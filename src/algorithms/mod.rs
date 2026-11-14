@@ -43,12 +43,14 @@ pub enum MpqpAlgorithm {
     MplcpEnum,
     /// Jones-Kerrigan-Maciejowski lexicographic perturbation (mpLP only; mpQPs go to `geometric`)
     MplpLex,
+    /// `Mplcp` with each wave of regions explored in parallel
+    MplcpParallel,
 }
 
 impl MpqpAlgorithm {
     pub fn all() -> &'static [MpqpAlgorithm] {
         use MpqpAlgorithm::*;
-        &[Combinatorial, CombinatorialParallel, Graph, GraphExp, GraphParallel, CombinatorialGraph, CombinatorialGraphParallel, Geometric, GeometricParallel, Ahmadi, Mplcp, MplcpEnum, MplpLex]
+        &[Combinatorial, CombinatorialParallel, Graph, GraphExp, GraphParallel, CombinatorialGraph, CombinatorialGraphParallel, Geometric, GeometricParallel, Ahmadi, Mplcp, MplcpEnum, MplpLex, MplcpParallel]
     }
 
     pub fn name(&self) -> &'static str {
@@ -67,6 +69,7 @@ impl MpqpAlgorithm {
             Mplcp => "mplcp",
             MplcpEnum => "mplcp_enum",
             MplpLex => "mplp_lex",
+            MplcpParallel => "mplcp_parallel",
         }
     }
 
@@ -109,6 +112,7 @@ pub fn solve_mpqp_with(program: &Arc<MpProgram>, algorithm: MpqpAlgorithm, opts:
         Ahmadi => ahmadi::ahmadi(program),
         Mplcp => mplcp::regions(program, opts.seed, mplcp::Method::Pivot),
         MplcpEnum => mplcp::regions(program, opts.seed, mplcp::Method::Enumeration),
+        MplcpParallel => mplcp::regions(program, opts.seed, mplcp::Method::PivotParallel),
         MplpLex => {
             if program.is_qp() {
                 geometric(program, opts, false)
