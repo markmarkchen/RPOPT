@@ -16,12 +16,13 @@ mpLP, mpQP, mpMILP and mpMIQP solvers, plus fast exact point location.
 
 ## Speedup over PPOPT
 
-**Against each of PPOPT's four solvers** (the same algorithm in both, one thread; median, then range):
+**Against each of PPOPT's four solvers** (same algorithm, one thread, runs where PPOPT finished with a gap-free
+answer; median, then range):
 
 | PPOPT solver | mpQP | mpLP |
 |---|---:|---:|
 | `combinatorial` | **1,001x** (705x to 1,665x) | **922x** (780x to 1,475x) |
-| `graph` | **1,065x** (575x to 2,577x) | **2,882x** (1,175x to 17,227x) |
+| `graph` | **1,065x** (575x to 2,577x) | **1,195x** (1 run) |
 | `geometric` | **1,014x** (559x to 2,257x) | **231x** (185x to 968x) |
 | `combinatorial_graph` | **1,020x** (389x to 2,703x) | **234x** (213x to 261x) |
 
@@ -35,15 +36,8 @@ mpLP, mpQP, mpMILP and mpMIQP solvers, plus fast exact point location.
 | mpLP, no gap-free PPOPT answer within 120 s | 7 problems | **> 134,000x** | > 6,400x to > 305,000x |
 | point location, per query (PPOPT numba, RPOPT hash table) | 9 problems | **676x** | 593x to 3,603x |
 
-<sub>Quiet-machine runs on one Apple M4 Max. PPOPT is the GitHub `main` source with Gurobi 12 and quadprog. Runs are
-counted where PPOPT finished. mpQP: the 12 MPC problems in `bench/problems`, 9 runs per solver. `combinatorial` has 5,
-because PPOPT did not finish the other 4 within 300 s or 4 h; those are lower bounds of > 1,049x to > 2,398x. mpLP:
-infinity-norm and 1-norm MPC (`bench/problems_lp`), each solution checked at 1,000 random parameters; 3 to 5 runs per
-solver. PPOPT's `geometric` leaves 0.3% to 77% of the parameter set uncovered on 7 of its 12 mpLP runs, so the
-`geometric` row uses the 5 runs where its answer is gap-free; on the other 7 it does less work and the ratio is 16x to
-351x. "> " marks lower bounds, where PPOPT stopped at its time limit. RPOPT also runs 1.5x to 2.9x faster than
-`pdaqp`, the authors' own implementation of Arnström and Axehill (2024). Details: [Performance](#performance) and
-[bench/README.md](bench/README.md).</sub>
+<sub>Same Apple M4 Max; PPOPT `main` with Gurobi 12. "> " is a lower bound (PPOPT hit its time limit). Details and
+caveats: [Performance](#performance).</sub>
 
 ## Highlights
 
