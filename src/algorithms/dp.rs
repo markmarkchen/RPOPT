@@ -320,6 +320,51 @@ struct Horizon<'a> {
     /// `G H^-1 G'` (q x q) and `G H^-1 fm + E` (q x nx): everything the KKT elimination needs
     w_mat: Mat,
     cx: Mat,
+    /// rows with G_i = 0 (bounds on x0 only): active, they are equalities in x0 and carry no multiplier
+    zero_row: Vec<bool>,
+}
+
+/// Parameter substitution `x0 = xc + T y` from the equalities of the active rows with G_i = 0.
+struct Subst {
+    xc: Vec<f64>,
+    t: Mat,
+}
+
+impl Subst {
+    /// `[rows[:, :nx] T | rows[:, nx:]]` and `b - rows[:, :nx] xc` (the extra columns are kept).
+    fn apply(&self, m: &Mat, b: &mut [f64], nx: usize) -> Mat {
+        let nf = self.t.cols;
+        let extra = m.cols - nx;
+        let mut out = Mat::zeros(m.rows, nf + extra);
+        for r in 0..m.rows {
+            let row = m.row(r);
+            let o = out.row_mut(r);
+            let mut sh = 0.0;
+            for c in 0..nx {
+                let v = row[c];
+                if v == 0.0 {
+                    continue;
+                }
+                sh += v * self.xc[c];
+                let tr = self.t.row(c);
+                for f in 0..nf {
+                    o[f] += v * tr[f];
+                }
+            }
+            o[nf..].copy_from_slice(&row[nx..]);
+            b[r] -= sh;
+        }
+        out
+    }
+}
+
+/// Rows of the active set that are linear combinations of earlier ones (G_d = sum_k C_dk G_k over the
+/// independent rows k): their multipliers are free (only `mu = lambda_B + C' lambda_D` is determined)
+/// and each gives an equality in x0.
+struct Dep {
+    rows: Vec<usize>,
+    /// |D| x |B|
+    c: Mat,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -406,14 +451,84 @@ impl Horizon<'_> {
         } else {
             (Mat::zeros(0, 0), Mat::zeros(0, 0))
         };
-        Horizon { qp, perm, reduced, w_mat, cx }
+        let zero_row = (0..qp.num_rows()).map(|i| qp.g.row(i).iter().all(|&v| v == 0.0)).collect();
+        Horizon { qp, perm, reduced, w_mat, cx, zero_row }
+    }
+
+    /// Solves the equalities `aug[:, :nx] x0 = aug[:, nx]` (Gauss-Jordan, complete pivoting). `None`
+    /// when they contradict each other.
+    fn eliminate_params(&self, mut aug: Mat) -> Option<Subst> {
+        let nx = self.qp.nx;
+        let kz = aug.rows;
+        let scale = aug.max_abs().max(1.0);
+        let mut used = vec![false; nx];
+        let mut piv: Vec<usize> = Vec::with_capacity(nx);
+        let mut rank = 0;
+        for r in 0..kz {
+            let (mut br, mut bc, mut bv) = (r, usize::MAX, 0.0f64);
+            for rr in r..kz {
+                for c in 0..nx {
+                    if !used[c] && aug[(rr, c)].abs() > bv {
+                        bv = aug[(rr, c)].abs();
+                        br = rr;
+                        bc = c;
+                    }
+                }
+            }
+            if bc == usize::MAX || bv <= 1e-10 * scale {
+                break;
+            }
+            if br != r {
+                for c in 0..=nx {
+                    let t = aug[(r, c)];
+                    aug[(r, c)] = aug[(br, c)];
+                    aug[(br, c)] = t;
+                }
+            }
+            let pv = aug[(r, bc)];
+            for c in 0..=nx {
+                aug[(r, c)] /= pv;
+            }
+            for rr in 0..kz {
+                if rr != r {
+                    let f = aug[(rr, bc)];
+                    if f != 0.0 {
+                        for c in 0..=nx {
+                            let t = aug[(r, c)];
+                            aug[(rr, c)] -= f * t;
+                        }
+                    }
+                }
+            }
+            used[bc] = true;
+            piv.push(bc);
+            rank += 1;
+        }
+        for rr in rank..kz {
+            if aug[(rr, nx)].abs() > 1e-9 * scale {
+                return None;
+            }
+        }
+        let free: Vec<usize> = (0..nx).filter(|&c| !used[c]).collect();
+        let mut t = Mat::zeros(nx, free.len());
+        let mut xc = vec![0.0; nx];
+        for (k, &pc) in piv.iter().enumerate() {
+            xc[pc] = aug[(k, nx)];
+            for (f, &fc) in free.iter().enumerate() {
+                t[(pc, f)] = -aug[(k, fc)];
+            }
+        }
+        for (f, &fc) in free.iter().enumerate() {
+            t[(fc, f)] = 1.0;
+        }
+        Some(Subst { xc, t })
     }
 
     /// Optimality LP (5) for a candidate whose G_A has full row rank, in the variables (x0, t):
     /// with `S = G_A H^-1 G_A'` the multipliers are `lambda = -S^-1 (Cx_A x0 + w_A)`, the primal
     /// solution `U = -H^-1 (fm x0 + G_A' lambda)`, and the slack of an inactive row i is
     /// `-(Cx_i x0 + W_iA lambda + w_i)`. `None` when S is not positive definite.
-    fn lp_full_reduced(&self, a: Set, act: &[usize]) -> Option<Option<f64>> {
+    fn lp_full_reduced(&self, a: Set, act: &[usize], dep: &Dep, sub: Option<&Subst>) -> Option<Option<f64>> {
         let qp = self.qp;
         let (nx, q, na) = (qp.nx, qp.num_rows(), act.len());
         let mut s = Mat::zeros(na, na);
@@ -430,8 +545,9 @@ impl Horizon<'_> {
         }
         let chol = Cholesky::new(&s)?;
         let sol = chol.solve_mat(&rhs).neg(); // [Lx | l0]
-        let n_in = q;
-        let mut m = Mat::zeros(n_in, nx);
+        let nd = dep.rows.len();
+        let n_in = q - a.count_ones() as usize + na + nd;
+        let mut m = Mat::zeros(n_in, nx + nd);
         let mut b = vec![0.0; n_in];
         let mut r = 0;
         for i in 0..q {
@@ -455,29 +571,42 @@ impl Horizon<'_> {
             r += 1;
         }
         for k in 0..na {
-            // lambda_k >= t
+            // lambda_k = mu_k - sum_d C_dk lambda_d >= t
             let row = m.row_mut(r);
             for c in 0..nx {
                 row[c] = -sol[(k, c)];
             }
+            for d in 0..nd {
+                row[nx + d] = dep.c[(d, k)];
+            }
             b[r] = sol[(k, nx)];
             r += 1;
         }
+        for d in 0..nd {
+            // lambda_d >= t
+            m[(r, nx + d)] = -1.0;
+            r += 1;
+        }
+        let m = match sub {
+            Some(sb) => sb.apply(&m, &mut b, nx),
+            None => m,
+        };
         // t* >= 0 iff the rows hold at t = 0; t* > T_TOL iff they hold at t = T_TOL (a feasibility LP
         // in x0 only, which has a fast path for up to four parameters)
-        if !lp_feasible(&m, &b, &[]) {
+        let feas = |b: &[f64]| if m.cols == 0 { b.iter().all(|&v| v >= -1e-9) } else { lp_feasible(&m, b, &[]) };
+        if !feas(&b) {
             return Some(None);
         }
         for v in b.iter_mut() {
             *v -= T_TOL;
         }
-        Some(Some(if lp_feasible(&m, &b, &[]) { 1.0 } else { 0.0 }))
+        Some(Some(if feas(&b) { 1.0 } else { 0.0 }))
     }
 
     /// Feasibility LP (5 without 5b, 5c), equalities eliminated by Gauss-Jordan on `[G_A | -E_A | w_A]`
     /// (complete pivoting on the G_A columns); variables (x0, U of the non-pivot columns).
     /// `None` when G_A is rank deficient. t is dropped: a solution with t >= 0 exists iff t = 0 is feasible.
-    fn feasible_reduced(&self, a: Set, act: &[usize]) -> Option<bool> {
+    fn feasible_reduced(&self, a: Set, act: &[usize], sub: Option<&Subst>) -> Option<bool> {
         let qp = self.qp;
         let (nm, nx, q, na) = (qp.nm, qp.nx, qp.num_rows(), act.len());
         let width = nm + nx + 1;
@@ -534,7 +663,7 @@ impl Horizon<'_> {
         }
         let rest: Vec<usize> = (0..nm).filter(|&c| !used[c]).collect();
         let nz = nx + rest.len();
-        let n_in = q - na;
+        let n_in = q - a.count_ones() as usize;
         let mut m = Mat::zeros(n_in, nz);
         let mut b = vec![0.0; n_in];
         let mut r = 0;
@@ -567,15 +696,121 @@ impl Horizon<'_> {
             b[r] = rhs;
             r += 1;
         }
-        Some(lp_feasible(&m, &b, &[]))
+        let m = match sub {
+            Some(sb) => sb.apply(&m, &mut b, nx),
+            None => m,
+        };
+        Some(if m.cols == 0 { b.iter().all(|&v| v >= -1e-9) } else { lp_feasible(&m, &b, &[]) })
+    }
+
+    /// Splits the rows `act_r` (G_i != 0) into independent rows B (greedy in index order, by the
+    /// Gram matrix `W = G H^-1 G'`) and dependent rows D with G_d = sum_k C_dk G_k.
+    fn split_dependent(&self, act_r: &[usize]) -> (Vec<usize>, Dep) {
+        let n = act_r.len();
+        let mut b_idx: Vec<usize> = Vec::with_capacity(n);
+        let mut d_idx: Vec<usize> = vec![];
+        // Cholesky factor of W_BB (lower, row-major, grows with B)
+        let mut l: Vec<Vec<f64>> = vec![];
+        let mut c_rows: Vec<Vec<f64>> = vec![];
+        for &j in act_r {
+            let k = b_idx.len();
+            // forward solve L z = W_Bj
+            let mut z = vec![0.0; k];
+            for r in 0..k {
+                let mut v = self.w_mat[(b_idx[r], j)];
+                for c in 0..r {
+                    v -= l[r][c] * z[c];
+                }
+                z[r] = v / l[r][r];
+            }
+            let wjj = self.w_mat[(j, j)];
+            let res = wjj - z.iter().map(|v| v * v).sum::<f64>();
+            if res > 1e-9 * wjj.abs().max(1e-300) {
+                let mut row = z;
+                row.push(res.sqrt());
+                l.push(row);
+                b_idx.push(j);
+            } else {
+                // C_d = W_BB^-1 W_Bd: back solve L' c = z
+                let mut c = z.clone();
+                for r in (0..k).rev() {
+                    let mut v = c[r];
+                    for rr in r + 1..k {
+                        v -= l[rr][r] * c[rr];
+                    }
+                    c[r] = v / l[r][r];
+                }
+                d_idx.push(j);
+                c_rows.push(c);
+            }
+        }
+        let nb = b_idx.len();
+        let mut c = Mat::zeros(d_idx.len(), nb);
+        for (d, row) in c_rows.iter().enumerate() {
+            // dependents found before later B members were added have shorter rows
+            c.row_mut(d)[..row.len()].copy_from_slice(row);
+        }
+        (b_idx, Dep { rows: d_idx, c })
     }
 
     fn classify(&self, a: Set, stats: &mut DpStats) -> Outcome {
+        let qp = self.qp;
+        let nx = qp.nx;
         let act = bits(a);
-        let reduced = self.reduced && is_full_rank_rows(&self.qp.g, &act);
+        let mut act_r: Vec<usize> = Vec::with_capacity(act.len());
+        let mut act_z: Vec<usize> = Vec::new();
+        for &i in &act {
+            if self.zero_row[i] { act_z.push(i) } else { act_r.push(i) }
+        }
+        let reduced = self.reduced;
+        let (act_b, dep) = if reduced && !is_full_rank_rows(&qp.g, &act_r) {
+            self.split_dependent(&act_r)
+        } else {
+            (act_r, Dep { rows: vec![], c: Mat::zeros(0, 0) })
+        };
+        let sub = if reduced && (!act_z.is_empty() || !dep.rows.is_empty()) {
+            let mut aug = Mat::zeros(act_z.len() + dep.rows.len(), nx + 1);
+            for (r, &i) in act_z.iter().enumerate() {
+                let row = aug.row_mut(r);
+                for c in 0..nx {
+                    row[c] = -qp.e[(i, c)];
+                }
+                row[nx] = qp.w[i];
+            }
+            for (d, &i) in dep.rows.iter().enumerate() {
+                let row = aug.row_mut(act_z.len() + d);
+                let mut rhs = qp.w[i];
+                for c in 0..nx {
+                    row[c] = -qp.e[(i, c)];
+                }
+                for (k, &j) in act_b.iter().enumerate() {
+                    let ck = dep.c[(d, k)];
+                    if ck == 0.0 {
+                        continue;
+                    }
+                    for c in 0..nx {
+                        row[c] += ck * qp.e[(j, c)];
+                    }
+                    rhs -= ck * qp.w[j];
+                }
+                row[nx] = rhs;
+            }
+            match self.eliminate_params(aug) {
+                Some(sb) => Some(sb),
+                None => {
+                    // contradicting equalities on x0: infeasible
+                    stats.optimality_lps += 1;
+                    stats.feasibility_lps += 1;
+                    stats.outcomes[1] += 1;
+                    return Outcome::Infeasible;
+                }
+            }
+        } else {
+            None
+        };
         stats.optimality_lps += 1;
         let t0 = Instant::now();
-        let full = if reduced { self.lp_full_reduced(a, &act) } else { None };
+        let full = if reduced { self.lp_full_reduced(a, &act_b, &dep, sub.as_ref()) } else { None };
         let full = match full {
             Some(r) => r,
             None => self.lp(a, true),
@@ -587,7 +822,7 @@ impl Horizon<'_> {
         }
         stats.feasibility_lps += 1;
         let t0 = Instant::now();
-        let feas = if reduced { self.feasible_reduced(a, &act) } else { None };
+        let feas = if reduced { self.feasible_reduced(a, &act_b, sub.as_ref()) } else { None };
         let feasible = match feas {
             Some(f) => f,
             None => self.lp(a, false).is_some(),
