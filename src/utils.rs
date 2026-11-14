@@ -97,7 +97,29 @@ fn canonical_bits(v: f64) -> u64 {
 pub fn cheap_remove_redundant_constraints(a: &Mat, b: &[f64]) -> (Mat, Vec<f64>) {
     let (a, b) = remove_zero_rows(a, b);
     let (a, b) = scale_constraint(&a, &b);
-    remove_duplicate_rows(&a, &b)
+    let (a, b) = remove_duplicate_rows(&a, &b);
+    remove_near_duplicate_rows(&a, &b, 1e-12)
+}
+
+/// Removes rows of [A | b] (unit-normalised rows) that agree with an earlier kept row to within
+/// `tol` in every entry, keeping the first. Exact duplicates are handled by `remove_duplicate_rows`;
+/// two rows that differ by an ulp are not equal there, and the weak-redundancy test of
+/// `facet_ball_elimination` then drops both of them (each blocks the other's facet ball).
+pub fn remove_near_duplicate_rows(a: &Mat, b: &[f64], tol: f64) -> (Mat, Vec<f64>) {
+    if a.rows < 2 || a.rows > 4000 {
+        return (a.clone(), b.to_vec());
+    }
+    let mut keep: Vec<usize> = Vec::with_capacity(a.rows);
+    for j in 0..a.rows {
+        let dup = keep.iter().any(|&i| (b[i] - b[j]).abs() <= tol && a.row(i).iter().zip(a.row(j)).all(|(x, y)| (x - y).abs() <= tol));
+        if !dup {
+            keep.push(j);
+        }
+    }
+    if keep.len() == a.rows {
+        return (a.clone(), b.to_vec());
+    }
+    (a.select_rows(&keep), keep.iter().map(|&i| b[i]).collect())
 }
 
 /// Keeps constraint i iff the polytope with row i (plus `equality_set`) held at equality is
