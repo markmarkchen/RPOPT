@@ -431,13 +431,14 @@ impl PartialOrd for Queued {
 }
 
 /// Oberdieck et al. (2016) connected-graph algorithm.
-fn graph(program: &MpProgram, opts: &SolveOptions, use_pruning: bool) -> Vec<CriticalRegion> {
+fn graph(program: &Arc<MpProgram>, opts: &SolveOptions, use_pruning: bool) -> Vec<CriticalRegion> {
     let mut rng = StdRng::seed_from_u64(opts.seed);
     let initial = program.sample_theta_space(opts.graph_samples, &mut rng);
     let m = program.num_constraints();
     let eq = program.equality_indices.clone();
     let mut attempted: HashSet<Vec<usize>> = HashSet::default();
     let mut murder = CombinationTester::new(m);
+    let (is_lp, nx) = (!program.is_qp(), program.num_x());
     let mut regions = vec![];
     let mut heap = BinaryHeap::new();
     let mut seq = 0usize;
@@ -454,19 +455,32 @@ fn graph(program: &MpProgram, opts: &SolveOptions, use_pruning: bool) -> Vec<Cri
         }
         attempted.insert(candidate.clone());
         let mref = if use_pruning { Some(&murder) } else { None };
+        // mpLP: only vertex-defining sets (size n_x) can be regions; smaller sets lead nowhere
+        if is_lp && candidate.len() < nx {
+            continue;
+        }
         crate::stats::rank();
         if !program.check_active_set_rank(&candidate) {
+            if is_lp && candidate.len() <= nx {
+                if use_pruning {
+                    murder.add_combo(&candidate);
+                }
+                continue;
+            }
             let red = generate_reduce(&candidate, mref, Some(&attempted), &eq);
             for s in red {
                 push(&mut heap, s, &mut seq);
             }
-            if use_pruning {
+            if use_pruning && !is_lp {
                 murder.add_combo(&candidate);
             }
             continue;
         }
         // PPOPT's feasibility test here is `is None` on a bool and never fires; we keep that behaviour.
         let Some(region) = optimal_region(program, &candidate) else {
+            if is_lp && candidate.len() <= nx {
+                continue;
+            }
             for s in generate_reduce(&candidate, mref, Some(&attempted), &eq) {
                 push(&mut heap, s, &mut seq);
             }
@@ -474,13 +488,21 @@ fn graph(program: &MpProgram, opts: &SolveOptions, use_pruning: bool) -> Vec<Cri
         };
         let Some(region) = region else { continue };
         if region.is_full_dimension() {
-            let mut new_sets = generate_reduce(&candidate, mref, Some(&attempted), &eq);
-            new_sets.extend(generate_extra(&candidate, &region.regular_set.1, mref, Some(&attempted)));
+            let new_sets = if is_lp {
+                generate_lp_swaps(&candidate, &region.regular_set.1, &region.lambda_set, m, &eq, mref, Some(&attempted))
+            } else {
+                let mut ns = generate_reduce(&candidate, mref, Some(&attempted), &eq);
+                ns.extend(generate_extra(&candidate, &region.regular_set.1, mref, Some(&attempted)));
+                ns
+            };
             regions.push(region);
             for s in new_sets {
                 push(&mut heap, s, &mut seq);
             }
         }
+    }
+    if is_lp {
+        regions = lp_repair(program, regions, false);
     }
     regions
 }
@@ -494,13 +516,14 @@ enum GraphOutcome {
 
 /// Level-synchronous parallel version of the graph algorithm: every candidate of the current
 /// frontier is processed in parallel, then the bookkeeping is merged.
-fn graph_parallel(program: &MpProgram, opts: &SolveOptions) -> Vec<CriticalRegion> {
+fn graph_parallel(program: &Arc<MpProgram>, opts: &SolveOptions) -> Vec<CriticalRegion> {
     let mut rng = StdRng::seed_from_u64(opts.seed);
     let initial = program.sample_theta_space(opts.graph_samples, &mut rng);
     let m = program.num_constraints();
     let eq = program.equality_indices.clone();
     let mut attempted: HashSet<Vec<usize>> = HashSet::default();
     let mut murder = CombinationTester::new(m);
+    let (is_lp, nx) = (!program.is_qp(), program.num_x());
     let mut regions = vec![];
     let mut frontier: Vec<Vec<usize>> = initial;
     while !frontier.is_empty() {
@@ -517,17 +540,31 @@ fn graph_parallel(program: &MpProgram, opts: &SolveOptions) -> Vec<CriticalRegio
         let outcomes: Vec<GraphOutcome> = uniq
             .par_iter()
             .map(|cand| {
+                if is_lp && cand.len() < nx {
+                    return GraphOutcome::Nothing;
+                }
                 crate::stats::rank();
                 if !program.check_active_set_rank(cand) {
+                    if is_lp && cand.len() <= nx {
+                        return GraphOutcome::RankDeficient(vec![]);
+                    }
                     return GraphOutcome::RankDeficient(generate_reduce(cand, Some(&murder), Some(&attempted), &eq));
                 }
                 let Some(region) = optimal_region(program, cand) else {
+                    if is_lp && cand.len() <= nx {
+                        return GraphOutcome::Nothing;
+                    }
                     return GraphOutcome::NotOptimal(generate_reduce(cand, Some(&murder), Some(&attempted), &eq));
                 };
                 match region {
                     Some(r) if r.is_full_dimension() => {
-                        let mut ns = generate_reduce(cand, Some(&murder), Some(&attempted), &eq);
-                        ns.extend(generate_extra(cand, &r.regular_set.1, Some(&murder), Some(&attempted)));
+                        let ns = if is_lp {
+                            generate_lp_swaps(cand, &r.regular_set.1, &r.lambda_set, m, &eq, Some(&murder), Some(&attempted))
+                        } else {
+                            let mut ns = generate_reduce(cand, Some(&murder), Some(&attempted), &eq);
+                            ns.extend(generate_extra(cand, &r.regular_set.1, Some(&murder), Some(&attempted)));
+                            ns
+                        };
                         GraphOutcome::Region(Box::new(r), ns)
                     }
                     _ => GraphOutcome::Nothing,
@@ -537,7 +574,9 @@ fn graph_parallel(program: &MpProgram, opts: &SolveOptions) -> Vec<CriticalRegio
         for (cand, out) in uniq.iter().zip(outcomes) {
             match out {
                 GraphOutcome::RankDeficient(ns) => {
-                    murder.add_combo(cand);
+                    if !(is_lp && cand.len() > nx) {
+                        murder.add_combo(cand);
+                    }
                     frontier.extend(ns);
                 }
                 GraphOutcome::NotOptimal(ns) => frontier.extend(ns),
@@ -550,7 +589,33 @@ fn graph_parallel(program: &MpProgram, opts: &SolveOptions) -> Vec<CriticalRegio
         }
         frontier.sort_by_key(|s| s.len());
     }
+    if is_lp {
+        regions = lp_repair(program, regions, false);
+    }
     regions
+}
+
+/// Degenerate mpLPs: the vertex bases of neighbouring regions need not differ by one pivot of
+/// full-dimensional bases, so the connected-graph search can stop short. Like `geometric`, step
+/// out of every facet part that no found region covers (see facet_completion) and continue from
+/// the regions found that way. On nondegenerate problems this finds nothing.
+fn lp_repair(program: &Arc<MpProgram>, regions: Vec<CriticalRegion>, parallel: bool) -> Vec<CriticalRegion> {
+    use std::sync::atomic::AtomicBool;
+    let mut indexed: HashSet<Vec<usize>> = regions.iter().map(|r| r.active_set.clone()).collect();
+    let mut solution = Solution::new(program.clone(), regions);
+    let degen = AtomicBool::new(true);
+    let mut suspects: Vec<(usize, Option<Vec<f64>>)> = (0..solution.critical_regions.len()).map(|i| (i, None)).collect();
+    while !suspects.is_empty() {
+        let found = facet_completion::complete_facets(program, &solution, &suspects, &indexed, &degen, parallel);
+        suspects.clear();
+        for cr in found {
+            if indexed.insert(cr.active_set.clone()) {
+                suspects.push((solution.critical_regions.len(), None));
+                solution.add_region(cr);
+            }
+        }
+    }
+    solution.critical_regions
 }
 
 // ---------------------------------------------------------------------------- combinatorial graph

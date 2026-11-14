@@ -212,6 +212,50 @@ pub fn generate_extra(
     out
 }
 
+/// mpLP neighbours of a vertex active set `candidate` (size n_x): the bases reached by one pivot.
+/// `entering` are constraints that become active across a primal facet (any basis member may
+/// leave); `leaving` are members whose multiplier reaches zero across a dual facet (any
+/// constraint of the program may enter). PPOPT reaches the first kind through the over-determined
+/// set `candidate + r` and its reductions, but its pruning list rejects that set whenever it
+/// contains a recorded dependent pair (for example the two bounds of one variable), which
+/// disconnects degenerate mpLPs. Swaps are generated directly instead.
+pub fn generate_lp_swaps(
+    candidate: &[usize],
+    entering: &[usize],
+    leaving: &[usize],
+    num_constraints: usize,
+    equality: &[usize],
+    murder: Option<&CombinationTester>,
+    attempted: Option<&HashSet<Vec<usize>>>,
+) -> Vec<Vec<usize>> {
+    let mut out: Vec<Vec<usize>> = vec![];
+    let mut push = |base: &[usize], drop: usize, add: usize| {
+        let mut child: Vec<usize> = base.iter().cloned().filter(|&j| j != drop).collect();
+        child.push(add);
+        child.sort_unstable();
+        let ok_attempt = attempted.map(|a| !a.contains(&child)).unwrap_or(true);
+        let ok_murder = murder.map(|m| m.check(&child)).unwrap_or(true);
+        if ok_attempt && ok_murder && !out.contains(&child) {
+            out.push(child);
+        }
+    };
+    for &r in entering {
+        for &i in candidate {
+            if !equality.contains(&i) {
+                push(candidate, i, r);
+            }
+        }
+    }
+    for &i in leaving {
+        for j in 0..num_constraints {
+            if !candidate.contains(&j) && !equality.contains(&i) {
+                push(candidate, i, j);
+            }
+        }
+    }
+    out
+}
+
 /// For an over-determined active set, the greedy full-rank subset keeping the equalities.
 pub fn find_sub_active_set(program: &MpProgram, active_set: &[usize]) -> Vec<usize> {
     let eq = &program.equality_indices;

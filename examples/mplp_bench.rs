@@ -127,7 +127,11 @@ fn main() {
         let family = if name.starts_with("rand") { "rand".to_string() } else { name.split("_N").next().unwrap().to_string() };
         let p = load(spec);
         let (nt, nx, m) = (p.num_t(), p.num_x(), p.a.rows);
+        let only = std::env::var("MPLP_ALGOS").ok();
         for alg in ALGOS {
+            if only.as_ref().is_some_and(|o| !o.split(',').any(|x| x == alg.name())) {
+                continue;
+            }
             let key = (family.clone(), alg.name());
             let head = format!("{:<18} {:>3} {:>4} {:>4}  {:<22}", name, nt, nx, m, alg.name());
             if dropped.contains(&key) {
