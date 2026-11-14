@@ -3,13 +3,35 @@
 //! All working storage lives in a thread-local `Scratch` that is reused across calls, so after the
 //! first call on a thread an LP solve performs no heap allocation unless the caller asks for the
 //! full solution (`Want::Full`).
+//!
+//! LPs with at most 16 variables first go to the revised form of the same method (`lp_rev.rs`);
+//! the tableau runs when that path cannot verify its answer, and for larger LPs.
 
 use crate::linalg::{dot, Lu, Mat};
 use std::cell::RefCell;
 
+#[path = "lp_rev.rs"]
+mod rev;
+
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Benchmarking switch (`lp::bench::set_tableau_only`): skip the revised path and run the
+/// tableau, the solver before `lp_rev` existed.
+pub(crate) static TABLEAU_ONLY: AtomicBool = AtomicBool::new(false);
+
 pub const PIVOT_TOL: f64 = 1e-9;
 
 const MAX_DEGENERATE_BEFORE_BLAND: usize = 30;
+
+/// Run of degenerate pivots after which pricing switches to Bland's rule (anti-cycling). In a
+/// feasibility LP every pivot of the dual is degenerate, so a fixed 30 means that every LP that
+/// needs more than 30 pivots finishes under Bland's rule, which is very slow on large LPs and
+/// ran into the iteration limit (a false "infeasible") on n >= 48 test LPs. Up to n = 16 the
+/// threshold is unchanged; above, Bland's rule is a last resort after 10 (n + m) such pivots.
+#[inline]
+pub(crate) fn bland_after(n: usize, m: usize) -> usize {
+    if n <= 16 { MAX_DEGENERATE_BEFORE_BLAND } else { MAX_DEGENERATE_BEFORE_BLAND.max(10 * (n + m)) }
+}
 const REFACTOR_ROUNDS: usize = 4;
 const DRIVE_OUT: bool = false;
 
@@ -50,6 +72,7 @@ struct Scratch {
     x: Vec<f64>,
     y: Vec<f64>,
     bshift: Vec<f64>,
+    rev: rev::RevScratch,
 }
 
 thread_local! {
@@ -122,7 +145,7 @@ impl Tab<'_> {
             if phase1 && -self.t[cost_row * w + rhs] <= 1e-13 {
                 return Outcome::Optimal;
             }
-            let bland = degenerate > MAX_DEGENERATE_BEFORE_BLAND;
+            let bland = degenerate > bland_after(self.nrows, ns);
             let crow = &self.t[cost_row * w..cost_row * w + ns];
             let sc = &sc[..ns];
             let mut enter = usize::MAX;
@@ -430,6 +453,15 @@ pub(crate) fn solve_from(c: Option<&[f64]>, a: &Mat, b: &[f64], eq: &[usize], x0
     SCRATCH.with(|cell| {
         let mut guard = cell.borrow_mut();
         let s = &mut *guard;
+        let rhs = match x0 {
+            None => rev::Rhs::Plain,
+            Some(x0) => rev::Rhs::Shift(x0),
+        };
+        if !TABLEAU_ONLY.load(Ordering::Relaxed) {
+            if let rev::Rev::Done(out) = rev::solve(&mut s.rev, c, a, b, eq, rhs, want) {
+                return out;
+            }
+        }
         match x0 {
             None => solve_in(s, c, a, b, eq, want),
             Some(x0) => {
@@ -455,6 +487,11 @@ pub(crate) fn solve_from(c: Option<&[f64]>, a: &Mat, b: &[f64], eq: &[usize], x0
 pub(crate) fn solve_shifted(a: &Mat, bs: &[f64], eq: &[usize], x0: &[f64], want: Want) -> Option<Core> {
     SCRATCH.with(|cell| {
         let mut guard = cell.borrow_mut();
+        if !TABLEAU_ONLY.load(Ordering::Relaxed) {
+            if let rev::Rev::Done(out) = rev::solve(&mut guard.rev, None, a, bs, eq, rev::Rhs::Shifted(x0), want) {
+                return out;
+            }
+        }
         solve_in(&mut guard, None, a, bs, eq, want).map(|mut core| {
             if !core.x.is_empty() {
                 for (v, o) in core.x.iter_mut().zip(x0) {

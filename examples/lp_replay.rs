@@ -3,8 +3,13 @@
 //! at both versions and run each on the same capture files).
 //!
 //!   lp_replay capture <out.bin> <problem.json> <algorithm>
-//!   lp_replay run <reps> <results.bin|-> <capture.bin>...
+//!   lp_replay run <reps> <results.bin|-> <capture.bin>...      (LP_CLASS=<prefix>, LP_MIN=1)
 //!   lp_replay compare <old.res> <new.res> <capture.bin>...
+//!   lp_replay scale [n,n,...] [LPs per kind] [reps]
+//!
+//! `scale` times synthetic dense LPs (m = 4n, a few equality rows, x free; feasible, infeasible
+//! and objective instances) with the tableau, the default path and Clarabel (`sparse_lp`), and
+//! checks that the decisions and objectives agree.
 
 use rpopt::linalg::Mat;
 use rpopt::solver::lp::capture::{self, Call, Log, Rec};
@@ -138,6 +143,29 @@ fn replay_one(inst: &Inst, rec: &Rec, eq: &[usize]) -> Option<Vec<f64>> {
     }
 }
 
+/// Real solves build each LP's data just before solving it, so it is in cache; the replay
+/// prefetches the next call's data while the current one runs (hundreds of thousands of distinct
+/// matrices would otherwise be timed as cache misses).
+#[inline(always)]
+fn prefetch(inst: &Inst, rec: &Rec) {
+    #[inline(always)]
+    fn lines(v: &[f64]) {
+        #[cfg(target_arch = "aarch64")]
+        for p in (0..v.len()).step_by(8) {
+            let addr = v[p..].as_ptr();
+            // SAFETY: prefetch hint only, the address is inside the slice
+            unsafe { std::arch::asm!("prfm pldl1keep, [{0}]", in(reg) addr, options(nostack, readonly, preserves_flags)) };
+        }
+        #[cfg(not(target_arch = "aarch64"))]
+        black_box(v.first());
+    }
+    lines(&inst.mats[rec.a as usize].data);
+    lines(&inst.vecs[rec.b as usize]);
+    if let Some(x) = rec.x0 {
+        lines(&inst.vecs[x as usize]);
+    }
+}
+
 /// Replay classes: entry point, with/without equality rows, theta-space (n <= 4) or not.
 fn class_of(inst: &Inst, rec: &Rec) -> String {
     let n = inst.mats[rec.a as usize].cols;
@@ -156,12 +184,23 @@ fn class_of(inst: &Inst, rec: &Rec) -> String {
     format!("{name}{obj}{eq} {size}")
 }
 
+/// Median over the repetitions (minimum with LP_MIN set).
 fn median(v: &mut [f64]) -> f64 {
     v.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    v[v.len() / 2]
+    if std::env::var("LP_MIN").is_ok() { v[0] } else { v[v.len() / 2] }
+}
+
+#[cfg(target_os = "macos")]
+unsafe extern "C" {
+    fn pthread_set_qos_class_self_np(qos: u32, rel: i32) -> i32;
 }
 
 fn main() {
+    // user-interactive QoS: the scheduler prefers performance cores (shared, loaded machine)
+    #[cfg(target_os = "macos")]
+    unsafe {
+        pthread_set_qos_class_self_np(0x21, 0);
+    }
     let args: Vec<String> = std::env::args().collect();
     match args[1].as_str() {
         "capture" => {
@@ -176,7 +215,15 @@ fn main() {
         "run" => {
             let reps: usize = args[2].parse().unwrap();
             let res_path = &args[3];
-            let insts: Vec<(String, Inst)> = args[4..].iter().map(|p| (p.clone(), load(p))).collect();
+            let mut insts: Vec<(String, Inst)> = args[4..].iter().map(|p| (p.clone(), load(p))).collect();
+            // LP_CLASS=<prefix>: replay only the classes starting with it
+            if let Ok(pre) = std::env::var("LP_CLASS") {
+                for (_, inst) in insts.iter_mut() {
+                    let keep: Vec<bool> = inst.recs.iter().map(|(r, _)| class_of(inst, r).starts_with(&pre)).collect();
+                    let mut it = keep.iter();
+                    inst.recs.retain(|_| *it.next().unwrap());
+                }
+            }
             // results (and warm up)
             let mut out = vec![];
             for (_, inst) in &insts {
@@ -216,14 +263,20 @@ fn main() {
             for _ in 0..reps {
                 for (fi, (_, inst)) in insts.iter().enumerate() {
                     let t0 = Instant::now();
-                    for (rec, eq) in &inst.recs {
+                    for (q, (rec, eq)) in inst.recs.iter().enumerate() {
+                        if let Some((next, _)) = inst.recs.get(q + 1) {
+                            prefetch(inst, next);
+                        }
                         black_box(replay_one(inst, black_box(rec), eq));
                     }
                     file_t[fi].push(t0.elapsed().as_secs_f64());
                 }
                 for (k, mem) in members.iter().enumerate() {
                     let t0 = Instant::now();
-                    for &(fi, ri) in mem {
+                    for (q, &(fi, ri)) in mem.iter().enumerate() {
+                        if let Some(&(f2, r2)) = mem.get(q + 1) {
+                            prefetch(&insts[f2].1, &insts[f2].1.recs[r2].0);
+                        }
                         let inst = &insts[fi].1;
                         let (rec, eq) = &inst.recs[ri];
                         black_box(replay_one(inst, black_box(rec), eq));
@@ -326,6 +379,158 @@ fn main() {
                 "{n} records: decisions differ {flag_diff}, objectives differ (>1e-9 rel) {obj_diff} (max rel {max_obj_rel:.2e}), points differ {x_diff}, new points infeasible {infeasible_pts}"
             );
         }
+        "scale" => scale(&args[2..]),
         _ => panic!("unknown mode"),
+    }
+}
+
+/// Synthetic LPs shaped like the (x, theta) LPs: dense normalized random rows, a parameter box,
+/// x free, m = 4n rows (2n random, 2n box), q = max(2, n/8) equality rows.
+/// Kinds: feasible (b = A x* + slack, equality rows tight at x*), infeasible (one random row
+/// replaced by the negated sum of two others, shifted by 0.5), objective (feasible + random c).
+struct Synth {
+    a: Mat,
+    b: Vec<f64>,
+    eq: Vec<usize>,
+    c: Option<Vec<f64>>,
+}
+
+fn synth(n: usize, kind: u8, seed: u64) -> Synth {
+    use rand::{Rng, SeedableRng};
+    let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+    let m = 4 * n;
+    let q = (n / 8).max(2);
+    let xs: Vec<f64> = (0..n).map(|_| rng.gen_range(-5.0..5.0)).collect();
+    let mut a = Mat::zeros(m, n);
+    let mut b = vec![0.0; m];
+    for i in 0..2 * n {
+        let row: Vec<f64> = (0..n).map(|_| rng.gen_range(-1.0..1.0)).collect();
+        let nr = row.iter().map(|v| v * v).sum::<f64>().sqrt();
+        for k in 0..n {
+            a[(i, k)] = row[k] / nr;
+        }
+        let ax: f64 = (0..n).map(|k| a[(i, k)] * xs[k]).sum();
+        b[i] = ax + if i < q { 0.0 } else { rng.gen_range(0.0..1.0) };
+    }
+    for k in 0..n {
+        a[(2 * n + 2 * k, k)] = 1.0;
+        b[2 * n + 2 * k] = 10.0;
+        a[(2 * n + 2 * k + 1, k)] = -1.0;
+        b[2 * n + 2 * k + 1] = 10.0;
+    }
+    let eq: Vec<usize> = (0..q).collect();
+    if kind == 1 {
+        let r1 = rng.gen_range(q..2 * n);
+        let mut r2 = rng.gen_range(q..2 * n);
+        while r2 == r1 {
+            r2 = rng.gen_range(q..2 * n);
+        }
+        let mut r3 = rng.gen_range(q..2 * n);
+        while r3 == r1 || r3 == r2 {
+            r3 = rng.gen_range(q..2 * n);
+        }
+        for k in 0..n {
+            a[(r3, k)] = -(a[(r1, k)] + a[(r2, k)]);
+        }
+        b[r3] = -(b[r1] + b[r2]) - 0.5;
+    }
+    let c = if kind == 2 { Some((0..n).map(|_| rng.gen_range(-1.0..1.0)).collect()) } else { None };
+    Synth { a, b, eq, c }
+}
+
+/// Clarabel (interior point) on the same LP; None if not solved (infeasible or failed).
+fn clarabel(s: &Synth) -> Option<Vec<f64>> {
+    let n = s.a.cols;
+    let mut lp = rpopt::solver::sparse_lp::SparseLp::new(n);
+    if let Some(c) = &s.c {
+        lp.c = c.clone();
+    }
+    for i in 0..s.a.rows {
+        let terms: Vec<(usize, f64)> = (0..n).map(|k| (k, s.a[(i, k)])).collect();
+        if s.eq.contains(&i) {
+            lp.add_eq(&terms, s.b[i]);
+        } else {
+            lp.add_le(&terms, s.b[i]);
+        }
+    }
+    lp.solve()
+}
+
+fn scale(args: &[String]) {
+    let sizes: Vec<usize> = args.first().map(|s| s.split(',').map(|v| v.parse().unwrap()).collect()).unwrap_or(vec![16, 24, 32, 48, 64, 128]);
+    let per: usize = args.get(1).map(|s| s.parse().unwrap()).unwrap_or(20);
+    let reps: usize = args.get(2).map(|s| s.parse().unwrap()).unwrap_or(5);
+    use rpopt::solver::lp::{bench::set_tableau_only, lp_feasible_point, lp_point};
+    println!("n     m    kind        LPs   tableau us   new us   clarabel us   new/tab  clar/tab  decisions(new,clar)  max obj rel(new,clar)");
+    for &n in &sizes {
+        for kind in 0..3u8 {
+            let lps: Vec<Synth> = (0..per).map(|i| synth(n, kind, 1000 * n as u64 + 17 * i as u64 + kind as u64)).collect();
+            let solve = |s: &Synth| -> Option<Vec<f64>> {
+                match &s.c {
+                    None => lp_feasible_point(&s.a, &s.b, &s.eq, None),
+                    Some(c) => lp_point(Some(c), &s.a, &s.b, &s.eq),
+                }
+            };
+            let time = |f: &dyn Fn(&Synth) -> Option<Vec<f64>>| -> (f64, Vec<Option<Vec<f64>>>) {
+                let res: Vec<Option<Vec<f64>>> = lps.iter().map(|s| f(s)).collect();
+                let mut ts = vec![];
+                for _ in 0..reps {
+                    let t0 = Instant::now();
+                    for s in &lps {
+                        black_box(f(black_box(s)));
+                    }
+                    ts.push(t0.elapsed().as_secs_f64() / lps.len() as f64);
+                }
+                (median(&mut ts), res)
+            };
+            set_tableau_only(true);
+            let (tt, rt) = time(&solve);
+            set_tableau_only(false);
+            let (tn, rn) = time(&solve);
+            let clar_reps = if n >= 64 { 1 } else { reps };
+            let (tc, rc) = {
+                let res: Vec<Option<Vec<f64>>> = lps.iter().map(clarabel).collect();
+                let mut ts = vec![];
+                for _ in 0..clar_reps {
+                    let t0 = Instant::now();
+                    for s in &lps {
+                        black_box(clarabel(black_box(s)));
+                    }
+                    ts.push(t0.elapsed().as_secs_f64() / lps.len() as f64);
+                }
+                (median(&mut ts), res)
+            };
+            let same = |r: &[Option<Vec<f64>>]| r.iter().zip(&rt).filter(|(a, b)| a.is_some() == b.is_some()).count();
+            let objrel = |r: &[Option<Vec<f64>>]| -> f64 {
+                let Some(c) = &lps[0].c else { return 0.0 };
+                let _ = c;
+                let mut worst: f64 = 0.0;
+                for ((s, x), y) in lps.iter().zip(r).zip(&rt) {
+                    if let (Some(x), Some(y), Some(c)) = (x, y, &s.c) {
+                        let ox: f64 = c.iter().zip(x).map(|(u, v)| u * v).sum();
+                        let oy: f64 = c.iter().zip(y).map(|(u, v)| u * v).sum();
+                        worst = worst.max((ox - oy).abs() / (1.0 + oy.abs()));
+                    }
+                }
+                worst
+            };
+            let feas = rt.iter().filter(|r| r.is_some()).count();
+            let kname = ["feasible", "infeasible", "objective"][kind as usize];
+            println!(
+                "{n:<5} {:<4} {kname:<10} {per:>4}   {:>10.2} {:>8.2} {:>13.2}   {:>7.2} {:>9.2}   {}/{} {}/{} (feasible {feas})   {:.1e} {:.1e}",
+                4 * n,
+                tt * 1e6,
+                tn * 1e6,
+                tc * 1e6,
+                tn / tt,
+                tc / tt,
+                same(&rn),
+                per,
+                same(&rc),
+                per,
+                objrel(&rn),
+                objrel(&rc)
+            );
+        }
     }
 }

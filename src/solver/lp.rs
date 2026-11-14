@@ -25,6 +25,7 @@
 
 use crate::linalg::{dot, Mat};
 use super::lp_core::{solve, Want};
+use super::lp_small::Verdict;
 
 #[derive(Clone, Debug)]
 pub struct LpSolution {
@@ -61,19 +62,30 @@ pub fn lp_feasible(a: &Mat, b: &[f64], eq: &[usize]) -> bool {
     LP_CALLS.add(1);
     capture::hook(capture::Call::Feasible, None, a, b, eq, None);
     match small_feasible(a, b, eq) {
-        super::lp_small::Small::Feasible(_) => return true,
-        super::lp_small::Small::Infeasible => return false,
-        super::lp_small::Small::Undecided => {}
+        Verdict::Feasible(_) => return true,
+        Verdict::Infeasible => return false,
+        Verdict::Undecided => {}
     }
     solve(None, a, b, eq, Want::Feasible).is_some()
 }
 
 /// Revised-simplex fast path for inequality-only feasibility LPs with n <= 4 variables.
-fn small_feasible(a: &Mat, b: &[f64], eq: &[usize]) -> super::lp_small::Small {
+fn small_feasible(a: &Mat, b: &[f64], eq: &[usize]) -> Verdict {
     if eq.is_empty() && a.cols <= 4 {
-        return super::lp_small::feasible(a, b);
+        return super::lp_small::verdict(a, b);
     }
-    super::lp_small::Small::Undecided
+    Verdict::Undecided
+}
+
+/// The point of a feasible `Verdict`, shifted by `x0`.
+fn small_point(z: &[f64; 4], n: usize, x0: Option<&[f64]>) -> Vec<f64> {
+    let mut z = z[..n].to_vec();
+    if let Some(x0) = x0 {
+        for (v, o) in z.iter_mut().zip(x0) {
+            *v += o;
+        }
+    }
+    z
 }
 
 /// `lp_feasible` starting the simplex from `x0` (see `lp_core::solve_from`).
@@ -97,16 +109,9 @@ pub fn lp_feasible_point(a: &Mat, b: &[f64], eq: &[usize], x0: Option<&[f64]>) -
             None => b,
         };
         match small_feasible(a, bb, eq) {
-            super::lp_small::Small::Feasible(mut z) => {
-                if let Some(x0) = x0 {
-                    for (v, o) in z.iter_mut().zip(x0) {
-                        *v += o;
-                    }
-                }
-                return Some(z);
-            }
-            super::lp_small::Small::Infeasible => return None,
-            super::lp_small::Small::Undecided => {}
+            Verdict::Feasible(z) => return Some(small_point(&z, a.cols, x0)),
+            Verdict::Infeasible => return None,
+            Verdict::Undecided => {}
         }
     }
     super::lp_core::solve_from(None, a, b, eq, x0, Want::Point).map(|c| c.x)
@@ -118,15 +123,10 @@ pub fn lp_feasible_point_shifted(a: &Mat, bs: &[f64], eq: &[usize], x0: &[f64]) 
     LP_CALLS.add(1);
     capture::hook(capture::Call::FeasiblePointShifted, None, a, bs, eq, Some(x0));
     if eq.is_empty() && a.cols <= 4 {
-        return match super::lp_small::feasible(a, bs) {
-            super::lp_small::Small::Feasible(mut z) => {
-                for (v, o) in z.iter_mut().zip(x0) {
-                    *v += o;
-                }
-                Some(z)
-            }
-            super::lp_small::Small::Infeasible => None,
-            super::lp_small::Small::Undecided => super::lp_core::solve_shifted(a, bs, eq, x0, Want::Point).map(|c| c.x),
+        return match super::lp_small::verdict(a, bs) {
+            Verdict::Feasible(z) => Some(small_point(&z, a.cols, Some(x0))),
+            Verdict::Infeasible => None,
+            Verdict::Undecided => super::lp_core::solve_shifted(a, bs, eq, x0, Want::Point).map(|c| c.x),
         };
     }
     super::lp_core::solve_shifted(a, bs, eq, x0, Want::Point).map(|c| c.x)
@@ -144,6 +144,16 @@ pub fn lp_point(c: Option<&[f64]>, a: &Mat, b: &[f64], eq: &[usize]) -> Option<V
     LP_CALLS.add(1);
     capture::hook(capture::Call::Point, c, a, b, eq, None);
     solve(c, a, b, eq, Want::Point).map(|c| c.x)
+}
+
+/// Benchmarking hooks (`examples/lp_replay.rs scale`).
+#[doc(hidden)]
+pub mod bench {
+    /// Routes every LP with n > 4 (and n <= 4 with equality rows or an objective) to the dense
+    /// tableau, as before the revised path existed.
+    pub fn set_tableau_only(on: bool) {
+        super::super::lp_core::TABLEAU_ONLY.store(on, std::sync::atomic::Ordering::SeqCst);
+    }
 }
 
 /// Capture of the LP instances the entry points receive (benchmarking only, see
