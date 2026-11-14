@@ -505,7 +505,7 @@ fn graph(program: &Arc<MpProgram>, opts: &SolveOptions, use_pruning: bool) -> Ve
         }
     }
     if is_lp {
-        regions = lp_repair(program, regions, false);
+        regions = lp_repair(program, regions, true);
     }
     regions
 }
@@ -593,7 +593,7 @@ fn graph_parallel(program: &Arc<MpProgram>, opts: &SolveOptions) -> Vec<Critical
         frontier.sort_by_key(|s| s.len());
     }
     if is_lp {
-        regions = lp_repair(program, regions, false);
+        regions = lp_repair(program, regions, true);
     }
     regions
 }
@@ -609,7 +609,7 @@ fn lp_repair(program: &Arc<MpProgram>, regions: Vec<CriticalRegion>, parallel: b
     let degen = AtomicBool::new(true);
     let mut suspects: Vec<(usize, Option<Vec<f64>>)> = (0..solution.critical_regions.len()).map(|i| (i, None)).collect();
     while !suspects.is_empty() {
-        let found = facet_completion::complete_facets(program, &solution, &suspects, &indexed, &degen, parallel);
+        let found = facet_completion::complete_facets_indexed(program, &solution, &suspects, &indexed, &degen, parallel);
         suspects.clear();
         for cr in found {
             if indexed.insert(cr.active_set.clone()) {
