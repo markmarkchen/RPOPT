@@ -4,6 +4,7 @@ pub mod ahmadi;
 pub mod common;
 pub mod dp;
 pub mod incremental;
+pub mod mpmilp_bb;
 pub mod mpmiqp;
 pub mod mplcp;
 pub mod mplp_lex;
