@@ -2,6 +2,7 @@
 
 pub mod ahmadi;
 pub mod approx;
+pub mod combinatorial_kp;
 pub mod common;
 pub mod dp;
 pub mod facet_completion;
@@ -32,6 +33,9 @@ use std::sync::Arc;
 pub enum MpqpAlgorithm {
     Combinatorial,
     CombinatorialParallel,
+    /// Kenefake and Pistikopoulos (2023) constraint and pair classification pruning on top of `Combinatorial`
+    CombinatorialKp,
+    CombinatorialKpParallel,
     Graph,
     /// graph without the pruning list (PPOPT `graph_exp`)
     GraphExp,
@@ -57,7 +61,7 @@ pub enum MpqpAlgorithm {
 impl MpqpAlgorithm {
     pub fn all() -> &'static [MpqpAlgorithm] {
         use MpqpAlgorithm::*;
-        &[Combinatorial, CombinatorialParallel, Graph, GraphExp, GraphParallel, CombinatorialGraph, CombinatorialGraphParallel, Geometric, GeometricParallel, Ahmadi, Mplcp, MplcpEnum, MplpLex, ParametricDaqp, MplcpParallel]
+        &[Combinatorial, CombinatorialParallel, CombinatorialKp, CombinatorialKpParallel, Graph, GraphExp, GraphParallel, CombinatorialGraph, CombinatorialGraphParallel, Geometric, GeometricParallel, Ahmadi, Mplcp, MplcpEnum, MplpLex, ParametricDaqp, MplcpParallel]
     }
 
     pub fn name(&self) -> &'static str {
@@ -65,6 +69,8 @@ impl MpqpAlgorithm {
         match self {
             Combinatorial => "combinatorial",
             CombinatorialParallel => "combinatorial_parallel",
+            CombinatorialKp => "combinatorial_kp",
+            CombinatorialKpParallel => "combinatorial_kp_parallel",
             Graph => "graph",
             GraphExp => "graph_exp",
             GraphParallel => "graph_parallel",
@@ -110,6 +116,8 @@ pub fn solve_mpqp_with(program: &Arc<MpProgram>, algorithm: MpqpAlgorithm, opts:
     let regions = match algorithm {
         Combinatorial => combinatorial(program, false),
         CombinatorialParallel => combinatorial(program, true),
+        CombinatorialKp => combinatorial_kp::combinatorial_kp(program, false),
+        CombinatorialKpParallel => combinatorial_kp::combinatorial_kp(program, true),
         Graph => graph(program, opts, true),
         GraphExp => graph(program, opts, false),
         GraphParallel => graph_parallel(program, opts),
