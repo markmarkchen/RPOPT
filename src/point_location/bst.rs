@@ -193,6 +193,23 @@ impl BinarySearchTree {
     }
 
     #[inline]
+    fn region_violation(&self, j: usize, theta: &[f64]) -> f64 {
+        let w = self.dim + 1;
+        let n = self.dim;
+        let mut worst = f64::NEG_INFINITY;
+        for k in self.offsets[j]..self.offsets[j + 1] {
+            let r = &self.geom_rows[k * w..(k + 1) * w];
+            let v = dot(&r[..n], theta) - r[n];
+            if v > LOCATE_TOL {
+                return f64::INFINITY;
+            }
+            worst = worst.max(v);
+        }
+        worst
+    }
+
+    #[inline]
+    #[allow(dead_code)]
     fn region_contains(&self, j: usize, theta: &[f64]) -> bool {
         let w = self.dim + 1;
         let n = self.dim;
@@ -252,7 +269,7 @@ impl PointLocator for BinarySearchTree {
     }
 
     fn locate(&self, theta: &[f64]) -> Option<usize> {
-        self.leaf(theta).iter().cloned().find(|&j| self.region_contains(j, theta))
+        super::pick_strict_first(self.leaf(theta).iter().cloned(), |j| self.region_violation(j, theta))
     }
 
     fn storage_floats(&self) -> usize {

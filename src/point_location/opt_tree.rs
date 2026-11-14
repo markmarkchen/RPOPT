@@ -679,6 +679,23 @@ impl OptimizedTree {
     }
 
     #[inline]
+    fn region_violation(&self, j: usize, theta: &[f64]) -> f64 {
+        let n = self.dim;
+        let w = n + 1;
+        let mut worst = f64::NEG_INFINITY;
+        for k in self.offsets[j] as usize..self.offsets[j + 1] as usize {
+            let r = &self.rows[k * w..(k + 1) * w];
+            let v = dot(&r[..n], theta) - r[n];
+            if v > LOCATE_TOL {
+                return f64::INFINITY;
+            }
+            worst = worst.max(v);
+        }
+        worst
+    }
+
+    #[inline]
+    #[allow(dead_code)]
     fn region_contains(&self, j: usize, theta: &[f64]) -> bool {
         let n = self.dim;
         let w = n + 1;
@@ -695,12 +712,12 @@ impl OptimizedTree {
     pub fn locate_counted(&self, theta: &[f64]) -> (Option<usize>, usize, usize) {
         let (off, d) = self.descend(theta);
         let cnt = self.leaves[off] as usize;
-        for (t, &j) in self.leaves[off + 1..off + 1 + cnt].iter().enumerate() {
-            if self.region_contains(j as usize, theta) {
-                return (Some(j as usize), d, t + 1);
-            }
-        }
-        (None, d, cnt)
+        let mut tested = 0;
+        let r = super::pick_strict_first(self.leaves[off + 1..off + 1 + cnt].iter().map(|&j| j as usize), |j| {
+            tested += 1;
+            self.region_violation(j, theta)
+        });
+        (r, d, tested)
     }
 }
 
@@ -713,7 +730,7 @@ impl PointLocator for OptimizedTree {
     fn locate(&self, theta: &[f64]) -> Option<usize> {
         let (off, _) = self.descend(theta);
         let cnt = self.leaves[off] as usize;
-        self.leaves[off + 1..off + 1 + cnt].iter().map(|&j| j as usize).find(|&j| self.region_contains(j, theta))
+        super::pick_strict_first(self.leaves[off + 1..off + 1 + cnt].iter().map(|&j| j as usize), |j| self.region_violation(j, theta))
     }
 
     fn storage_floats(&self) -> usize {

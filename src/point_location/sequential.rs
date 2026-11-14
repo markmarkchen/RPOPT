@@ -87,6 +87,23 @@ impl FlatSequential {
         true
     }
 
+    /// Largest row violation of region j, infinity once a row exceeds `LOCATE_TOL`.
+    #[inline]
+    pub fn region_violation(&self, j: usize, theta: &[f64]) -> f64 {
+        let w = self.dim + 1;
+        let n = self.dim;
+        let mut worst = f64::NEG_INFINITY;
+        for k in self.offsets[j]..self.offsets[j + 1] {
+            let r = &self.rows[k * w..(k + 1) * w];
+            let v = dot(&r[..n], theta) - r[n];
+            if v > LOCATE_TOL {
+                return f64::INFINITY;
+            }
+            worst = worst.max(v);
+        }
+        worst
+    }
+
     pub fn num_regions(&self) -> usize {
         self.offsets.len() - 1
     }
@@ -98,7 +115,7 @@ impl PointLocator for FlatSequential {
     }
 
     fn locate(&self, theta: &[f64]) -> Option<usize> {
-        (0..self.num_regions()).find(|&j| self.region_contains(j, theta))
+        super::pick_strict_first(0..self.num_regions(), |j| self.region_violation(j, theta))
     }
 
     fn storage_floats(&self) -> usize {
