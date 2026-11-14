@@ -26,6 +26,7 @@ use crate::program::MpProgram;
 use crate::solution::Solution;
 use crate::solver::lp::{lp_feasible, solve_lp};
 use crate::fxhash::FxHashSet as HashSet;
+use crate::fxhash::FxHashMap as HashMap;
 use rayon::prelude::*;
 use std::sync::Arc;
 use std::time::Instant;
@@ -143,7 +144,9 @@ pub fn enumerate_active_sets(mpc: &MpcProblem, opts: &DpOptions, stats: &mut DpS
     stats.cumulative_seconds.push(t0.elapsed().as_secs_f64());
     let mut last = 1;
     for n in 1..nbar {
-        let ctx = Horizon::new(&qps[n], syms[n].as_deref(), opts.reduced_lps);
+        let mut ctx = Horizon::new(&qps[n], syms[n].as_deref(), opts.reduced_lps);
+        let pmap = ctx.build_parent_feas(&cur);
+        ctx.pfeas = Some(&pmap);
         cur = extend(&ctx, &qps[n - 1], &cur, &subsets, cmax, opts, stats);
         stats.set_sizes.push(cur.len());
         stats.cumulative_seconds.push(t0.elapsed().as_secs_f64());
@@ -322,6 +325,19 @@ struct Horizon<'a> {
     cx: Mat,
     /// rows with G_i = 0 (bounds on x0 only): active, they are equalities in x0 and carry no multiplier
     zero_row: Vec<bool>,
+    /// feasibility systems of the parents (horizon n) for the candidates of the horizon n+1
+    pfeas: Option<&'a HashMap<Set, PFeas>>,
+}
+
+/// Feasibility system of the rows of a parent T (shifted by one stage), with the equalities of T
+/// eliminated: variables v = (x0, U of the non-pivot columns); the rows not in T are
+/// `mat v <= b`, a candidate A_j + T makes the rows of A_j equalities. `dep_eq` are rows (equalities)
+/// that remain from dependent rows of T.
+struct PFeas {
+    mat: Mat,
+    b: Vec<f64>,
+    row_of: Vec<u32>,
+    n_dep: usize,
 }
 
 /// Parameter substitution `x0 = xc + T y` from the equalities of the active rows with G_i = 0.
@@ -461,7 +477,7 @@ impl Horizon<'_> {
             (Mat::zeros(0, 0), Mat::zeros(0, 0))
         };
         let zero_row = (0..qp.num_rows()).map(|i| qp.g.row(i).iter().all(|&v| v == 0.0)).collect();
-        Horizon { qp, perm, reduced, w_mat, cx, zero_row }
+        Horizon { qp, perm, reduced, w_mat, cx, zero_row, pfeas: None }
     }
 
     /// Solves the equalities `aug[:, :nx] x0 = aug[:, nx]` (Gauss-Jordan, complete pivoting). `None`
@@ -905,6 +921,7 @@ struct Scratch {
     ug_rest: Vec<usize>,
     rowx: Vec<f64>,
     rowu: Vec<f64>,
+    eqi: Vec<usize>,
 }
 
 thread_local! {
@@ -1273,9 +1290,31 @@ impl Horizon<'_> {
             stats.outcomes[2] += 1;
             return Some(Outcome::Other);
         }
-        // ---- feasibility: eliminate U of the independent active rows
+        // ---- feasibility
         stats.feasibility_lps += 1;
         let t0 = Instant::now();
+        if let Some(pf) = self.pfeas.and_then(|m| m.get(&(a >> qp.q0))) {
+            // rows of the stage-0 active set are equalities of the parent's system
+            sc.eqi.clear();
+            let mut x = a & mask(qp.q0);
+            while x != 0 {
+                sc.eqi.push(pf.row_of[x.trailing_zeros() as usize] as usize);
+                x &= x - 1;
+            }
+            let nrows = pf.mat.rows;
+            for k in 0..pf.n_dep {
+                sc.eqi.push(nrows - pf.n_dep + k);
+            }
+            let feasible = lp_feasible(&pf.mat, &pf.b, &sc.eqi);
+            stats.seconds_feas_lp += t0.elapsed().as_secs_f64();
+            return Some(if feasible {
+                stats.outcomes[2] += 1;
+                Outcome::Other
+            } else {
+                stats.outcomes[1] += 1;
+                Outcome::Infeasible
+            });
+        }
         let width = nm + nx + 1;
         sc.aug.clear();
         sc.aug.resize(nb * width, 0.0);
@@ -1363,6 +1402,86 @@ impl Horizon<'_> {
             stats.outcomes[1] += 1;
             Outcome::Infeasible
         })
+    }
+
+    /// Feasibility systems of all parents `cur` (their rows shifted by one stage).
+    fn build_parent_feas(&self, cur: &[(Set, bool)]) -> HashMap<Set, PFeas> {
+        let mut map: HashMap<Set, PFeas> = HashMap::default();
+        if !self.reduced {
+            return map;
+        }
+        let (qp, q0) = (self.qp, self.qp.q0);
+        let (nx, nm, q) = (qp.nx, qp.nm, qp.num_rows());
+        let width = nm + nx + 1;
+        for &(al, _) in cur {
+            if map.contains_key(&al) {
+                continue;
+            }
+            let tmask = al << q0;
+            let tr = bits(tmask);
+            let nt = tr.len();
+            let mut aug = vec![0.0; nt * width];
+            for (r, &i) in tr.iter().enumerate() {
+                let row = &mut aug[r * width..(r + 1) * width];
+                row[..nm].copy_from_slice(qp.g.row(i));
+                for c in 0..nx {
+                    row[nm + c] = -qp.e[(i, c)];
+                }
+                row[nm + nx] = qp.w[i];
+            }
+            let scale = aug.iter().fold(1.0f64, |m, v| m.max(v.abs()));
+            let (mut used, mut piv) = (vec![], vec![]);
+            let rank = gauss_jordan(&mut aug, nt, width, nm, &mut used, &mut piv, 1e-10 * scale);
+            let rest: Vec<usize> = (0..nm).filter(|&c| !used[c]).collect();
+            let nr = rest.len();
+            let n = nx + nr;
+            let n_dep = nt - rank;
+            let rows_total = (q - nt) + n_dep;
+            let mut mat = Mat::zeros(rows_total, n);
+            let mut b = vec![0.0; rows_total];
+            let mut row_of = vec![u32::MAX; q];
+            let mut r = 0;
+            for i in 0..q {
+                if tmask >> i & 1 == 1 {
+                    continue;
+                }
+                row_of[i] = r as u32;
+                let gi = qp.g.row(i);
+                let out = mat.row_mut(r);
+                let mut rhs = qp.w[i];
+                for c in 0..nx {
+                    out[c] = -qp.e[(i, c)];
+                }
+                for (u, &rc) in rest.iter().enumerate() {
+                    out[nx + u] = gi[rc];
+                }
+                for k in 0..rank {
+                    let g = gi[piv[k]];
+                    if g == 0.0 {
+                        continue;
+                    }
+                    let ak = &aug[k * width..(k + 1) * width];
+                    for c in 0..nx {
+                        out[c] -= g * ak[nm + c];
+                    }
+                    rhs -= g * ak[nm + nx];
+                    for (u, &rc) in rest.iter().enumerate() {
+                        out[nx + u] -= g * ak[rc];
+                    }
+                }
+                b[r] = rhs;
+                r += 1;
+            }
+            for rr in rank..nt {
+                let ak = &aug[rr * width..(rr + 1) * width];
+                let out = mat.row_mut(r);
+                out[..nx].copy_from_slice(&ak[nm..nm + nx]);
+                b[r] = ak[nm + nx];
+                r += 1;
+            }
+            map.insert(al, PFeas { mat, b, row_of, n_dep });
+        }
+        map
     }
 
     /// Flat version of `split_dependent` (fills `act_b`, `dep_rows`, `dep_c` of the scratch).
