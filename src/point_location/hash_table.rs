@@ -160,7 +160,7 @@ fn lp_filter(geom: &PartitionGeometry, cands: Cands, grows: &[f64], n: usize, bl
             let centre: Vec<f64> = (0..n).map(|k| 0.5 * (blo[k] + bhi[k])).collect();
             let scale = (0..n).map(|k| 0.5 * (bhi[k] - blo[k])).fold(0.0f64, f64::max);
             let hint: Vec<&[f64]> = geom.centers.get(j as usize).map(|c| c.as_slice()).into_iter().collect();
-            if !has_interior(&a, &b, 1e-12, &hint, &centre, scale) {
+            if !has_interior(&a, &b, 1e-12, &hint, &centre, scale, scale) {
                 continue;
             }
         }
@@ -827,6 +827,7 @@ mod tests {
             domain_planes: vec![],
             global_lo: vec![0.0, 0.0],
             global_hi: vec![1.0, 1.0],
+            thin: vec![false; k * k],
         }
     }
 

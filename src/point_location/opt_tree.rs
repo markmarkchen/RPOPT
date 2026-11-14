@@ -181,7 +181,8 @@ impl<'a> Builder<'a> {
         set.iter()
             .map(|&i| {
                 let vs = &self.geom.vertices[i];
-                if vs.is_empty() {
+                // a thin region's vertex list may be incomplete: never classify it from vertices
+                if vs.is_empty() || self.geom.thin[i] {
                     return (f64::NEG_INFINITY, f64::INFINITY);
                 }
                 let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
@@ -586,7 +587,7 @@ fn split_check(geom: &PartitionGeometry, i: usize, path: &[Vec<f64>], pl: &[f64]
         let row: Vec<f64> = pl[..n].iter().map(|v| sign * v).collect();
         r2.push_row(&row);
         b2.push(sign * pl[n]);
-        has_interior(&r2, &b2, 1e-11, &hints, &geom.centers[i], scale)
+        has_interior(&r2, &b2, 1e-11, &hints, &geom.centers[i], scale, geom.extent())
     };
     (check(1.0), check(-1.0))
 }

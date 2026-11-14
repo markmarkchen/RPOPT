@@ -195,9 +195,18 @@ fn main() {
     let t0 = Instant::now();
     let geom = PartitionGeometry::new(&sol);
     let geom_s = t0.elapsed().as_secs_f64();
-    println!("# geometry {:.1}s", geom_s);
+    println!("# geometry {:.1}s, thin regions {} of {}", geom_s, geom.thin.iter().filter(|&&t| t).count(), geom.num_regions);
     let nt = prog.num_t();
     let nreg = geom.num_regions;
+    if let Ok(list) = std::env::var("SWEEP_VERT_DIAG") {
+        // vertex completeness of the given regions at several feasibility tolerances
+        for j in list.split(',').map(|v| v.parse::<usize>().unwrap()) {
+            let (a, b) = geom.region_mat(j);
+            let counts: Vec<String> = [1e-9, 1e-8, 1e-7, 1e-6, 1e-5].iter().map(|&t| format!("{:e}:{}", t, rpopt::point_location::opt_tree::robust_vertices(&a, &b, t).len())).collect();
+            println!("region {j} rows {} radius {:e} geometry verts {} robust {}", a.rows, geom.radii[j], geom.vertices[j].len(), counts.join(" "));
+        }
+        return;
+    }
     let (lo, hi) = theta_box(&prog);
     let seq = FlatSequential::new(&sol);
     let mut rng = StdRng::seed_from_u64(11);
@@ -355,6 +364,7 @@ fn main() {
         ms.push(M { name: nm.into(), loc: Box::new(ArcLoc(ht)), build_s: b, bytes, depth_max: dm, depth_of: None });
     }
 
+    eprintln!("# has_interior: certified no {} uncertified {}", rpopt::point_location::geometry::INTERIOR_CERTIFIED_NO.load(std::sync::atomic::Ordering::Relaxed), rpopt::point_location::geometry::INTERIOR_UNCERTIFIED.load(std::sync::atomic::Ordering::Relaxed));
     // ---- mismatches, depth statistics
     println!("spec\ttheta\tregions\tmethod\tbuild_s\tbytes\tns_uniform\tns_inside\tns_walk\tdepth_max\tdepth_avg_walk\tcand_avg_walk\tmismatch");
     let mut times: Vec<Vec<Vec<f64>>> = vec![vec![vec![]; modes.len()]; ms.len()];

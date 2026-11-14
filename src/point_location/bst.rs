@@ -67,6 +67,10 @@ impl BinarySearchTree {
         let tol = 1e-9;
         let mut side = vec![Side::Both; r * np];
         for i in 0..r {
+            if geom.thin[i] {
+                // incomplete vertex lists of thin regions cannot prove "entirely on one side"
+                continue;
+            }
             for (p, pl) in geom.planes.iter().enumerate() {
                 let mut lo = false;
                 let mut hi = false;
@@ -264,7 +268,7 @@ fn split_check(geom: &PartitionGeometry, i: usize, path: &[Vec<f64>], pl: &[f64]
         let row: Vec<f64> = pl[..n].iter().map(|v| sign * v).collect();
         r2.push_row(&row);
         b2.push(sign * pl[n]);
-        has_interior(&r2, &b2, 1e-9, &hints, &geom.centers[i], scale)
+        has_interior(&r2, &b2, 1e-9, &hints, &geom.centers[i], scale, geom.extent())
     };
     let _ = Mat::zeros(0, 0);
     (check(1.0), check(-1.0))
