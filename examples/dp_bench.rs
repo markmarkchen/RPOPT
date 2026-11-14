@@ -125,7 +125,8 @@ fn main() {
         let mpc = MpcProblem::from_json_file(&path).unwrap();
         let prog = Arc::new(MpProgram::from_json_file(&path).unwrap());
         if !only_dp {
-            for algo in [MpqpAlgorithm::Geometric, MpqpAlgorithm::Combinatorial, MpqpAlgorithm::CombinatorialGraph] {
+            let algos: &[MpqpAlgorithm] = if std::env::var("DP_GEO").is_ok() { &[MpqpAlgorithm::Geometric] } else { &[MpqpAlgorithm::Geometric, MpqpAlgorithm::Combinatorial, MpqpAlgorithm::CombinatorialGraph] };
+            for &algo in algos {
                 let (t, s) = median_time(limit, || solve_mpqp(&prog, algo));
                 println!("{:<12} {:<18} {:>10.4} {:>8}", name, algo.name(), t, s.critical_regions.len());
             }
@@ -138,6 +139,9 @@ fn main() {
             vs.push(("dp2023sym+cor3", DpOptions { terminal_invariant: true, ..DpOptions::symmetric() }));
         }
         for (label, opts) in &vs {
+            if std::env::var("DP_GEO").is_ok() {
+                break;
+            }
             if only_variant.as_deref().is_some_and(|v| v != *label) {
                 continue;
             }
