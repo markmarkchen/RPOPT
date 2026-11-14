@@ -2,6 +2,7 @@
 
 pub mod ahmadi;
 pub mod common;
+pub mod facet_completion;
 pub mod incremental;
 pub mod mpmiqp;
 pub mod mplcp;
@@ -897,44 +898,120 @@ pub fn kkt_region_nonempty(program: &MpProgram, active_set: &[usize]) -> bool {
 
 // ---------------------------------------------------------------------------- geometric
 
+/// Start for `geometric` when every sampled optimal active set is over-determined (the sampled
+/// ball lies inside one degenerate vertex cone): the canonical basis of a sampled active set.
+fn degenerate_start(program: &MpProgram, rng: &mut StdRng) -> Option<Vec<usize>> {
+    use rand::Rng;
+    let s = program.feasible_space_chebychev_ball()?;
+    let (nx, nt) = (program.num_x(), program.num_t());
+    let center = &s.x[nx..nx + nt];
+    let radius = s.x[s.x.len() - 1];
+    for _ in 0..500 {
+        let test: Vec<f64> = center.iter().map(|c| c + rng.gen_range(-radius..=radius)).collect();
+        if let Some(active) = program.active_set_at(&test) {
+            if let Some(b) = canonical_basis(program, &active, &test) {
+                return Some(b);
+            }
+        }
+    }
+    None
+}
+
 /// Spjøtvold et al. facet-stepping exploration.
 fn geometric(program: &Arc<MpProgram>, opts: &SolveOptions, parallel: bool) -> Vec<CriticalRegion> {
     let mut rng = StdRng::seed_from_u64(opts.seed);
-    let Some(active_set) = program.gen_optimal_active_set(&mut rng) else { return vec![] };
+    let Some(active_set) = program.gen_optimal_active_set(&mut rng).or_else(|| degenerate_start(program, &mut rng)) else { return vec![] };
     let Some(initial) = gen_cr_from_active_set(program, &active_set, false) else { return vec![] };
     let mut solution = Solution::new(program.clone(), vec![initial.clone()]);
     let mut indexed: HashSet<Vec<usize>> = HashSet::default();
     indexed.insert(active_set.clone());
-    let mut unchecked: std::collections::VecDeque<CriticalRegion> = std::collections::VecDeque::new();
-    unchecked.push_back(initial);
+    use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
+    let degen = AtomicBool::new(false);
+    // Degeneracy bookkeeping: facets whose step met a degenerate active set (or whose region has a
+    // duplicated facet row) are completed afterwards (see facet_completion); all else is untouched.
+    // Entries are (index in the solution, Some(facet normal) or None for every facet).
+    let mut suspects: Vec<(usize, Option<Vec<f64>>)> = vec![];
+    let mut unchecked: std::collections::VecDeque<(usize, CriticalRegion)> = std::collections::VecDeque::new();
+    unchecked.push_back((0, initial));
     if !parallel {
-        while let Some(cur) = unchecked.pop_front() {
-            for (center, normal, radius) in get_facet_centers(&cur.e, &cur.f) {
-                if let Some(cr) = fathem_facet(&center, &normal, radius, program, &indexed, &cur.active_set, Some(&solution)) {
+        while let Some((ci, cur)) = unchecked.pop_front() {
+            let region_flag = AtomicBool::new(false);
+            let centers = get_facet_centers_degen(&cur.e, &cur.f, Some(&region_flag));
+            if region_flag.load(Relaxed) {
+                suspects.push((ci, None));
+            }
+            for (center, normal, radius) in centers {
+                let flag = AtomicBool::new(false);
+                let found = fathem_facet_degen(&center, &normal, radius, program, &indexed, None, &cur.active_set, Some(&solution), Some(&flag));
+                let flagged = flag.load(Relaxed);
+                if flagged {
+                    suspects.push((ci, Some(normal.clone())));
+                }
+                if let Some(cr) = found {
                     indexed.insert(cr.active_set.clone());
-                    unchecked.push_back(cr.clone());
+                    let idx = solution.critical_regions.len();
+                    if flagged {
+                        suspects.push((idx, None));
+                    }
+                    unchecked.push_back((idx, cr.clone()));
                     solution.add_region(cr);
                 }
             }
         }
     } else {
         while !unchecked.is_empty() {
-            let wave: Vec<CriticalRegion> = unchecked.drain(..).collect();
+            let wave: Vec<(usize, CriticalRegion)> = unchecked.drain(..).collect();
             let tasks: Vec<(usize, Vec<f64>, Vec<f64>, f64)> = wave
                 .par_iter()
                 .enumerate()
-                .flat_map_iter(|(wi, r)| get_facet_centers(&r.e, &r.f).into_iter().map(move |(c, n, rad)| (wi, c, n, rad)))
+                .flat_map_iter(|(wi, (_, r))| {
+                    let region_flag = AtomicBool::new(false);
+                    let mut v: Vec<_> = get_facet_centers_degen(&r.e, &r.f, Some(&region_flag)).into_iter().map(|(c, n, rad)| (wi, c, n, rad)).collect();
+                    if region_flag.load(Relaxed) {
+                        v.push((wi, vec![], vec![], f64::NAN)); // marker: whole region suspect
+                    }
+                    v
+                })
                 .collect();
             let claimed = std::sync::Mutex::new(HashSet::default());
-            let found: Vec<Option<CriticalRegion>> = tasks
+            let found: Vec<(Option<CriticalRegion>, bool)> = tasks
                 .par_iter()
-                .map(|(wi, c, n, rad)| fathem_facet_claim(c, n, *rad, program, &indexed, Some(&claimed), &wave[*wi].active_set, Some(&solution)))
+                .map(|(wi, c, n, rad)| {
+                    if rad.is_nan() {
+                        return (None, true);
+                    }
+                    let flag = AtomicBool::new(false);
+                    let cr = fathem_facet_degen(c, n, *rad, program, &indexed, Some(&claimed), &wave[*wi].1.active_set, Some(&solution), Some(&flag));
+                    (cr, flag.load(Relaxed))
+                })
                 .collect();
-            for cr in found.into_iter().flatten() {
-                if indexed.insert(cr.active_set.clone()) {
-                    unchecked.push_back(cr.clone());
-                    solution.add_region(cr);
+            for ((wi, _, n, rad), (cr, flagged)) in tasks.iter().zip(found) {
+                if flagged {
+                    suspects.push((wave[*wi].0, if rad.is_nan() { None } else { Some(n.clone()) }));
                 }
+                if let Some(cr) = cr {
+                    if indexed.insert(cr.active_set.clone()) {
+                        let idx = solution.critical_regions.len();
+                        if flagged {
+                            suspects.push((idx, None));
+                        }
+                        unchecked.push_back((idx, cr.clone()));
+                        solution.add_region(cr);
+                    }
+                }
+            }
+        }
+    }
+    // Degenerate problem (dependent or over-determined active sets met): the partition need not be
+    // facet-to-facet, so complete the suspect facets (see facet_completion).
+    while !suspects.is_empty() {
+        degen.store(true, Relaxed);
+        let found = facet_completion::complete_facets(program, &solution, &suspects, &indexed, &degen, parallel);
+        suspects.clear();
+        for cr in found {
+            if indexed.insert(cr.active_set.clone()) {
+                suspects.push((solution.critical_regions.len(), None));
+                solution.add_region(cr);
             }
         }
     }
