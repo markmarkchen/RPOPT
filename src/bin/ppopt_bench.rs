@@ -219,10 +219,10 @@ fn main() {
         let df = DescriptorFunction::new(&sol, &geom, 7);
         let dinfo = json!({"compared_facets": df.compared_facets, "explicit_rows": df.explicit_rows});
         locators.push(timed(&mut || (Box::new(DescriptorFunction::new(&sol, &geom, 7)), dinfo.clone())));
-        for mult in [1usize, 4, 16] {
+        for mult in [1usize, 4, 16, 64, 256] {
             let target = (geom.num_regions * mult).max(4);
             let ht = HashTable::new(&geom, target);
-            let info = json!({"cells": ht.num_cells(), "mean_candidates": ht.mean_candidates(), "max_candidates": ht.max_candidates()});
+            let info = json!({"cells": ht.num_cells(), "mean_candidates": ht.mean_candidates(), "max_candidates": ht.max_candidates(), "mixed_cells": ht.mixed_cells(), "rows_per_mixed": ht.mean_rows_per_mixed_cell()});
             locators.push(timed(&mut || (Box::new(HashTable::new(&geom, target)), info.clone())));
         }
         locators.push(timed(&mut || (Box::new(Yann::new(&sol)), json!({}))));

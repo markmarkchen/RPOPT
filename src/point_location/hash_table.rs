@@ -9,7 +9,7 @@
 
 use super::geometry::PartitionGeometry;
 use super::{PointLocator, LOCATE_TOL};
-use crate::linalg::{dot, Mat};
+use crate::linalg::Mat;
 use crate::utils::chebyshev_ball;
 use rayon::prelude::*;
 
@@ -19,10 +19,18 @@ pub struct HashTable {
     inv_h: Vec<f64>,
     cells_per_dim: Vec<usize>,
     strides: Vec<usize>,
-    cell_start: Vec<u32>,
-    cell_items: Vec<u32>,
-    rows: Vec<f64>,
-    offsets: Vec<usize>,
+    /// per cell: 0 = no region, 1 + j = the cell lies entirely inside region j, otherwise
+    /// `mixed_base + w` where w is the word offset of the cell's record in `stream`
+    info: Vec<u32>,
+    mixed_base: u32,
+    /// record of a cell that needs row tests: [ncand, then per candidate (region << 32 | nrows)
+    /// followed by nrows packed rows [a | b] (f64 bits)]. Only rows whose hyperplane can cut the
+    /// cell are kept. Contiguous, so one cache line chain per query.
+    stream: Vec<u64>,
+    mixed: usize,
+    total_cands: usize,
+    total_rows: usize,
+    max_cands: usize,
 }
 
 impl HashTable {
@@ -115,28 +123,141 @@ impl HashTable {
             items[fill[c] as usize] = i;
             fill[c] += 1;
         }
-        let mut rows = vec![];
-        for i in 0..geom.num_regions {
-            let (e, f) = geom.region_rows(i);
-            for k in 0..f.len() {
-                rows.extend_from_slice(&e[k * n..(k + 1) * n]);
-                rows.push(f[k]);
+        // Per cell and candidate keep only the rows that can reject a point of the cell: a row
+        // whose halfspace contains the whole (slightly enlarged) cell with a margin can never
+        // fail the online test, so dropping it does not change any answer. A candidate left with
+        // no rows contains the whole cell and is returned at once; later candidates are unreachable.
+        let mixed_base = geom.num_regions as u32 + 1;
+        let mut info = vec![0u32; total + 1];
+        let mut stream: Vec<u64> = vec![];
+        let (mut mixed, mut total_cands, mut total_rows, mut max_cands) = (0usize, 0usize, 0usize, 0usize);
+        let w = n + 1;
+        for c in 0..total {
+            let mut corner_lo = vec![0.0; n];
+            let mut corner_hi = vec![0.0; n];
+            for k in 0..n {
+                let ik = (c / strides[k]) % cells_per_dim[k];
+                corner_lo[k] = lo[k] + ik as f64 * h[k] - 1e-6 * h[k];
+                corner_hi[k] = lo[k] + (ik + 1) as f64 * h[k] + 1e-6 * h[k];
+            }
+            let mut cell_cands: Vec<(u32, Vec<f64>)> = vec![];
+            for &j in &items[counts[c] as usize..counts[c + 1] as usize] {
+                let (e, f) = geom.region_rows(j as usize);
+                let mut rws: Vec<f64> = vec![];
+                for r in 0..f.len() {
+                    let a = &e[r * n..(r + 1) * n];
+                    let mut maxdot = 0.0;
+                    for k in 0..n {
+                        maxdot += (a[k] * corner_lo[k]).max(a[k] * corner_hi[k]);
+                    }
+                    if maxdot > f[r] - 1e-8 {
+                        rws.extend_from_slice(a);
+                        rws.push(f[r]);
+                    }
+                }
+                let empty = rws.is_empty();
+                cell_cands.push((j, rws));
+                if empty {
+                    break;
+                }
+            }
+            // order candidates by how many sample points of the cell they contain (the likely
+            // region first). Only done when no candidate covers the cell entirely.
+            if cell_cands.len() > 1 && cell_cands.iter().all(|(_, r)| !r.is_empty()) {
+                let samples = 24usize;
+                let mut state = 0x9E3779B97F4A7C15u64 ^ c as u64;
+                let mut pts: Vec<Vec<f64>> = vec![];
+                for _ in 0..samples {
+                    let mut p = vec![0.0; n];
+                    for k in 0..n {
+                        state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                        let t = (state >> 11) as f64 / (1u64 << 53) as f64;
+                        p[k] = corner_lo[k] + t * (corner_hi[k] - corner_lo[k]);
+                    }
+                    pts.push(p);
+                }
+                let hits: Vec<usize> = cell_cands
+                    .iter()
+                    .map(|(j, _)| {
+                        let (e, f) = geom.region_rows(*j as usize);
+                        pts.iter().filter(|p| (0..f.len()).all(|r| (0..n).map(|k| e[r * n + k] * p[k]).sum::<f64>() <= f[r] + LOCATE_TOL)).count()
+                    })
+                    .collect();
+                let mut idx: Vec<usize> = (0..cell_cands.len()).collect();
+                idx.sort_by_key(|&i| std::cmp::Reverse(hits[i]));
+                cell_cands = idx.into_iter().map(|i| cell_cands[i].clone()).collect();
+            }
+            if cell_cands.is_empty() {
+                info[c] = 0;
+            } else if cell_cands.len() == 1 && cell_cands[0].1.is_empty() {
+                info[c] = cell_cands[0].0 + 1;
+            } else {
+                info[c] = mixed_base + stream.len() as u32;
+                mixed += 1;
+                max_cands = max_cands.max(cell_cands.len());
+                total_cands += cell_cands.len();
+                stream.push(cell_cands.len() as u64);
+                for (j, rws) in &cell_cands {
+                    let nr = rws.len() / w;
+                    total_rows += nr;
+                    stream.push(((*j as u64) << 32) | nr as u64);
+                    stream.extend(rws.iter().map(|v| v.to_bits()));
+                }
             }
         }
-        HashTable { dim: n, lo, inv_h, cells_per_dim: cells_per_dim.to_vec(), strides, cell_start: counts, cell_items: items, rows, offsets: geom.offsets.clone() }
+        assert!(stream.len() < (u32::MAX - mixed_base) as usize);
+        HashTable { dim: n, lo, inv_h, cells_per_dim: cells_per_dim.to_vec(), strides, info, mixed_base, stream, mixed, total_cands, total_rows, max_cands }
     }
 
-    #[inline]
-    fn region_contains(&self, j: usize, theta: &[f64]) -> bool {
-        let w = self.dim + 1;
-        let n = self.dim;
-        for k in self.offsets[j]..self.offsets[j + 1] {
-            let r = &self.rows[k * w..(k + 1) * w];
-            if dot(&r[..n], theta) > r[n] + LOCATE_TOL {
-                return false;
-            }
+    #[inline(always)]
+    fn locate_g(&self, theta: &[f64], n: usize) -> Option<usize> {
+        let mut cell = 0usize;
+        let mut inside = true;
+        for k in 0..n {
+            let u = (theta[k] - self.lo[k]) * self.inv_h[k];
+            let m = self.cells_per_dim[k];
+            // NaN fails both comparisons and counts as outside
+            inside &= (u >= -1e-9) & (u <= m as f64 + 1e-9);
+            cell += (u as usize).min(m - 1) * self.strides[k];
         }
-        true
+        // outside the grid: the extra last entry of `info` means "no region"
+        let cell = if inside { cell } else { self.info.len() - 1 };
+        let inf = self.info[cell];
+        if inf < self.mixed_base {
+            return (inf as usize).checked_sub(1);
+        }
+        let mut p = (inf - self.mixed_base) as usize;
+        let nc = self.stream[p] as usize;
+        p += 1;
+        for _ in 0..nc {
+            let head = self.stream[p];
+            let nr = (head & 0xffff_ffff) as usize;
+            let mut ok = true;
+            let rows = &self.stream[p + 1..p + 1 + nr * (n + 1)];
+            for row in rows.chunks_exact(n + 1) {
+                let mut d = 0.0;
+                for k in 0..n {
+                    d += f64::from_bits(row[k]) * theta[k];
+                }
+                if d > f64::from_bits(row[n]) + LOCATE_TOL {
+                    ok = false;
+                    break;
+                }
+            }
+            if ok {
+                return Some((head >> 32) as usize);
+            }
+            p += 1 + nr * (n + 1);
+        }
+        None
+    }
+
+    pub fn mixed_cells(&self) -> usize {
+        self.mixed
+    }
+
+    pub fn mean_rows_per_mixed_cell(&self) -> f64 {
+        self.total_rows as f64 / self.mixed.max(1) as f64
     }
 
     pub fn num_cells(&self) -> usize {
@@ -144,11 +265,11 @@ impl HashTable {
     }
 
     pub fn mean_candidates(&self) -> f64 {
-        self.cell_items.len() as f64 / self.num_cells() as f64
+        self.total_cands as f64 / self.num_cells() as f64
     }
 
     pub fn max_candidates(&self) -> usize {
-        self.cell_start.windows(2).map(|w| (w[1] - w[0]) as usize).max().unwrap_or(0)
+        self.max_cands
     }
 }
 
@@ -157,25 +278,17 @@ impl PointLocator for HashTable {
         "hash table"
     }
 
+    #[inline]
     fn locate(&self, theta: &[f64]) -> Option<usize> {
-        let mut cell = 0usize;
-        for k in 0..self.dim {
-            let u = (theta[k] - self.lo[k]) * self.inv_h[k];
-            if !(u >= -1e-9) {
-                return None;
-            }
-            let c = (u as usize).min(self.cells_per_dim[k] - 1);
-            if u > self.cells_per_dim[k] as f64 + 1e-9 {
-                return None;
-            }
-            cell += c * self.strides[k];
+        match self.dim {
+            2 => self.locate_g(theta, 2),
+            3 => self.locate_g(theta, 3),
+            4 => self.locate_g(theta, 4),
+            n => self.locate_g(theta, n),
         }
-        let s = self.cell_start[cell] as usize;
-        let e = self.cell_start[cell + 1] as usize;
-        self.cell_items[s..e].iter().map(|&j| j as usize).find(|&j| self.region_contains(j, theta))
     }
 
     fn storage_floats(&self) -> usize {
-        self.cell_start.len() + self.cell_items.len() + self.rows.len() + 3 * self.dim
+        self.info.len() + self.stream.len() + 3 * self.dim
     }
 }
