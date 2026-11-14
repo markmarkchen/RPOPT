@@ -12,7 +12,7 @@ fn problems() -> Vec<(String, Arc<MpProgram>)> {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("bench/problems");
     let mut files: Vec<_> = std::fs::read_dir(dir).unwrap().filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")).collect();
     files.sort();
-    assert_eq!(files.len(), 9);
+    assert_eq!(files.len(), 12);
     files.into_iter().map(|f| (f.file_stem().unwrap().to_string_lossy().to_string(), Arc::new(MpProgram::from_json_file(&f).unwrap()))).collect()
 }
 

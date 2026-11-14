@@ -213,25 +213,49 @@ impl MpProgram {
         self.theta_bbox = OnceLock::new();
     }
 
-    /// Bounding box of the parameter set {A_t θ <= b_t} (2 n_t LPs, cached); None if unbounded.
+    /// Bounding box of the parameter set {A_t θ <= b_t} (2 n_t LPs, cached). Constraint processing
+    /// can drop parameter bounds that the other constraints imply (e.g. with a terminal set), which
+    /// leaves {A_t θ <= b_t} unbounded; the box of the feasible parameters (the projection of the
+    /// (x, θ) polytope) is used then. None only if that is unbounded too.
     pub fn theta_bbox(&self) -> Option<&(Vec<f64>, Vec<f64>)> {
         self.theta_bbox
             .get_or_init(|| {
                 let n = self.num_t();
-                if self.a_t.rows == 0 {
-                    return None;
-                }
-                let mut lo = vec![0.0; n];
-                let mut hi = vec![0.0; n];
-                let mut c = vec![0.0; n];
-                for k in 0..n {
-                    c[k] = 1.0;
-                    lo[k] = crate::solver::lp::lp_point(Some(&c), &self.a_t, &self.b_t, &[])?[k];
-                    c[k] = -1.0;
-                    hi[k] = crate::solver::lp::lp_point(Some(&c), &self.a_t, &self.b_t, &[])?[k];
-                    c[k] = 0.0;
-                }
-                Some((lo, hi))
+                let bbox = |a: &Mat, b: &[f64], off: usize| -> Option<(Vec<f64>, Vec<f64>)> {
+                    let mut lo = vec![0.0; n];
+                    let mut hi = vec![0.0; n];
+                    let mut c = vec![0.0; a.cols];
+                    for k in 0..n {
+                        c[off + k] = 1.0;
+                        lo[k] = crate::solver::lp::lp_point(Some(&c), a, b, &[])?[off + k];
+                        c[off + k] = -1.0;
+                        hi[k] = crate::solver::lp::lp_point(Some(&c), a, b, &[])?[off + k];
+                        c[off + k] = 0.0;
+                    }
+                    Some((lo, hi))
+                };
+                let own = if self.a_t.rows == 0 { None } else { bbox(&self.a_t, &self.b_t, 0) };
+                own.or_else(|| {
+                    let (pa, pb) = self.xtheta_cached();
+                    let eq: Vec<usize> = self.equality_indices.clone();
+                    if eq.is_empty() {
+                        bbox(pa, pb, self.num_x())
+                    } else {
+                        // equality rows must hold: bound θ on {A x - F θ <= b, rows eq at equality}
+                        let mut lo = vec![0.0; n];
+                        let mut hi = vec![0.0; n];
+                        let mut c = vec![0.0; pa.cols];
+                        let off = self.num_x();
+                        for k in 0..n {
+                            c[off + k] = 1.0;
+                            lo[k] = crate::solver::lp::lp_point(Some(&c), pa, pb, &eq)?[off + k];
+                            c[off + k] = -1.0;
+                            hi[k] = crate::solver::lp::lp_point(Some(&c), pa, pb, &eq)?[off + k];
+                            c[off + k] = 0.0;
+                        }
+                        Some((lo, hi))
+                    }
+                })
             })
             .as_ref()
     }

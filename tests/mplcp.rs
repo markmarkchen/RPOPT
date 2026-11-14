@@ -24,7 +24,7 @@ fn bench_problems_match_geometric() {
         assert_eq!(region_signature(&m.critical_regions), region_signature(&g.critical_regions), "{:?}", path);
         n += 1;
     }
-    assert_eq!(n, 9);
+    assert_eq!(n, 12);
 }
 
 #[test]
@@ -142,7 +142,7 @@ fn enumeration_matches_geometric_on_all_bench_problems() {
         assert_eq!(region_signature(&e.critical_regions), region_signature(&g.critical_regions), "{:?}", path);
         n += 1;
     }
-    assert_eq!(n, 9);
+    assert_eq!(n, 12);
 }
 
 #[test]

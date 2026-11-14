@@ -13,7 +13,7 @@ fn ahmadi_matches_geometric_on_bench_problems() {
         .filter(|p| p.extension().map(|e| e == "json").unwrap_or(false))
         .collect();
     files.sort();
-    assert_eq!(files.len(), 9);
+    assert_eq!(files.len(), 12);
     for f in files {
         let p = Arc::new(MpProgram::from_json_file(&f).unwrap());
         let g = region_signature(&solve_mpqp(&p, MpqpAlgorithm::Geometric).critical_regions);
