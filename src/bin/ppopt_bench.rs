@@ -237,10 +237,14 @@ fn main() {
                 "sys3x2_N5" => 84650,
                 _ => HashTable::new(&geom, (geom.num_regions * 16).max(4)).storage_floats(),
             };
-            let cap = 4 * old16;
-            let ht = HashTable::new_adaptive(&geom, cap);
-            let info = json!({"cap": cap, "base_cells": ht.num_cells(), "leaves": ht.leaves(), "max_depth": ht.max_depth(), "mean_candidates": ht.mean_candidates(), "max_candidates": ht.max_candidates(), "mixed_leaves": ht.mixed_cells(), "rows_per_mixed": ht.mean_rows_per_mixed_cell()});
-            locators.push(timed(&mut || (Box::new(HashTable::new_adaptive(&geom, cap)), info.clone())));
+            let mut limits: Vec<(String, usize)> = [1usize, 4, 16, 64].iter().map(|m| (format!("{m}x old16"), m * old16 * 8)).collect();
+            limits.extend([(1usize << 20, "1 MB"), (8 << 20, "8 MB"), (64 << 20, "64 MB")].iter().map(|&(b, l)| (l.to_string(), b)));
+            for (label, bytes) in limits {
+                let ht = HashTable::with_storage_limit(&geom, bytes);
+                let label: &'static str = Box::leak(format!("hash table (limit {label})").into_boxed_str());
+                let info = json!({"limit_bytes": bytes, "storage_bytes": ht.storage_bytes(), "fits": ht.storage_bytes() <= bytes, "base_cells": ht.num_cells(), "mixed_leaves": ht.mixed_cells(), "mean_candidates": ht.mean_candidates(), "rows_per_mixed": ht.mean_rows_per_mixed_cell()});
+                locators.push(timed(&mut || (Box::new(HashTable::with_storage_limit(&geom, bytes).with_name(label)), info.clone())));
+            }
         }
         locators.push(timed(&mut || (Box::new(Yann::new(&sol)), json!({}))));
 
