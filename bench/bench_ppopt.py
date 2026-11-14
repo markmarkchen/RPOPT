@@ -35,8 +35,13 @@ def worker(problem_path, algorithm):
     m = {k: (numpy.array(v, dtype=float) if k != 'equality_indices' else v) for k, v in d.items()}
 
     t0 = time.perf_counter()
-    prog = MPQP_Program(m['A'], m['b'], m['c'], m['H'], m['Q'], m['A_t'], m['b_t'], m['F'],
-                        equality_indices=m['equality_indices'])
+    if 'Q' in m:
+        prog = MPQP_Program(m['A'], m['b'], m['c'], m['H'], m['Q'], m['A_t'], m['b_t'], m['F'],
+                            equality_indices=m['equality_indices'])
+    else:  # mpLP (bench/mplp_problems.py)
+        from ppopt.mplp_program import MPLP_Program
+        prog = MPLP_Program(m['A'], m['b'], m['c'], m['H'], m['A_t'], m['b_t'], m['F'],
+                            equality_indices=m['equality_indices'])
     t1 = time.perf_counter()
     with contextlib.redirect_stdout(io.StringIO()):
         sol = solve_mpqp(prog, getattr(mpqp_algorithm, algorithm))
