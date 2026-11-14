@@ -8,10 +8,9 @@
 //! region follows a branch only if it meets that branch with nonzero volume. Leaves keep the few
 //! remaining candidates, which are checked directly.
 
-use super::geometry::PartitionGeometry;
+use super::geometry::{has_interior, PartitionGeometry};
 use super::{PointLocator, LOCATE_TOL};
 use crate::linalg::{dot, Mat};
-use crate::utils::chebyshev_ball;
 
 #[derive(Clone, Debug)]
 pub enum BstNode {
@@ -251,13 +250,21 @@ fn split_check(geom: &PartitionGeometry, i: usize, path: &[Vec<f64>], pl: &[f64]
         rows.push_row(&h[..n]);
         rhs.push(h[n]);
     }
+    // known points of the region (a hint that the cut piece has an interior) and the scale of the
+    // shifted second LP; a missed region is a wrong answer, so "no" needs more than one LP
+    let centroid: Vec<f64> = {
+        let vs = &geom.vertices[i];
+        (0..n).map(|k| if vs.is_empty() { geom.centers[i][k] } else { vs.iter().map(|v| v[k]).sum::<f64>() / vs.len() as f64 }).collect()
+    };
+    let hints = [geom.centers[i].as_slice(), centroid.as_slice()];
+    let scale = (0..n).map(|k| 0.5 * (geom.bbox_hi[i][k] - geom.bbox_lo[i][k])).fold(0.0f64, f64::max);
     let check = |sign: f64| -> bool {
         let mut r2 = rows.clone();
         let mut b2 = rhs.clone();
         let row: Vec<f64> = pl[..n].iter().map(|v| sign * v).collect();
         r2.push_row(&row);
         b2.push(sign * pl[n]);
-        matches!(chebyshev_ball(&r2, &b2, &[]), Some(s) if s.x[n] > 1e-9)
+        has_interior(&r2, &b2, 1e-9, &hints, &geom.centers[i], scale)
     };
     let _ = Mat::zeros(0, 0);
     (check(1.0), check(-1.0))
@@ -269,7 +276,7 @@ impl PointLocator for BinarySearchTree {
     }
 
     fn locate(&self, theta: &[f64]) -> Option<usize> {
-        super::pick_strict_first(self.leaf(theta).iter().cloned(), |j| self.region_violation(j, theta))
+        super::pick_strict_first_rescan(self.leaf(theta).iter().cloned(), self.offsets.len() - 1, |j| self.region_violation(j, theta))
     }
 
     fn storage_floats(&self) -> usize {

@@ -228,17 +228,21 @@ impl LinearMachine {
         }
     }
 
+    /// Largest row violation of region j, infinity once a row exceeds `LOCATE_TOL`.
     #[inline]
-    fn region_contains(&self, j: usize, theta: &[f64]) -> bool {
+    fn region_violation(&self, j: usize, theta: &[f64]) -> f64 {
         let w = self.dim + 1;
         let n = self.dim;
+        let mut worst = f64::NEG_INFINITY;
         for k in self.offsets[j]..self.offsets[j + 1] {
             let r = &self.rows[k * w..(k + 1) * w];
-            if dot(&r[..n], theta) > r[n] + LOCATE_TOL {
-                return false;
+            let v = dot(&r[..n], theta) - r[n];
+            if v > LOCATE_TOL {
+                return f64::INFINITY;
             }
+            worst = worst.max(v);
         }
-        true
+        worst
     }
 }
 
@@ -252,17 +256,19 @@ impl PointLocator for LinearMachine {
         if !self.verify {
             return Some(i);
         }
-        if self.region_contains(i, theta) {
+        // strict-first rule shared by all locators: the argmax region answers when it contains
+        // theta strictly; a strict neighbour next; otherwise the full strict-first scan
+        if self.region_violation(i, theta) <= 0.0 {
             return Some(i);
         }
         let n = self.dim;
         if !self.domain.iter().all(|p| dot(&p[..n], theta) <= p[n] + LOCATE_TOL) {
             return None;
         }
-        if let Some(&j) = self.neighbors[i].iter().find(|&&j| self.region_contains(j, theta)) {
+        if let Some(&j) = self.neighbors[i].iter().find(|&&j| self.region_violation(j, theta) <= 0.0) {
             return Some(j);
         }
-        (0..self.num_regions).find(|&j| self.region_contains(j, theta))
+        super::pick_strict_first(0..self.num_regions, |j| self.region_violation(j, theta))
     }
 
     fn storage_floats(&self) -> usize {

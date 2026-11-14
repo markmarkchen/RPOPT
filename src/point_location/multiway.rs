@@ -83,17 +83,21 @@ impl MultiwayTree {
         mw
     }
 
+    /// Largest row violation of region j, infinity once a row exceeds `LOCATE_TOL`.
     #[inline]
-    fn region_contains(&self, j: usize, theta: &[f64]) -> bool {
+    fn region_violation(&self, j: usize, theta: &[f64]) -> f64 {
         let w = self.dim + 1;
         let n = self.dim;
+        let mut worst = f64::NEG_INFINITY;
         for k in self.offsets[j]..self.offsets[j + 1] {
             let r = &self.rows[k * w..(k + 1) * w];
-            if dot(&r[..n], theta) > r[n] + LOCATE_TOL {
-                return false;
+            let v = dot(&r[..n], theta) - r[n];
+            if v > LOCATE_TOL {
+                return f64::INFINITY;
             }
+            worst = worst.max(v);
         }
-        true
+        worst
     }
 
     pub fn order(&self) -> usize {
@@ -130,7 +134,7 @@ impl PointLocator for MultiwayTree {
                         break;
                     }
                     Slot::Leaf(l) => {
-                        return self.leaves[l as usize].iter().cloned().find(|&j| self.region_contains(j, theta));
+                        return super::pick_strict_first_rescan(self.leaves[l as usize].iter().cloned(), self.offsets.len() - 1, |j| self.region_violation(j, theta));
                     }
                 }
             }

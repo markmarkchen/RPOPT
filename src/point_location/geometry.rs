@@ -363,3 +363,26 @@ pub fn enumerate_vertices(a: &Mat, b: &[f64]) -> Vec<Vec<f64>> {
         }
     }
 }
+
+/// Does {x : A x <= b} contain a ball of radius above `thr`? Used to decide that a region misses a
+/// cell or a cut with positive volume, so a wrong "no" drops a region a query can fall into. The
+/// plain Chebyshev LP returns radius 0 for some thin or badly scaled polytopes that do have an
+/// interior (seen at theta dimension 8: a slab of width 2.5e-4 at coordinates of magnitude 38 with
+/// a slack of 5e-6 at a known point), so "no" needs three independent confirmations:
+///   * no hint point (`hints`, for example region centers) lies inside with slack above `thr`,
+///   * the LP on the original data has radius at most `thr`, and
+///   * the LP on the data shifted to `centre` and scaled by `scale` has radius at most `thr`.
+pub fn has_interior(a: &Mat, b: &[f64], thr: f64, hints: &[&[f64]], centre: &[f64], scale: f64) -> bool {
+    let n = a.cols;
+    for h in hints {
+        if h.len() == n && (0..a.rows).all(|i| b[i] - dot(a.row(i), h) > thr * crate::linalg::norm(a.row(i)).max(1e-300) * 1.0000001) {
+            return true;
+        }
+    }
+    if matches!(chebyshev_ball(a, b, &[]), Some(s) if s.x[n] > thr) {
+        return true;
+    }
+    let scale = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
+    let b2: Vec<f64> = (0..a.rows).map(|i| (b[i] - dot(a.row(i), centre)) / scale).collect();
+    matches!(chebyshev_ball(a, &b2, &[]), Some(s) if s.x[n] * scale > thr)
+}

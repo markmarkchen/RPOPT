@@ -2,8 +2,12 @@
 //!
 //! Every method implements [`PointLocator`] and answers the same question as PPOPT's
 //! `PointLocation.locate`: the index of a region containing θ, or `None` if θ lies outside the
-//! feasible parameter set. All methods are exact up to the boundary tolerance (points on a shared
-//! facet may be assigned to either neighbour).
+//! feasible parameter set. All methods are exact up to the boundary tolerance and share one tie
+//! rule ([`pick_strict_first`], the rule of `Solution::get_region`): the first region that
+//! contains θ with tolerance 0, otherwise the first within [`LOCATE_TOL`]. A point on a shared
+//! facet therefore goes to the same neighbour in every method. Classification inside the trees
+//! and tables is conservative: a region is dropped from a cell or a branch only when several
+//! independent checks agree that it cannot contain a point there.
 
 pub mod bst;
 pub mod descriptor;
@@ -57,4 +61,29 @@ pub fn pick_strict_first(cands: impl Iterator<Item = usize>, mut violation: impl
         }
     }
     fallback
+}
+
+/// [`pick_strict_first`] over the candidate list of a tree leaf, plus a rescan of all `num_regions`
+/// regions when the leaf only offers a region that holds θ within `LOCATE_TOL`. A tree separates
+/// regions by classifying their vertices against its planes with a tolerance, so a point within
+/// that tolerance of a plane can reach a leaf that lacks the region containing it strictly; the
+/// rescan restores the shared tie rule. It only runs for points on or within `LOCATE_TOL` of a
+/// region boundary that no candidate contains strictly, never for interior points or for points
+/// far outside the partition.
+#[inline]
+pub fn pick_strict_first_rescan(cands: impl Iterator<Item = usize>, num_regions: usize, mut violation: impl FnMut(usize) -> f64) -> Option<usize> {
+    let mut fallback = None;
+    for j in cands {
+        let v = violation(j);
+        if v <= 0.0 {
+            return Some(j);
+        }
+        if v <= LOCATE_TOL && fallback.is_none() {
+            fallback = Some(j);
+        }
+    }
+    if fallback.is_some() {
+        return pick_strict_first(0..num_regions, violation);
+    }
+    None
 }
