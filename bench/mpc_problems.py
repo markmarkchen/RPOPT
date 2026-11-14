@@ -21,6 +21,29 @@ import numpy
 from scipy.linalg import expm, solve_discrete_are
 
 
+def box_polytope(bound):
+    """{z : |z_i| <= bound_i} as {H z <= k} with rows [+e_1..+e_n, -e_1..-e_n]."""
+    bound = numpy.asarray(bound, dtype=float).reshape(-1)
+    n = bound.size
+    return dict(H=numpy.vstack([numpy.eye(n), -numpy.eye(n)]).tolist(), k=numpy.concatenate([bound, bound]).tolist())
+
+
+def mpc_data(A, B, Qx, Ru, P, N, x_bound, u_bound, row_map):
+    """
+    MPC structure of a benchmark problem, read by the Rust DP algorithms (rpopt::mpc::MpcProblem).
+
+    x(k+1) = A x(k) + B u(k); cost sum_{k<N} x'Qx x + u'Ru u + x(N)'P x(N) (the QP carries a factor 1/2);
+    u(k) in {Hu u <= ku}, x(k) in {Hx x <= kx} for k = 0..N-1 (x(0) is the parameter), x(N) in T = X.
+    `row_map[i]` is the row of the problem's A/b/F (before RPOPT's constraint processing) that
+    corresponds to row i of the DP constraint order: for k = 0..N-1 the rows of u(k) then of x(k),
+    then the rows of x(N); -1 for the x(0) rows, which have no counterpart (they are the box A_t).
+    """
+    return dict(A=numpy.asarray(A).tolist(), B=numpy.asarray(B).tolist(), Q=numpy.asarray(Qx).tolist(),
+                R=numpy.asarray(Ru).tolist(), P=numpy.asarray(P).tolist(), N=N,
+                u_poly=box_polytope(u_bound), x_poly=box_polytope(x_bound), t_poly=box_polytope(x_bound),
+                row_map=[int(i) for i in row_map])
+
+
 def condensed_mpc(A, B, Qx, Ru, N, x_bound, u_bound, terminal_lqr=True):
     """
     Condensed (state-eliminated) linear MPC with box constraints on states and inputs.
@@ -69,8 +92,22 @@ def condensed_mpc(A, B, Qx, Ru, N, x_bound, u_bound, terminal_lqr=True):
     A_t = numpy.vstack([numpy.eye(nx), -numpy.eye(nx)])
     b_t = numpy.vstack([x_bound.reshape(-1, 1), x_bound.reshape(-1, 1)])
 
+    # DP constraint order -> row of the condensed problem (input rows: [+, -] blocks of nu*N; state rows
+    # of x(k), k = 1..N: [+nx, -nx] per k)
+    def u_row(k, sgn, j):
+        return sgn * nu * N + k * nu + j
+
+    def x_row(k, sgn, i):  # state x(k), k >= 1
+        return 2 * nu * N + (k - 1) * 2 * nx + sgn * nx + i
+
+    row_map = []
+    for k in range(N):
+        row_map += [u_row(k, sgn, j) for sgn in (0, 1) for j in range(nu)]
+        row_map += [-1 if k == 0 else x_row(k, sgn, i) for sgn in (0, 1) for i in range(nx)]
+    row_map += [x_row(N, sgn, i) for sgn in (0, 1) for i in range(nx)]
+
     return dict(Q=Hq, c=numpy.zeros((nu * N, 1)), H=Fq, A=A_c, b=b_c, F=F_c, A_t=A_t, b_t=b_t,
-                equality_indices=[])
+                equality_indices=[], mpc=mpc_data(A, B, Qx, Ru, P, N, x_bound, u_bound, row_map))
 
 
 def double_integrator_noncondensed(N):
@@ -94,10 +131,23 @@ def double_integrator_noncondensed(N):
     ub = numpy.vstack([numpy.tile(x_upper, (N, 1)), numpy.tile(u_upper, (N, 1))])
     b_ineq = numpy.vstack([ub, ub])
     F_ineq = numpy.zeros((2 * nv, nx))
+    # DP constraint order -> row of A (equalities first, then +I x <= ub, then -I x <= ub); variables are
+    # [x(1), ..., x(N), u(0), ..., u(N-1)]
+    neq = N * nx
+
+    def var_row(v, sgn):
+        return neq + sgn * nv + v
+
+    row_map = []
+    for k in range(N):
+        row_map += [var_row(N * nx + k * nu + j, sgn) for sgn in (0, 1) for j in range(nu)]
+        row_map += [-1 if k == 0 else var_row((k - 1) * nx + i, sgn) for sgn in (0, 1) for i in range(nx)]
+    row_map += [var_row((N - 1) * nx + i, sgn) for sgn in (0, 1) for i in range(nx)]
     return dict(Q=numpy.eye(nv), c=numpy.zeros((nv, 1)), H=numpy.zeros((nv, nx)),
                 A=numpy.vstack([A_eq, A_ineq]), b=numpy.vstack([b_eq, b_ineq]), F=numpy.vstack([F_eq, F_ineq]),
                 A_t=numpy.vstack([numpy.eye(nx), -numpy.eye(nx)]), b_t=numpy.vstack([x_upper, x_upper]),
-                equality_indices=list(range(N * nx)))
+                equality_indices=list(range(N * nx)),
+                mpc=mpc_data(A_ss, B_ss, numpy.eye(nx), numpy.eye(nu), numpy.eye(nx), N, x_upper, u_upper[0:1], row_map))
 
 
 def double_integrator(N):

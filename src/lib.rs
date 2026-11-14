@@ -18,6 +18,7 @@ pub mod algorithms;
 pub mod critical_region;
 pub mod fxhash;
 pub mod linalg;
+pub mod mpc;
 pub mod mpqp_utils;
 pub mod plot;
 pub mod point_location;
