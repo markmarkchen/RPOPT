@@ -16,30 +16,34 @@ mpLP, mpQP, mpMILP and mpMIQP solvers, plus fast exact point location.
 
 ## Speedup over PPOPT
 
-| | comparison | cases | median | range |
-|---|---|---:|---:|---:|
-| **mpQP** | same algorithm, 1 thread | 32 runs | **1,020x** | 389x to 2,703x |
-| | fastest algorithm against fastest algorithm | 9 problems | **1,798x** | 755x to 4,167x |
-| | parallel against parallel | 7 runs | **2,110x** | 1,286x to 5,755x |
-| **mpLP** | fastest against PPOPT's fastest gap-free algorithm | 6 problems | **1,422x** | 836x to 18,028x |
-| | no gap-free PPOPT answer within 120 s | 7 problems | **> 134,000x** | > 6,400x to > 305,000x |
-| **point location** | per query, PPOPT (numba) against the RPOPT hash table | 9 problems | **676x** | 593x to 3,603x |
+**Against each of PPOPT's four solvers** (the same algorithm in both, one thread; median, then range):
 
-| example | PPOPT | RPOPT | speedup |
+| PPOPT solver | mpQP | mpLP |
+|---|---:|---:|
+| `combinatorial` | **1,001x** (705x to 1,665x) | **922x** (780x to 1,475x) |
+| `graph` | **1,065x** (575x to 2,577x) | **2,882x** (1,175x to 17,227x) |
+| `geometric` | **1,014x** (559x to 2,257x) | **231x** (185x to 968x) |
+| `combinatorial_graph` | **1,020x** (389x to 2,703x) | **234x** (213x to 261x) |
+
+**Other comparisons:**
+
+| comparison | cases | median | range |
 |---|---:|---:|---:|
-| mpQP sys3x2_N5, 973 regions (PPOPT `geometric`, RPOPT `mplcp`) | 18.6 s | 9.6 ms | 1,943x |
-| mpQP di_N10, `combinatorial` | > 4 h, unfinished | 6.0 s | > 2,398x |
-| mpLP masses2one_N2, 828 regions (PPOPT `geometric`, RPOPT `mplp_lex`) | 44.6 s | 24 ms | 1,869x |
-| point location, sys3x2_N5 | 68.5 µs | 19 ns | 3,603x |
+| mpQP, PPOPT's fastest solver against RPOPT's fastest | 9 problems | **1,798x** | 755x to 4,167x |
+| mpQP, parallel against parallel | 7 runs | **2,110x** | 1,286x to 5,755x |
+| mpLP, RPOPT's fastest against PPOPT's fastest gap-free solver | 6 problems | **1,422x** | 836x to 18,028x |
+| mpLP, no gap-free PPOPT answer within 120 s | 7 problems | **> 134,000x** | > 6,400x to > 305,000x |
+| point location, per query (PPOPT numba, RPOPT hash table) | 9 problems | **676x** | 593x to 3,603x |
 
-<sub>Quiet-machine runs on one Apple M4 Max. PPOPT is the GitHub `main` source with Gurobi 12 and quadprog. mpQP: the
-12 MPC problems in `bench/problems`; the 32 runs are those PPOPT finished within 300 s (four combinatorial runs it
-did not finish are lower bounds of > 1,049x to > 2,398x). mpLP: infinity-norm and 1-norm MPC (`bench/problems_lp`),
-checked at 1,000 random parameters per problem. PPOPT's geometric leaves 50% to 77% of the feasible parameter set
-uncovered on five of them, so mpLP rows compare against PPOPT's fastest algorithm with no sampled gap; "> " marks
-lower bounds, where PPOPT stopped at its time limit. Point location uses the storage-limited hash table. RPOPT also
-runs 1.5x to 2.9x faster than `pdaqp`, the authors' own implementation of Arnström and Axehill (2024). Details:
-[Performance](#performance) and [bench/README.md](bench/README.md).</sub>
+<sub>Quiet-machine runs on one Apple M4 Max. PPOPT is the GitHub `main` source with Gurobi 12 and quadprog. Runs are
+counted where PPOPT finished. mpQP: the 12 MPC problems in `bench/problems`, 9 runs per solver. `combinatorial` has 5,
+because PPOPT did not finish the other 4 within 300 s or 4 h; those are lower bounds of > 1,049x to > 2,398x. mpLP:
+infinity-norm and 1-norm MPC (`bench/problems_lp`), each solution checked at 1,000 random parameters; 3 to 5 runs per
+solver. PPOPT's `geometric` leaves 0.3% to 77% of the parameter set uncovered on 7 of its 12 mpLP runs, so the
+`geometric` row uses the 5 runs where its answer is gap-free; on the other 7 it does less work and the ratio is 16x to
+351x. "> " marks lower bounds, where PPOPT stopped at its time limit. RPOPT also runs 1.5x to 2.9x faster than
+`pdaqp`, the authors' own implementation of Arnström and Axehill (2024). Details: [Performance](#performance) and
+[bench/README.md](bench/README.md).</sub>
 
 ## Highlights
 
@@ -263,6 +267,16 @@ masses with springs, and an unstable 3-state, 2-input system, with 7 to 973 regi
 `bench/mplp_problems.py`), heavily primal and dual degenerate, with 20 to 28,336 regions. PPOPT is the current
 GitHub source with its default backends (Gurobi 12, quadprog). Both run on the same Apple M4 Max with no other
 load.
+
+**Examples:**
+
+| problem | PPOPT | RPOPT | speedup |
+|---|---:|---:|---:|
+| mpQP sys3x2_N5, 973 regions, `geometric` in both | 18.6 s | 17.5 ms | 1,062x |
+| mpQP sys3x2_N5, fastest solver (PPOPT `geometric`, RPOPT `mplcp`) | 18.6 s | 9.6 ms | 1,943x |
+| mpQP di_N10, `combinatorial` in both | > 4 h, unfinished | 6.0 s | > 2,398x |
+| mpLP masses2one_N2, 828 regions (PPOPT `geometric`, RPOPT `mplp_lex`) | 44.6 s | 24 ms | 1,869x |
+| point location, sys3x2_N5, per query | 68.5 µs | 19 ns | 3,603x |
 
 **Against PPOPT, mpQP, same algorithm, one thread** (PPOPT runs one at a time, 300 s limit, plus two 4-hour runs):
 
