@@ -3,6 +3,7 @@
 pub mod common;
 pub mod incremental;
 pub mod mpmiqp;
+pub mod mplcp;
 
 use crate::critical_region::CriticalRegion;
 use crate::linalg::{min_eigenvalue_sym, Mat};
@@ -30,12 +31,14 @@ pub enum MpqpAlgorithm {
     CombinatorialGraphParallel,
     Geometric,
     GeometricParallel,
+    /// Jones-Morari mp-LCP pivoting
+    Mplcp,
 }
 
 impl MpqpAlgorithm {
     pub fn all() -> &'static [MpqpAlgorithm] {
         use MpqpAlgorithm::*;
-        &[Combinatorial, CombinatorialParallel, Graph, GraphExp, GraphParallel, CombinatorialGraph, CombinatorialGraphParallel, Geometric, GeometricParallel]
+        &[Combinatorial, CombinatorialParallel, Graph, GraphExp, GraphParallel, CombinatorialGraph, CombinatorialGraphParallel, Geometric, GeometricParallel, Mplcp]
     }
 
     pub fn name(&self) -> &'static str {
@@ -50,6 +53,7 @@ impl MpqpAlgorithm {
             CombinatorialGraphParallel => "combinatorial_graph_parallel",
             Geometric => "geometric",
             GeometricParallel => "geometric_parallel",
+            Mplcp => "mplcp",
         }
     }
 
@@ -89,6 +93,7 @@ pub fn solve_mpqp_with(program: &Arc<MpProgram>, algorithm: MpqpAlgorithm, opts:
         CombinatorialGraphParallel => combinatorial_graph(program, opts, true),
         Geometric => geometric(program, opts, false),
         GeometricParallel => geometric(program, opts, true),
+        Mplcp => mplcp::mplcp(program, opts.seed),
     };
     let mut sol = Solution::new(program.clone(), regions);
     // PPOPT flags every solution as overlapping (its isinstance check also matches MPQP). We only
