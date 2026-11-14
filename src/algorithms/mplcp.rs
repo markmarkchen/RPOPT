@@ -40,6 +40,10 @@ struct Plcp {
     /// original constraint index of each pLCP row
     ineq: Vec<usize>,
     eq: Vec<usize>,
+    /// position in `ineq` of each original constraint (usize::MAX for equalities)
+    pos: Vec<usize>,
+    /// X = M_EE^{-1} [M_EI | q_E | R_E], ne x (n + 1 + nt) (empty without equalities)
+    xe: Mat,
 }
 
 impl Plcp {
@@ -53,6 +57,11 @@ impl Plcp {
         let mut m = vec![0.0; n * n];
         let mut q = vec![0.0; n];
         let mut r = vec![0.0; n * nt];
+        let mut xe = Mat::zeros(0, 0);
+        let mut pos = vec![usize::MAX; mfull];
+        for (a, &i) in ineq.iter().enumerate() {
+            pos[i] = a;
+        }
         for (a, &i) in ineq.iter().enumerate() {
             for (b, &j) in ineq.iter().enumerate() {
                 m[a * n + b] = kc.m[(i, j)];
@@ -102,8 +111,9 @@ impl Plcp {
                     r[a * nt + t] -= s;
                 }
             }
+            xe = x;
         }
-        Some(Plcp { n, nt, m, q, r, ineq, eq })
+        Some(Plcp { n, nt, m, q, r, ineq, eq, pos, xe })
     }
 
     /// Full active set (equalities first) of the z-basic rows.
@@ -729,13 +739,133 @@ fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>
     cands
 }
 
-/// Region of a candidate (`None` when it is empty or lower dimensional).
-fn build_cand(program: &MpProgram, c: &Cand) -> Option<(CriticalRegion, Option<Vec<f64>>)> {
+/// Switch between the multiplier law read from the tableau (default) and the Cholesky KKT solve
+/// `optimal_control_law_dual` (the A/B reference and the fallback for a doubtful basis).
+static TABLEAU_LAW: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// Selects the tableau law (`true`, default) or the KKT-solve law (`false`) for the regions built by
+/// `Method::Pivot` and `Method::PivotParallel`.
+pub fn set_tableau_law(on: bool) {
+    TABLEAU_LAW.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Multiplier law (λ_AS = A_l θ + b_l, `aset` = equalities then sorted inequalities) of a region
+/// read from its tableau, without a KKT solve.
+///
+/// Derivation. With z = λ, w = slack, the program's KKT system after eliminating x is
+///   w - M z = q + R θ,   M = A Q^-1 A', q = b + A Q^-1 c, R = F + A Q^-1 H  (the KKT cache),
+/// and x(θ) = -Q^-1 (c + H θ + A' λ) (done by `complete_primal_law` from the cached Q^-1 H, Q^-1 c
+/// and A Q^-1). Split the rows into equalities E (w_E = 0, z_E free) and inequalities I.
+///   Equality block: 0 = q_E + R_E θ + M_EE z_E + M_EI z_I, so with X = M_EE^-1 [M_EI | q_E | R_E]
+///     z_E = -(X_q + X_R θ + X_I z_I).                                              (1)
+///   Substituting (1) into the I rows gives the reduced pLCP of `Plcp::new`.
+///   Region with basis B (z_B basic, all other z and every w_N zero): the tableau reads
+///     z_B(θ) = ρ_B,0 + ρ_B,θ θ   (rows of ρ are [constant | θ coefficients]),
+///   so the inequality multipliers are the tableau rows themselves (zero for the nonbasic z),
+///   and the equality multipliers follow from (1) with z_I = z_B(θ):
+///     A_l,E = -(X_R + X_I[:, B] ρ_B,θ),   b_l,E = -(X_q + X_I[:, B] ρ_B,0).
+/// The cost is O(|B| nt + ne |B| nt) instead of a Cholesky of S = A_AS Q^-1 A_AS' and |B| nt solves.
+/// `row(k, out)` writes the ρ row (width 1 + nt) of the basic z_k, returning false if it is not basic
+/// or not finite.
+fn tableau_law(plcp: &Plcp, aset: &[usize], mut row: impl FnMut(usize, &mut [f64]) -> bool) -> Option<crate::program::ControlLaw> {
+    let (nt, neq) = (plcp.nt, plcp.eq.len());
+    let k = aset.len();
+    let mut a_l = Mat::zeros(k, nt);
+    let mut b_l = vec![0.0; k];
+    let mut buf = vec![0.0; 1 + nt];
+    for (ii, &orig) in aset[neq..].iter().enumerate() {
+        let pos = *plcp.pos.get(orig)?;
+        if pos == usize::MAX || !row(pos, &mut buf) {
+            return None;
+        }
+        b_l[neq + ii] = buf[0];
+        a_l.row_mut(neq + ii).copy_from_slice(&buf[1..]);
+    }
+    for e in 0..neq {
+        let xr = plcp.xe.row(e);
+        let mut bq = -xr[plcp.n];
+        let mut al: Vec<f64> = xr[plcp.n + 1..].iter().map(|v| -v).collect();
+        for (ii, &orig) in aset[neq..].iter().enumerate() {
+            let c = xr[plcp.pos[orig]];
+            if c == 0.0 {
+                continue;
+            }
+            bq -= c * b_l[neq + ii];
+            for (o, l) in al.iter_mut().zip(a_l.row(neq + ii)) {
+                *o -= c * l;
+            }
+        }
+        b_l[e] = bq;
+        a_l.row_mut(e).copy_from_slice(&al);
+    }
+    Some(crate::program::ControlLaw { a_x: Mat::zeros(0, 0), b_x: vec![], a_l, b_l })
+}
+
+/// The tableau law of candidate `c` whose parent basis has tableau `parent`: one pivot away when
+/// `c.piv` is set (only the needed rows are formed, as in `Tab::pivoted`), otherwise from a fresh
+/// tableau (returned so the caller can reuse it as the region's own tableau).
+fn candidate_law(plcp: &Plcp, parent: &Tab, c: &Cand) -> Option<(crate::program::ControlLaw, Option<Tab>)> {
+    let n = plcp.n;
+    let w = 1 + plcp.nt;
+    match c.piv {
+        Some((r, col)) => {
+            let p = parent.tv(r, col);
+            if !(p.abs() > 1e-9) {
+                return None;
+            }
+            let inv = 1.0 / p;
+            let rrow: Vec<f64> = (0..w).map(|k| parent.rv(r, k) * -inv).collect();
+            let entering = parent.col_var[col];
+            let law = tableau_law(plcp, &c.aset, |k, out| {
+                let var = n + k;
+                if var == entering {
+                    out.copy_from_slice(&rrow);
+                } else {
+                    let Some(i) = parent.row_var.iter().position(|&v| v == var) else { return false };
+                    if i == r {
+                        return false;
+                    }
+                    let f = parent.tv(i, col);
+                    for (j, o) in out.iter_mut().enumerate() {
+                        *o = parent.rv(i, j) + f * rrow[j];
+                    }
+                }
+                out.iter().all(|v| v.is_finite())
+            })?;
+            Some((law, None))
+        }
+        None => {
+            let neq = plcp.eq.len();
+            let z: Vec<usize> = c.aset[neq..].iter().map(|&o| plcp.pos[o]).collect();
+            let tab = tableau_for(plcp, &z)?;
+            let law = tableau_law(plcp, &c.aset, |k, out| {
+                let Some(i) = tab.row_var.iter().position(|&v| v == n + k) else { return false };
+                for (j, o) in out.iter_mut().enumerate() {
+                    *o = tab.rv(i, j);
+                }
+                out.iter().all(|v| v.is_finite())
+            })?;
+            Some((law, Some(tab)))
+        }
+    }
+}
+
+/// Region of a candidate (`None` when it is empty or lower dimensional), plus the candidate's own
+/// tableau when it had to be formed from scratch for the law.
+fn build_cand(program: &MpProgram, plcp: &Plcp, parent: &Tab, c: &Cand) -> Option<(CriticalRegion, Option<Vec<f64>>, Option<Tab>)> {
     if program.num_t() > 1 {
-        let (cr, ce) = build::build_region(program, &c.aset, c.hint.as_deref())?;
-        Some((cr, Some(ce)))
+        let (law, own) = if TABLEAU_LAW.load(std::sync::atomic::Ordering::Relaxed) {
+            match candidate_law(plcp, parent, c) {
+                Some((l, t)) => (Some(l), t),
+                None => (None, None),
+            }
+        } else {
+            (None, None)
+        };
+        let (cr, ce) = build::build_region(program, &c.aset, c.hint.as_deref(), law)?;
+        Some((cr, Some(ce), own))
     } else {
-        Some((gen_cr_from_active_set_lambda_first(program, &c.aset, true)?, None))
+        Some((gen_cr_from_active_set_lambda_first(program, &c.aset, true)?, None, None))
     }
 }
 
@@ -747,7 +877,7 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
     let mut queue: VecDeque<Item> = VecDeque::new();
     queue.push_back(Item { idx: 0, center: init_center, tab: None, depth: 0 });
     let mut ws: Option<Tab> = None;
-    let mut pending: Vec<(CriticalRegion, Option<Vec<f64>>, Option<(usize, usize)>)> = vec![];
+    let mut pending: Vec<(CriticalRegion, Option<Vec<f64>>, Option<(usize, usize)>, Option<Tab>)> = vec![];
     while let Some(Item { idx, center, tab, depth }) = queue.pop_front() {
         let cur = &regions[idx];
         let tab = match tab {
@@ -763,16 +893,16 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
             if !fresh {
                 continue;
             }
-            let built = build_cand(program, &c);
-            if let Some((cr, ce)) = built {
-                pending.push((cr, ce, c.piv));
+            let built = build_cand(program, plcp, &tab, &c);
+            if let Some((cr, ce, own)) = built {
+                pending.push((cr, ce, c.piv, own));
             }
         }
         // the neighbours' tableaux are one pivot away (rebuilt from scratch every REFACTOR levels);
         // the last one takes over this region's tableau
         let np = pending.len();
         let mut tab = Some(tab);
-        for (i, (cr, ce, piv)) in pending.drain(..).enumerate() {
+        for (i, (cr, ce, piv, own)) in pending.drain(..).enumerate() {
             let (ntab, nd) = match piv {
                 Some((v, kk)) => {
                     let t = if i + 1 == np {
@@ -784,7 +914,7 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
                     };
                     (Some(t), depth + 1)
                 }
-                None => (None, 0),
+                None => (own, 0),
             };
             regions.push(cr);
             queue.push_back(Item { idx: regions.len() - 1, center: ce, tab: ntab, depth: nd });
@@ -854,12 +984,12 @@ fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalR
             }
         }
         let build = |(tab, depth, c): &(Arc<Tab>, usize, Cand)| -> Option<(CriticalRegion, Option<Vec<f64>>, Option<Tab>, usize)> {
-            let (cr, center) = build_cand(program, c)?;
+            let (cr, center, own) = build_cand(program, plcp, tab, c)?;
             let (ntab, nd) = match c.piv {
                 Some((v, kk)) => {
                     (Some(tab.pivoted(v, kk)), depth + 1)
                 }
-                None => (None, 0),
+                None => (own, 0),
             };
             Some((cr, center, ntab, nd))
         };
@@ -913,7 +1043,7 @@ fn lp_plcp(program: &MpProgram) -> Plcp {
             r[(2 * nx + j) * nt + t] = program.f[(j, t)];
         }
     }
-    Plcp { n, nt, m, q, r, ineq: vec![], eq: vec![] }
+    Plcp { n, nt, m, q, r, ineq: vec![], eq: vec![], pos: vec![], xe: Mat::zeros(0, 0) }
 }
 
 /// State of the depth-first form of Algorithm 1 (pairs are decided one by one; `choice[j]` is
@@ -1091,7 +1221,7 @@ fn permuted(p: &Plcp, perm: &[usize]) -> Plcp {
             m[a * n + b] = p.m[i * n + j];
         }
     }
-    Plcp { n, nt, m, q, r, ineq: p.ineq.clone(), eq: p.eq.clone() }
+    Plcp { n, nt, m, q, r, ineq: p.ineq.clone(), eq: p.eq.clone(), pos: p.pos.clone(), xe: p.xe.clone() }
 }
 
 /// Herceg et al. (2015) Algorithm 1: enumerates the feasible complementary bases of the pLCP and
