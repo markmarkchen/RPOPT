@@ -25,6 +25,9 @@ use rand::SeedableRng;
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 
+#[path = "mplcp_build.rs"]
+mod build;
+
 /// The reduced pLCP (equalities eliminated).
 struct Plcp {
     n: usize,
@@ -306,6 +309,7 @@ struct Facet<'a> {
 /// z-row sets of the adjacent bases.
 fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, out: &mut Vec<Vec<usize>>) {
     let n = p.n;
+    PROF[9].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let d1 = p.nt - 1;
     let alpha = 2 * n;
     let mut e = e;
@@ -350,6 +354,8 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
             continue;
         }
         // Case 2: the leaving variable depends on θ_f
+        PROF[12].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        PROF[13].fetch_add(pset.len() as u64, std::sync::atomic::Ordering::Relaxed);
         if depth > 6 {
             return;
         }
@@ -384,8 +390,11 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
                 continue;
             }
             if d1 > 0 {
+                PROF[10].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 match chebyshev_ball(&ef, &ff, &[]) {
-                    Some(s) if s.x[d1] > 1e-9 => {}
+                    Some(s) if s.x[d1] > 1e-9 => {
+                        PROF[14].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    }
                     _ => continue,
                 }
             }
@@ -471,6 +480,7 @@ enum Nbr {
 /// Neighbouring z-row sets across the facet {e_k θ = f_k} of the region with tableau `tab`.
 fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[f64], ws: &mut Option<Tab>) -> Vec<Nbr> {
     let (n, nt) = (p.n, p.nt);
+    PROF[8].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let nrm = erow.iter().map(|v| v * v).sum::<f64>().sqrt();
     let g: Vec<f64> = erow.iter().map(|v| v / nrm).collect();
     let b = -frhs / nrm; // γ'θ + b = 0
@@ -543,7 +553,9 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         }
     }
     let mut out = vec![];
+    let t0 = std::time::Instant::now();
     pivot_facet(p, &mut work, n, Facet { ef: &ef, ff: &ff }, 0, &mut out);
+    pt(2, t0);
     *ws = Some(work);
     out.into_iter().map(Nbr::Z).collect()
 }
@@ -594,6 +606,12 @@ pub fn regions(program: &MpProgram, seed: u64, method: Method) -> Vec<CriticalRe
     }
 }
 
+pub static PROF: [std::sync::atomic::AtomicU64; 16] = [const { std::sync::atomic::AtomicU64::new(0) }; 16];
+pub const PROF_NAMES: [&str; 15] = ["tableau_for", "adjacent_total", "pivot_facet", "seen/aset", "law_dual", "gen_cr", "tab_clone_pivot", "region_clone", "cnt:facets", "cnt:adjacent", "cnt:cheb_lp", "total", "c2 entries", "c2 sum pset", "lp feasible"];
+#[inline]
+fn pt(i: usize, t0: std::time::Instant) {
+    PROF[i].fetch_add(t0.elapsed().as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
+}
 const REFACTOR: usize = 8;
 /// smallest wave (or batch of new regions) that `pivot_solve_par` hands to rayon
 const PAR_MIN: usize = 4;
@@ -606,6 +624,13 @@ struct Item {
 }
 
 fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegion> {
+    let tt = std::time::Instant::now();
+    let r = pivot_solve_inner(program, plcp, seed);
+    pt(11, tt);
+    r
+}
+
+fn pivot_solve_inner(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegion> {
     let mut rng = StdRng::seed_from_u64(seed);
     let Some(active_set) = program.gen_optimal_active_set(&mut rng) else { return vec![] };
     let Some(initial) = crate::mpqp_utils::gen_cr_from_active_set(program, &active_set, false) else { return vec![] };
@@ -625,12 +650,16 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
             None => {
                 // z rows of the region (position in the reduced LCP)
                 let z: Vec<usize> = cur.active_set[neq..].iter().map(|c| plcp.ineq.iter().position(|x| x == c).unwrap()).collect();
+                let t0 = std::time::Instant::now();
                 let Some(t) = tableau_for(plcp, &z) else { continue };
+                pt(0, t0);
                 t
             }
         };
         for k in 0..cur.e.rows {
+            let t0 = std::time::Instant::now();
             let nbrs = adjacent(plcp, &tab, cur.e.row(k), cur.f[k], &cur.e, &cur.f, &mut ws);
+            pt(1, t0);
             if nbrs.is_empty() {
                 continue;
             }
@@ -641,21 +670,29 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
                 c.iter().zip(a).map(|(ci, ai)| ci + s * ai).collect()
             });
             for nb in nbrs {
+                let t0 = std::time::Instant::now();
                 let z = match &nb {
                     Nbr::Toggle(v, _) => z_toggle(&tab, plcp.n, *v),
                     Nbr::Z(z) => z.clone(),
                 };
                 let aset = plcp.active_set(z.into_iter());
                 if !seen.insert(aset.clone()) {
+                    pt(3, t0);
                     continue;
                 }
+                pt(3, t0);
                 let built = if nt > 1 {
-                    program.optimal_control_law_dual(&aset).and_then(|law| crate::mpqp_utils::gen_cr_from_law_hinted(program, &aset, law, hint.as_deref())).map(|(cr, c)| (cr, Some(c)))
+                    let t0 = std::time::Instant::now();
+                    let r = build::build_region(program, &aset, hint.as_deref()).map(|(cr, c)| (cr, Some(c)));
+                    pt(5, t0);
+                    r
                 } else {
                     gen_cr_from_active_set_lambda_first(program, &aset, true).map(|cr| (cr, None))
                 };
                 if let Some((cr, c)) = built {
+                    let t0 = std::time::Instant::now();
                     regions.push(cr.clone());
+                    pt(7, t0);
                     let piv = match nb {
                         Nbr::Toggle(v, kk) if depth + 1 < REFACTOR => Some((v, kk)),
                         _ => None,
@@ -671,8 +708,10 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
         for (idx, (cr, c, piv)) in pending.drain(..).enumerate() {
             let (ntab, nd) = match piv {
                 Some((v, kk)) => {
+                    let t0 = std::time::Instant::now();
                     let mut t = if idx + 1 == np { tab.take().unwrap() } else { tab.as_ref().unwrap().clone() };
                     t.pivot(v, kk);
+                    pt(6, t0);
                     (Some(t), depth + 1)
                 }
                 None => (None, 0),
@@ -758,8 +797,7 @@ fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalR
         }
         let build = |(tab, depth, c): (Arc<Tab>, usize, Cand)| -> Option<Item> {
             let (cr, center) = if nt > 1 {
-                let law = program.optimal_control_law_dual(&c.aset)?;
-                let (cr, ce) = crate::mpqp_utils::gen_cr_from_law_hinted(program, &c.aset, law, c.hint.as_deref())?;
+                let (cr, ce) = build::build_region(program, &c.aset, c.hint.as_deref())?;
                 (cr, Some(ce))
             } else {
                 (gen_cr_from_active_set_lambda_first(program, &c.aset, true)?, None)
