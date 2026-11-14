@@ -1,0 +1,225 @@
+problem            N   nx  regions  algorithm               time [ms]   same
+di_N4              4    4        9  geometric                   0.067   true
+di_N4              4    4        9  mplcp                       0.042   true
+di_N4              4    4        9  geometric_parallel          0.220   true
+di_N4              4    4        9  mplcp_parallel              0.040   true
+di_N4              4    4        9  graph                       0.104   true
+di_N4              4    4        9  combinatorial_graph         0.102   true
+di_N4              4    4        9  parametric_daqp             0.079   true
+di_N4              4    4        9  ahmadi                      0.099   true
+di_N4              4    4        9  combinatorial               0.394   true
+di_N4              4    4        9  dp (2023 sym)               0.251   true
+di_N6              6    6       11  geometric                   0.105   true
+di_N6              6    6       11  mplcp                       0.061   true
+di_N6              6    6       11  geometric_parallel          0.328   true
+di_N6              6    6       11  mplcp_parallel              0.064   true
+di_N6              6    6       11  graph                       0.169   true
+di_N6              6    6       11  combinatorial_graph         0.240   true
+di_N6              6    6       11  parametric_daqp             0.162   true
+di_N6              6    6       11  ahmadi                      0.190   true
+di_N6              6    6       11  combinatorial               9.307   true
+di_N6              6    6       11  dp (2023 sym)               0.790   true
+di_N8              8    8       11  geometric                   0.116   true
+di_N8              8    8       11  mplcp                       0.077   true
+di_N8              8    8       11  geometric_parallel          0.304   true
+di_N8              8    8       11  mplcp_parallel              0.083   true
+di_N8              8    8       11  graph                       0.197   true
+di_N8              8    8       11  combinatorial_graph         0.272   true
+di_N8              8    8       11  parametric_daqp             0.190   true
+di_N8              8    8       11  ahmadi                      0.234   true
+di_N8              8    8       11  combinatorial             243.374   true
+di_N8              8    8       11  dp (2023 sym)               1.714   true
+di_N10            10   10       11  geometric                   0.139   true
+di_N10            10   10       11  mplcp                       0.093   true
+di_N10            10   10       11  geometric_parallel          0.299   true
+di_N10            10   10       11  mplcp_parallel              0.103   true
+di_N10            10   10       11  graph                       0.235   true
+di_N10            10   10       11  combinatorial_graph         0.307   true
+di_N10            10   10       11  parametric_daqp             0.222   true
+di_N10            10   10       11  ahmadi                      0.278   true
+di_N10            10   10       11  combinatorial            6328.295   true
+di_N10            10   10       11  dp (2023 sym)               2.710   true
+di_N12            12   12       11  geometric                   0.164   true
+di_N12            12   12       11  mplcp                       0.113   true
+di_N12            12   12       11  geometric_parallel          0.345   true
+di_N12            12   12       11  mplcp_parallel              0.129   true
+di_N12            12   12       11  graph                       0.243   true
+di_N12            12   12       11  combinatorial_graph         0.338   true
+di_N12            12   12       11  parametric_daqp             0.253   true
+di_N12            12   12       11  ahmadi                      0.318   true
+di_N12            12   12       11  combinatorial          221064.690   true
+di_N12            12   12       11  dp (2023 sym)               4.079   true
+di_N15            15   15       11  geometric                   0.227   true
+di_N15            15   15       11  mplcp                       0.150   true
+di_N15            15   15       11  geometric_parallel          0.418   true
+di_N15            15   15       11  mplcp_parallel              0.172   true
+di_N15            15   15       11  graph                       0.282   true
+di_N15            15   15       11  combinatorial_graph         0.391   true
+di_N15            15   15       11  parametric_daqp             0.301   true
+di_N15            15   15       11  ahmadi                      0.450   true
+di_N15            15   15       11  combinatorial             skipped      -
+di_N15            15   15       11  dp (2023 sym)               6.409   true
+di_N20            20   20       11  geometric                   0.401   true
+di_N20            20   20       11  mplcp                       0.220   true
+di_N20            20   20       11  geometric_parallel          0.623   true
+di_N20            20   20       11  mplcp_parallel              0.242   true
+di_N20            20   20       11  graph                       0.442   true
+di_N20            20   20       11  combinatorial_graph         0.471   true
+di_N20            20   20       11  parametric_daqp             0.388   true
+di_N20            20   20       11  ahmadi                      0.651   true
+di_N20            20   20       11  combinatorial             skipped      -
+di_N20            20   20       11  dp (2023 sym)              12.395   true
+di_N25            25   25       11  geometric                   0.651   true
+di_N25            25   25       11  mplcp                       0.287   true
+di_N25            25   25       11  geometric_parallel          0.778   true
+di_N25            25   25       11  mplcp_parallel              0.315   true
+di_N25            25   25       11  graph                       0.437   true
+di_N25            25   25       11  combinatorial_graph         0.554   true
+di_N25            25   25       11  parametric_daqp             0.500   true
+di_N25            25   25       11  ahmadi                      0.935   true
+di_N25            25   25       11  combinatorial             skipped      -
+
+thread 'main' (26066154) panicked at src/algorithms/dp.rs:135:5:
+DP active sets are limited to 128 constraints
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+di_N25            25   25       11  dp (2023 sym)              failed      -
+di_N30            30   30       11  geometric                   1.106   true
+di_N30            30   30       11  mplcp                       0.378   true
+di_N30            30   30       11  geometric_parallel          1.057   true
+di_N30            30   30       11  mplcp_parallel              0.414   true
+di_N30            30   30       11  graph                       0.557   true
+di_N30            30   30       11  combinatorial_graph         0.676   true
+di_N30            30   30       11  parametric_daqp             0.618   true
+di_N30            30   30       11  ahmadi                      1.299   true
+di_N30            30   30       11  combinatorial             skipped      -
+di_N30            30   30       11  dp (2023 sym)             skipped      -
+masses2_N2         2    2       51  geometric                   1.324   true
+masses2_N2         2    2       51  mplcp                       0.972   true
+masses2_N2         2    2       51  geometric_parallel          0.708   true
+masses2_N2         2    2       51  mplcp_parallel              0.587   true
+masses2_N2         2    2       51  graph                       0.819   true
+masses2_N2         2    2       51  combinatorial_graph         0.780   true
+masses2_N2         2    2       51  parametric_daqp             0.766   true
+masses2_N2         2    2       51  ahmadi                      1.230   true
+masses2_N2         2    2       51  combinatorial               0.842   true
+masses2_N2         2    2       51  dp (2023 sym)               1.103   true
+masses2_N3         3    3      159  geometric                   6.010   true
+masses2_N3         3    3      159  mplcp                       4.084   true
+masses2_N3         3    3      159  geometric_parallel          2.226   true
+masses2_N3         3    3      159  mplcp_parallel              1.750   true
+masses2_N3         3    3      159  graph                       3.814   true
+masses2_N3         3    3      159  combinatorial_graph         4.519   true
+masses2_N3         3    3      159  parametric_daqp             4.308   true
+masses2_N3         3    3      159  ahmadi                      6.872   true
+masses2_N3         3    3      159  combinatorial               4.846   true
+masses2_N3         3    3      159  dp (2023 sym)               5.609   true
+masses2_N4         4    4      307  geometric                  34.714   true
+masses2_N4         4    4      307  mplcp                      14.469   true
+masses2_N4         4    4      307  geometric_parallel         85.342   true
+masses2_N4         4    4      307  mplcp_parallel            101.525   true
+masses2_N4         4    4      307  graph                      10.430   true
+masses2_N4         4    4      307  combinatorial_graph        19.591   true
+masses2_N4         4    4      307  parametric_daqp            18.035   true
+masses2_N4         4    4      307  ahmadi                     31.856   true
+masses2_N4         4    4      307  combinatorial              39.931   true
+masses2_N4         4    4      307  dp (2023 sym)              33.644   true
+masses2_N5         5    5      493  geometric                  47.740   true
+masses2_N5         5    5      493  mplcp                      35.424   true
+masses2_N5         5    5      493  geometric_parallel         50.680   true
+masses2_N5         5    5      493  mplcp_parallel            198.764   true
+masses2_N5         5    5      493  graph                      23.005   true
+masses2_N5         5    5      493  combinatorial_graph        94.083   true
+masses2_N5         5    5      493  parametric_daqp            71.209   true
+masses2_N5         5    5      493  ahmadi                     41.171   true
+masses2_N5         5    5      493  combinatorial              67.239   true
+masses2_N5         5    5      493  dp (2023 sym)              42.660   true
+masses2_N6         6    6      901  geometric                  58.854   true
+masses2_N6         6    6      901  mplcp                      40.308   true
+masses2_N6         6    6      901  geometric_parallel         15.588   true
+masses2_N6         6    6      901  mplcp_parallel             15.295   true
+masses2_N6         6    6      901  graph                      63.176   true
+masses2_N6         6    6      901  combinatorial_graph       144.777   true
+masses2_N6         6    6      901  parametric_daqp           124.775   true
+masses2_N6         6    6      901  ahmadi                    103.304   true
+masses2_N6         6    6      901  combinatorial             337.818   true
+masses2_N6         6    6      901  dp (2023 sym)             101.033   true
+masses2_N7         7    7     1641  geometric                 125.177   true
+masses2_N7         7    7     1641  mplcp                      76.839   true
+masses2_N7         7    7     1641  geometric_parallel         33.312   true
+masses2_N7         7    7     1641  mplcp_parallel             21.715   true
+masses2_N7         7    7     1641  graph                     143.719   true
+masses2_N7         7    7     1641  combinatorial_graph       410.430   true
+masses2_N7         7    7     1641  parametric_daqp           342.578   true
+masses2_N7         7    7     1641  ahmadi                    213.508   true
+masses2_N7         7    7     1641  combinatorial            2102.186   true
+masses2_N7         7    7     1641  dp (2023 sym)             221.457   true
+masses2_N8         8    8     2837  geometric                 233.738   true
+masses2_N8         8    8     2837  mplcp                     143.123   true
+masses2_N8         8    8     2837  geometric_parallel         63.177   true
+masses2_N8         8    8     2837  mplcp_parallel             37.545   true
+masses2_N8         8    8     2837  graph                     378.211   true
+masses2_N8         8    8     2837  combinatorial_graph      1121.925   true
+masses2_N8         8    8     2837  parametric_daqp           892.484   true
+masses2_N8         8    8     2837  ahmadi                    433.240   true
+masses2_N8         8    8     2837  combinatorial           16324.931   true
+masses2_N8         8    8     2837  dp (2023 sym)             448.015   true
+sys3x2_N2          2    4       61  geometric                   0.879   true
+sys3x2_N2          2    4       61  mplcp                       0.427   true
+sys3x2_N2          2    4       61  geometric_parallel          1.395   true
+sys3x2_N2          2    4       61  mplcp_parallel              0.911   true
+sys3x2_N2          2    4       61  graph                       0.628   true
+sys3x2_N2          2    4       61  combinatorial_graph         0.729   true
+sys3x2_N2          2    4       61  parametric_daqp             0.609   true
+sys3x2_N2          2    4       61  ahmadi                      0.945   true
+sys3x2_N2          2    4       61  combinatorial               1.277   true
+sys3x2_N2          2    4       61  dp (2023 sym)               1.453   true
+sys3x2_N3          3    6      211  geometric                   4.566   true
+sys3x2_N3          3    6      211  mplcp                       2.187   true
+sys3x2_N3          3    6      211  geometric_parallel          4.115   true
+sys3x2_N3          3    6      211  mplcp_parallel              2.700   true
+sys3x2_N3          3    6      211  graph                       3.831   true
+sys3x2_N3          3    6      211  combinatorial_graph         6.779   true
+sys3x2_N3          3    6      211  parametric_daqp             4.969   true
+sys3x2_N3          3    6      211  ahmadi                      5.613   true
+sys3x2_N3          3    6      211  combinatorial              21.381   true
+sys3x2_N3          3    6      211  dp (2023 sym)              10.690   true
+sys3x2_N4          4    8      503  geometric                  13.444   true
+sys3x2_N4          4    8      503  mplcp                       6.952   true
+sys3x2_N4          4    8      503  geometric_parallel        514.783   true
+sys3x2_N4          4    8      503  mplcp_parallel              5.777   true
+sys3x2_N4          4    8      503  graph                      19.684   true
+sys3x2_N4          4    8      503  combinatorial_graph        47.730   true
+sys3x2_N4          4    8      503  parametric_daqp            65.140   true
+sys3x2_N4          4    8      503  ahmadi                    369.947   true
+sys3x2_N4          4    8      503  combinatorial            1587.601   true
+sys3x2_N4          4    8      503  dp (2023 sym)              81.746   true
+sys3x2_N5          5   10      973  geometric                  63.395   true
+sys3x2_N5          5   10      973  mplcp                      15.718   true
+sys3x2_N5          5   10      973  geometric_parallel        184.932   true
+sys3x2_N5          5   10      973  mplcp_parallel             67.305   true
+sys3x2_N5          5   10      973  graph                     185.590   true
+sys3x2_N5          5   10      973  combinatorial_graph       730.807   true
+sys3x2_N5          5   10      973  parametric_daqp           496.776   true
+sys3x2_N5          5   10      973  ahmadi                    104.198   true
+sys3x2_N5          5   10      973  combinatorial           14560.619   true
+sys3x2_N5          5   10      973  dp (2023 sym)             217.575   true
+sys3x2_N6          6   12     1503  geometric                 141.631   true
+sys3x2_N6          6   12     1503  mplcp                      47.399   true
+sys3x2_N6          6   12     1503  geometric_parallel        351.007   true
+sys3x2_N6          6   12     1503  mplcp_parallel            429.813   true
+sys3x2_N6          6   12     1503  graph                     772.869   true
+sys3x2_N6          6   12     1503  combinatorial_graph      3072.218   true
+sys3x2_N6          6   12     1503  parametric_daqp          2667.892   true
+sys3x2_N6          6   12     1503  ahmadi                    289.053   true
+sys3x2_N6          6   12     1503  combinatorial          259717.043   true
+sys3x2_N6          6   12     1503  dp (2023 sym)             477.819   true
+sys3x2_N7          7   14     2095  geometric                 181.855   true
+sys3x2_N7          7   14     2095  mplcp                      66.844   true
+sys3x2_N7          7   14     2095  geometric_parallel        619.915   true
+sys3x2_N7          7   14     2095  mplcp_parallel            456.120   true
+sys3x2_N7          7   14     2095  graph                    2076.153   true
+sys3x2_N7          7   14     2095  combinatorial_graph      8459.533   true
+sys3x2_N7          7   14     2095  parametric_daqp          4716.048   true
+sys3x2_N7          7   14     2095  ahmadi                    393.410   true
+sys3x2_N7          7   14     2095  combinatorial             skipped      -
+sys3x2_N7          7   14     2095  dp (2023 sym)             958.444   true
