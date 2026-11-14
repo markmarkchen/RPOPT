@@ -398,21 +398,17 @@ pub fn canonical_basis(program: &MpProgram, active: &[usize], theta: &[f64]) -> 
         return None;
     }
     let k = r - eq.len();
-    let mut cands = vec![];
-    combos_into(&ineq, k, 0, &mut vec![], &mut cands, 20_000);
     let neq = eq.len();
-    for c in cands {
-        let mut b: Vec<usize> = eq.clone();
-        b.extend(c);
-        if !is_full_rank_rows(&program.a, &b) {
-            continue;
+    // The basis must be dual feasible for the fixed weights (reduced costs w_j - w_B' A_B^{-T} a_j
+    // >= 0) and primal feasible at theta (multipliers >= 0).
+    let valid = |b: &[usize]| -> bool {
+        if !is_full_rank_rows(&program.a, b) {
+            return false;
         }
-        // reduced costs of the dependent active constraints (independent of theta)
-        let ab = program.a.select_rows(&b);
+        let ab = program.a.select_rows(b);
         let g = ab.matmul(&ab.transpose());
-        let Some(ch) = Cholesky::new(&g) else { continue };
+        let Some(ch) = Cholesky::new(&g) else { return false };
         let wb: Vec<f64> = b.iter().map(|&i| weight(i)).collect();
-        let mut ok = true;
         for &j in &ineq {
             if b.contains(&j) {
                 continue;
@@ -421,17 +417,102 @@ pub fn canonical_basis(program: &MpProgram, active: &[usize], theta: &[f64]) -> 
             let y = ch.solve(&ab.matvec(aj));
             let rc = weight(j) - dot(&wb, &y);
             if rc < -1e-10 {
-                ok = false;
-                break;
+                return false;
             }
         }
-        if !ok {
+        let Some(law) = program.optimal_control_law(b) else { return false };
+        (neq..law.a_l.rows).all(|i| dot(law.a_l.row(i), theta) + law.b_l[i] >= -1e-9)
+    };
+    // Small active sets: enumerate the bases in lexicographic order. Large ones (the number of
+    // bases grows binomially, e.g. C(48,24) at a degenerate vertex of an infinity-norm MPC) get the
+    // basis from one LP over the multiplier polyhedron instead.
+    const ENUM_CAP: usize = 1000;
+    let mut cands = vec![];
+    combos_into(&ineq, k, 0, &mut vec![], &mut cands, ENUM_CAP);
+    if cands.len() >= ENUM_CAP && program.q.is_none() {
+        if let Some(b) = canonical_basis_lp(program, &ineq, k, theta, &valid) {
+            return Some(b);
+        }
+    }
+    if cands.len() >= ENUM_CAP {
+        cands.clear();
+        combos_into(&ineq, k, 0, &mut vec![], &mut cands, 20_000);
+    }
+    for c in cands {
+        let mut b: Vec<usize> = eq.clone();
+        b.extend(c);
+        if valid(&b) {
+            return Some(b);
+        }
+    }
+    None
+}
+
+/// The canonical basis of a degenerate mpLP vertex from one LP: minimise w'l over the multiplier
+/// polyhedron {l >= 0 : A_S' l = -(c + H theta)} and complete the support of the optimal vertex to
+/// a basis inside the set of zero reduced cost (any such completion is primal and dual feasible).
+fn canonical_basis_lp(program: &MpProgram, ineq: &[usize], k: usize, theta: &[f64], valid: &dyn Fn(&[usize]) -> bool) -> Option<Vec<usize>> {
+    let eq = &program.equality_indices;
+    let nx = program.num_x();
+    let n = ineq.len();
+    let nt = program.num_t();
+    // rows: nx equalities, then -l_j <= 0
+    let mut a = Mat::zeros(nx + n, n);
+    let mut b = vec![0.0; nx + n];
+    for (jj, &j) in ineq.iter().enumerate() {
+        for d in 0..nx {
+            a[(d, jj)] = program.a[(j, d)];
+        }
+        a[(nx + jj, jj)] = -1.0;
+    }
+    for d in 0..nx {
+        let mut g = program.c[d];
+        for t in 0..nt {
+            g += program.h[(d, t)] * theta[t];
+        }
+        b[d] = -g;
+    }
+    let w: Vec<f64> = ineq.iter().map(|&j| weight(j)).collect();
+    let eqs: Vec<usize> = (0..nx).collect();
+    let sol = crate::solver::lp::solve_lp(Some(&w), &a, &b, &eqs);
+    let sol = sol?;
+    let support: Vec<usize> = (0..n).filter(|&jj| sol.x[jj] > 1e-9).collect();
+    // zero reduced cost first, then the smallest (the caller validates the completed basis)
+    let mut tight: Vec<usize> = (0..n).collect();
+    tight.sort_by(|&p, &q| sol.dual[nx + p].partial_cmp(&sol.dual[nx + q]).unwrap_or(std::cmp::Ordering::Equal));
+    let mut basis: Vec<usize> = eq.clone();
+    basis.extend(support.iter().map(|&jj| ineq[jj]));
+    let ranks_ok = |basis: &[usize]| rank(&program.a.select_rows(basis)) == basis.len();
+    if !ranks_ok(&basis) {
+        return None;
+    }
+    let missing = eq.len() + k - basis.len();
+    if missing == 0 {
+        return if valid(&basis) { Some(basis) } else { None };
+    }
+    // A degenerate optimal vertex (support smaller than k): complete the support by the columns
+    // of smallest reduced cost, keeping the first completion that is primal and dual feasible.
+    let rest: Vec<usize> = tight.into_iter().filter(|jj| !support.contains(jj)).collect();
+    let mut tried = 0;
+    let mut stack: Vec<(Vec<usize>, usize)> = vec![(basis, 0)];
+    while let Some((cur, from)) = stack.pop() {
+        if cur.len() == eq.len() + k {
+            if valid(&cur) {
+                return Some(cur);
+            }
             continue;
         }
-        let Some(law) = program.optimal_control_law(&b) else { continue };
-        let lam_ok = (neq..law.a_l.rows).all(|i| dot(law.a_l.row(i), theta) + law.b_l[i] >= -1e-9);
-        if lam_ok {
-            return Some(b);
+        tried += 1;
+        if tried > 400 {
+            return None;
+        }
+        // push in reverse so the smallest reduced cost is explored first
+        for pos in (from..rest.len()).rev() {
+            let mut next = cur.clone();
+            next.push(ineq[rest[pos]]);
+            if ranks_ok(&next) {
+                stack.push((next, pos + 1));
+            }
         }
     }
     None
@@ -522,3 +603,4 @@ pub fn fathem_facet_degen(
     }
     None
 }
+
