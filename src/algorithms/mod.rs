@@ -10,6 +10,7 @@ pub mod mpmiqp;
 pub mod mplcp;
 pub mod mplp_lex;
 pub mod mpr;
+pub mod pdaqp;
 
 use crate::critical_region::CriticalRegion;
 use crate::linalg::{min_eigenvalue_sym, Mat};
@@ -45,12 +46,14 @@ pub enum MpqpAlgorithm {
     MplcpEnum,
     /// Jones-Kerrigan-Maciejowski lexicographic perturbation (mpLP only; mpQPs go to `geometric`)
     MplpLex,
+    /// Arnström and Axehill (CDC 2024) combinatorial connected graph with DAQP feasibility problems
+    ParametricDaqp,
 }
 
 impl MpqpAlgorithm {
     pub fn all() -> &'static [MpqpAlgorithm] {
         use MpqpAlgorithm::*;
-        &[Combinatorial, CombinatorialParallel, Graph, GraphExp, GraphParallel, CombinatorialGraph, CombinatorialGraphParallel, Geometric, GeometricParallel, Ahmadi, Mplcp, MplcpEnum, MplpLex]
+        &[Combinatorial, CombinatorialParallel, Graph, GraphExp, GraphParallel, CombinatorialGraph, CombinatorialGraphParallel, Geometric, GeometricParallel, Ahmadi, Mplcp, MplcpEnum, MplpLex, ParametricDaqp]
     }
 
     pub fn name(&self) -> &'static str {
@@ -69,6 +72,7 @@ impl MpqpAlgorithm {
             Mplcp => "mplcp",
             MplcpEnum => "mplcp_enum",
             MplpLex => "mplp_lex",
+            ParametricDaqp => "parametric_daqp",
         }
     }
 
@@ -118,6 +122,7 @@ pub fn solve_mpqp_with(program: &Arc<MpProgram>, algorithm: MpqpAlgorithm, opts:
                 mplp_lex::regions(program, opts.seed)
             }
         }
+        ParametricDaqp => pdaqp::pdaqp(program),
     };
     let mut sol = Solution::new(program.clone(), regions);
     // PPOPT flags every solution as overlapping (its isinstance check also matches MPQP). We only
