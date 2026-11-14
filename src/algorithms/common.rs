@@ -297,8 +297,56 @@ fn has_coincident_row(a: &Mat, b: &[f64], k: usize) -> bool {
 /// `get_facet_centers` that flags in `degen` a facet skipped because another row of the region
 /// lies on the same hyperplane (two constraints becoming active together: degenerate).
 pub fn get_facet_centers_degen(a: &Mat, b: &[f64], degen: Option<&std::sync::atomic::AtomicBool>) -> Vec<(Vec<f64>, Vec<f64>, f64)> {
+    get_facet_centers_skip(a, b, degen, &[])
+}
+
+/// Facets of `region` (rows of its E, f) shared with an already known neighbour: the neighbour's
+/// active set differs from the region's by one constraint (one more active, or one multiplier
+/// leaving) and the neighbour has a facet on the same hyperplane with the opposite normal. Stepping
+/// out of such a facet can only end in the known neighbour, so it is skipped. `lookup` maps a
+/// sorted active set to its region. QPs only (the mpLP partition can be degenerate).
+pub fn known_neighbour_facets<'a>(region: &CriticalRegion, lookup: &dyn Fn(&[usize]) -> Option<&'a CriticalRegion>) -> Vec<bool> {
+    let mut skip = vec![false; region.e.rows];
+    if region.e.rows == 0 {
+        return skip;
+    }
+    let mut cands: Vec<Vec<usize>> = vec![];
+    for &j in &region.lambda_set {
+        let mut v: Vec<usize> = region.active_set.iter().cloned().filter(|&i| i != j).collect();
+        v.sort_unstable();
+        cands.push(v);
+    }
+    for &i in &region.regular_set.1 {
+        let mut v = region.active_set.clone();
+        v.push(i);
+        v.sort_unstable();
+        cands.push(v);
+    }
+    for c in cands {
+        let Some(n) = lookup(&c) else { continue };
+        for k in 0..region.e.rows {
+            if skip[k] {
+                continue;
+            }
+            let (ek, fk) = (region.e.row(k), region.f[k]);
+            for i in 0..n.e.rows {
+                let ei = n.e.row(i);
+                if (n.f[i] + fk).abs() < 1e-8 && ek.iter().zip(ei).all(|(x, y)| (x + y).abs() < 1e-8) {
+                    skip[k] = true;
+                    break;
+                }
+            }
+        }
+    }
+    skip
+}
+
+pub fn get_facet_centers_skip(a: &Mat, b: &[f64], degen: Option<&std::sync::atomic::AtomicBool>, skip: &[bool]) -> Vec<(Vec<f64>, Vec<f64>, f64)> {
     let mut out = vec![];
     for k in 0..a.rows {
+        if skip.get(k).copied().unwrap_or(false) {
+            continue;
+        }
         let (theta, radius) = if a.cols == 1 {
             (vec![b[k] / a[(k, 0)]], 1.0)
         } else {
