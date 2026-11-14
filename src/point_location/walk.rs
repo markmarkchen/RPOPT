@@ -15,14 +15,14 @@
 //! neighbour is the one that contains the point of the ray just beyond the crossing point.
 //!
 //! Exactness: the walk only proposes a candidate. The candidate is verified with the f64 halfspace
-//! test of the other locators (`LOCATE_TOL`). Every case in which the walk cannot proceed (no
+//! test of the other locators (the point location tolerance). Every case in which the walk cannot proceed (no
 //! neighbour across the exit facet: outside the feasible set or a non-convex union; no neighbour
 //! contains the continuation point; a crossing parameter that decreases; more than `max_steps`
 //! steps; an unusable seed) falls back to an exact locator (the hash table), never a guess.
 
 use super::geometry::PartitionGeometry;
 use super::hash_table::HashTable;
-use super::{PointLocator, LOCATE_TOL};
+use super::PointLocator;
 use crate::linalg::dot;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -35,6 +35,8 @@ pub(crate) const MAX_DIM: usize = 16;
 pub struct RowGraph {
     pub dim: usize,
     pub num_regions: usize,
+    /// point location tolerance of the geometry
+    pub tol: f64,
     e: Box<[f64]>,
     f: Box<[f64]>,
     offsets: Box<[u32]>,
@@ -60,6 +62,7 @@ impl RowGraph {
         RowGraph {
             dim: geom.dim,
             num_regions: geom.num_regions,
+            tol: geom.tol,
             e: geom.e.clone().into(),
             f: geom.f.clone().into(),
             offsets: geom.offsets.iter().map(|&o| o as u32).collect(),
@@ -86,13 +89,13 @@ impl RowGraph {
         &self.nb[self.nb_off[g] as usize..self.nb_off[g + 1] as usize]
     }
 
-    /// The membership test shared with the other locators (within `LOCATE_TOL`).
+    /// The membership test shared with the other locators (within the tolerance).
     #[inline]
     pub fn contains(&self, i: usize, theta: &[f64]) -> bool {
-        self.violation(i, theta) <= LOCATE_TOL
+        self.violation(i, theta) <= self.tol
     }
 
-    /// Largest row violation of region i at theta; infinity once a row exceeds `LOCATE_TOL`.
+    /// Largest row violation of region i at theta; infinity once a row exceeds the tolerance.
     /// A value at most 0 means that theta lies in the region strictly.
     #[inline]
     pub fn violation(&self, i: usize, theta: &[f64]) -> f64 {
@@ -101,7 +104,7 @@ impl RowGraph {
         let mut worst = f64::NEG_INFINITY;
         for (k, fk) in f.iter().enumerate() {
             let v = dot(&e[k * n..(k + 1) * n], theta) - fk;
-            if v > LOCATE_TOL {
+            if v > self.tol {
                 return f64::INFINITY;
             }
             worst = worst.max(v);

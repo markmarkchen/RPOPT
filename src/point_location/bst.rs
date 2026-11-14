@@ -9,7 +9,7 @@
 //! remaining candidates, which are checked directly.
 
 use super::geometry::{has_interior, PartitionGeometry};
-use super::{PointLocator, LOCATE_TOL};
+use super::PointLocator;
 use crate::linalg::{dot, Mat};
 
 #[derive(Clone, Debug)]
@@ -26,6 +26,8 @@ pub struct BinarySearchTree {
     pub depth: usize,
     /// construction stopped at `max_nodes`
     pub truncated: bool,
+    /// point location tolerance of the geometry the tree was built from
+    pub tol: f64,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -64,7 +66,9 @@ impl BinarySearchTree {
         let np = geom.planes.len();
         let r = geom.num_regions;
         // classification of each region against each plane from its vertices
-        let tol = 1e-9;
+        // a region is put wholly on one side of a plane only when its vertices clear the plane by
+        // more than the tolerance, so that a point within the tolerance of it is never sent away
+        let tol = geom.tol.max(1e-9);
         let mut side = vec![Side::Both; r * np];
         for i in 0..r {
             if geom.thin[i] {
@@ -99,7 +103,7 @@ impl BinarySearchTree {
                 geom_rows.push(f[k]);
             }
         }
-        let mut tree = BinarySearchTree { dim: n, nodes: vec![], geom_rows, offsets: geom.offsets.clone(), depth: 0, truncated: false };
+        let mut tree = BinarySearchTree { dim: n, nodes: vec![], geom_rows, offsets: geom.offsets.clone(), depth: 0, truncated: false, tol: geom.tol };
         // iterative build: (node index, candidate set, path halfspaces, depth)
         tree.nodes.push(BstNode::Leaf { candidates: vec![] });
         let mut work: Vec<(usize, Vec<usize>, Vec<Vec<f64>>, usize)> = vec![(0, (0..r).collect(), vec![], 0)];
@@ -203,7 +207,7 @@ impl BinarySearchTree {
         for k in self.offsets[j]..self.offsets[j + 1] {
             let r = &self.geom_rows[k * w..(k + 1) * w];
             let v = dot(&r[..n], theta) - r[n];
-            if v > LOCATE_TOL {
+            if v > self.tol {
                 return f64::INFINITY;
             }
             worst = worst.max(v);
@@ -218,7 +222,7 @@ impl BinarySearchTree {
         let n = self.dim;
         for k in self.offsets[j]..self.offsets[j + 1] {
             let r = &self.geom_rows[k * w..(k + 1) * w];
-            if dot(&r[..n], theta) > r[n] + LOCATE_TOL {
+            if dot(&r[..n], theta) > r[n] + self.tol {
                 return false;
             }
         }
@@ -280,7 +284,7 @@ impl PointLocator for BinarySearchTree {
     }
 
     fn locate(&self, theta: &[f64]) -> Option<usize> {
-        super::pick_strict_first_rescan(self.leaf(theta).iter().cloned(), self.offsets.len() - 1, |j| self.region_violation(j, theta))
+        super::pick_strict_first_rescan(self.tol, self.leaf(theta).iter().cloned(), self.offsets.len() - 1, |j| self.region_violation(j, theta))
     }
 
     fn storage_floats(&self) -> usize {

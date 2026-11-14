@@ -1,8 +1,11 @@
 //! Every point location method must return exactly the region of `Solution::get_region_index`
 //! (strict-first rule: the first region that contains theta with tolerance 0, otherwise the first
-//! within `LOCATE_TOL`). Checked on theta dimension 6 and 8 with at least 20,000 queries each:
-//! uniform points in the parameter box and points within +-2e-9 of a facet (both sides of the
-//! `LOCATE_TOL` boundary), which is where first-within-tolerance and strict-first rules differ.
+//! within the point location tolerance). The tolerance is the one default of the crate
+//! (`Solution::new` gives `LOCATE_TOL`), with no special casing: locators are built from the
+//! solution as it comes out of the solver. Checked on theta dimension 6 and 8 with at least
+//! 20,000 queries each: uniform points in the parameter box and points within +-2 tolerances of
+//! a facet (both sides of the tolerance boundary), which is where first-within-tolerance and
+//! strict-first rules differ. A second run repeats this at PPOPT's tolerance 1e-5.
 //!
 //! Also holds the regression tests for the point location defects found by
 //! `examples/pl_dim_sweep.rs` (thin regions dropped by an unreliable LP radius check).
@@ -34,13 +37,14 @@ fn theta_box(prog: &MpProgram) -> (Vec<f64>, Vec<f64>) {
     (lo, hi)
 }
 
-/// Uniform queries plus queries within a few 1e-9 of facets of random regions.
+/// Uniform queries plus queries within a few tolerances of facets of random regions.
 fn queries(prog: &MpProgram, geom: &PartitionGeometry, count: usize, seed: u64) -> Vec<Vec<f64>> {
+    let t = geom.tol;
     let n = geom.dim;
     let (lo, hi) = theta_box(prog);
     let mut rng = StdRng::seed_from_u64(seed);
     let mut qs: Vec<Vec<f64>> = (0..count / 2).map(|_| (0..n).map(|k| rng.gen_range(lo[k]..hi[k])).collect()).collect();
-    let offsets = [-1e-7, -2e-9, -1e-9, -5e-10, -1e-10, -1e-11, 1e-11, 1e-10, 5e-10, 9e-10, 1.1e-9, 2e-9, 1e-7];
+    let offsets = [-100.0 * t, -2.0 * t, -t, -0.5 * t, -0.1 * t, -0.01 * t, 0.01 * t, 0.1 * t, 0.5 * t, 0.9 * t, 1.1 * t, 2.0 * t, 100.0 * t];
     while qs.len() < count {
         let r = rng.gen_range(0..geom.num_regions);
         let (e, f) = geom.region_rows(r);
@@ -149,8 +153,16 @@ fn all_methods(sol: &Solution, geom: &PartitionGeometry) -> Vec<Box<dyn PointLoc
 }
 
 fn run(name: &str, prog: Arc<MpProgram>, count: usize) {
+    run_tol(name, prog, count, None);
+}
+
+/// `tol`: None keeps the default of `Solution::new`.
+fn run_tol(name: &str, prog: Arc<MpProgram>, count: usize, tol: Option<f64>) {
     let mut sol = solve_mpqp(&prog, MpqpAlgorithm::GeometricParallel);
-    sol.point_location_tolerance = LOCATE_TOL;
+    match tol {
+        None => assert_eq!(sol.point_location_tolerance, LOCATE_TOL),
+        Some(t) => sol.point_location_tolerance = t,
+    }
     let geom = PartitionGeometry::new(&sol);
     let qs = queries(&prog, &geom, count, 17);
     let locs = all_methods(&sol, &geom);
@@ -173,6 +185,12 @@ fn all_methods_agree_with_solution_theta6() {
     run("qp:3:6:14:1", Arc::new(rpopt::problem_generator::generate_mpqp(3, 6, 14, 1)), 24_000);
 }
 
+/// PPOPT's own tolerance, set on the solution: every locator follows it.
+#[test]
+fn all_methods_agree_with_solution_at_ppopt_tolerance() {
+    run_tol("qp:3:6:14:1 tol 1e-5", Arc::new(rpopt::problem_generator::generate_mpqp(3, 6, 14, 1)), 24_000, Some(1e-5));
+}
+
 #[test]
 fn all_methods_agree_with_solution_theta8() {
     run("qp:3:8:10:1", Arc::new(rpopt::problem_generator::generate_mpqp(3, 8, 10, 1)), 24_000);
@@ -185,8 +203,7 @@ fn all_methods_agree_with_solution_theta8() {
 #[test]
 fn hash_table_keeps_thin_region_theta8() {
     let prog = Arc::new(rpopt::problem_generator::generate_mpqp(3, 8, 10, 1));
-    let mut sol = solve_mpqp(&prog, MpqpAlgorithm::GeometricParallel);
-    sol.point_location_tolerance = LOCATE_TOL;
+    let sol = solve_mpqp(&prog, MpqpAlgorithm::GeometricParallel);
     let geom = PartitionGeometry::new(&sol);
     let thetas: [[f64; 8]; 4] = [
         [34.80534466451739, 0.4775783571946002, 37.819863556682556, -4.094729937941457, 20.93323009248409, -7.019987216301264, 0.5104307985038137, 3.075497883138876],
@@ -208,8 +225,7 @@ fn hash_table_keeps_thin_region_theta8() {
 #[test]
 fn hash_table_supports_more_than_eight_parameters() {
     let prog = Arc::new(rpopt::problem_generator::generate_mpqp(3, 10, 10, 1));
-    let mut sol = solve_mpqp(&prog, MpqpAlgorithm::GeometricParallel);
-    sol.point_location_tolerance = LOCATE_TOL;
+    let sol = solve_mpqp(&prog, MpqpAlgorithm::GeometricParallel);
     let geom = PartitionGeometry::new(&sol);
     assert!(HashTable::supports_dim(geom.dim));
     let ht = HashTable::try_with_storage_limit(&geom, 8 << 20).unwrap();

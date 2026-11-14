@@ -197,6 +197,15 @@ the tolerance, so they return the same region as `Solution::get_region` even on 
 its law past its own boundary. Region classification for the trees and the hash table is conservative: interiors
 are certified, and thin regions are kept as candidates rather than dropped.
 
+There is one point location tolerance. `Solution::point_location_tolerance` defaults to
+`solution::DEFAULT_POINT_LOCATION_TOL` (1e-9, also `point_location::LOCATE_TOL`), and every locator takes the value of
+the solution it is built from (`SequentialSearch::new`, `PartitionGeometry::new`, hence the trees, tables and walks), so
+`Solution::get_region` and the locators agree. Another value goes in the solution field before building locators
+(`sol.point_location_tolerance = 1e-5` gives PPOPT's), or `PartitionGeometry::with_tol` / `SequentialSearch::with_tol`.
+PPOPT uses 1e-5; 1e-9 is used here because floating-point seams between neighbouring regions are below 1e-10 on the
+benchmark problems, while a 1e-5 tolerance returns a region for points up to 1e-5 outside the partition, whose extended
+law violates the constraints by up to about 2e4 times the distance (0.16 at distance 9e-6 on masses2_N10).
+
 | method | module | reference |
 |---|---|---|
 | sequential search (PPOPT's, plus an early-exit variant) | `sequential` | PPOPT `PointLocation` |

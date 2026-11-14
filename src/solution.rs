@@ -38,6 +38,10 @@ pub struct SolutionData {
     pub point_location_tolerance: f64,
 }
 
+/// Default point location tolerance, shared by `Solution::get_region` and every point locator
+/// (`point_location::LOCATE_TOL`). PPOPT uses 1e-5; see the README for why this crate uses 1e-9.
+pub const DEFAULT_POINT_LOCATION_TOL: f64 = 1e-9;
+
 impl Solution {
     pub fn new(program: Arc<MpProgram>, critical_regions: Vec<CriticalRegion>) -> Self {
         Solution {
@@ -45,7 +49,7 @@ impl Solution {
             continuous: Some(program),
             critical_regions,
             is_overlapping: false,
-            point_location_tolerance: 1e-5,
+            point_location_tolerance: DEFAULT_POINT_LOCATION_TOL,
         }
     }
 

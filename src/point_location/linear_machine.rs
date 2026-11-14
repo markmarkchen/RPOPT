@@ -17,7 +17,7 @@
 //! next, so a near-tie at a facet cannot return a wrong region.
 
 use super::geometry::PartitionGeometry;
-use super::{PointLocator, LOCATE_TOL};
+use super::PointLocator;
 use crate::linalg::dot;
 use crate::solver::sparse_lp::SparseLp;
 
@@ -48,6 +48,7 @@ pub struct LinearMachine {
     pub report: LinearMachineReport,
     /// verify the argmax region (and fall back) before returning
     pub verify: bool,
+    tol: f64,
 }
 
 impl LinearMachine {
@@ -155,6 +156,7 @@ impl LinearMachine {
             domain: geom.domain_planes.clone(),
             report: LinearMachineReport { max_vertex_violation: 0.0, min_center_margin: 0.0, centers_correct: 0, num_regions: r, certified: false, excluded: num_excluded },
             verify: true,
+            tol: geom.tol,
         };
         let mut rep = lm.check(geom);
         rep.excluded = num_excluded;
@@ -228,7 +230,7 @@ impl LinearMachine {
         }
     }
 
-    /// Largest row violation of region j, infinity once a row exceeds `LOCATE_TOL`.
+    /// Largest row violation of region j, infinity once a row exceeds the tolerance.
     #[inline]
     fn region_violation(&self, j: usize, theta: &[f64]) -> f64 {
         let w = self.dim + 1;
@@ -237,7 +239,7 @@ impl LinearMachine {
         for k in self.offsets[j]..self.offsets[j + 1] {
             let r = &self.rows[k * w..(k + 1) * w];
             let v = dot(&r[..n], theta) - r[n];
-            if v > LOCATE_TOL {
+            if v > self.tol {
                 return f64::INFINITY;
             }
             worst = worst.max(v);
@@ -262,13 +264,13 @@ impl PointLocator for LinearMachine {
             return Some(i);
         }
         let n = self.dim;
-        if !self.domain.iter().all(|p| dot(&p[..n], theta) <= p[n] + LOCATE_TOL) {
+        if !self.domain.iter().all(|p| dot(&p[..n], theta) <= p[n] + self.tol) {
             return None;
         }
         if let Some(&j) = self.neighbors[i].iter().find(|&&j| self.region_violation(j, theta) <= 0.0) {
             return Some(j);
         }
-        super::pick_strict_first(0..self.num_regions, |j| self.region_violation(j, theta))
+        super::pick_strict_first(self.tol, 0..self.num_regions, |j| self.region_violation(j, theta))
     }
 
     fn storage_floats(&self) -> usize {

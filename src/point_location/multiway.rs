@@ -8,7 +8,7 @@
 //! the paper.
 
 use super::bst::{BinarySearchTree, BstNode};
-use super::{PointLocator, LOCATE_TOL};
+use super::PointLocator;
 use crate::linalg::dot;
 
 #[derive(Clone, Copy, Debug)]
@@ -36,6 +36,7 @@ pub struct MultiwayTree {
     rows: Vec<f64>,
     offsets: Vec<usize>,
     pub height: usize,
+    tol: f64,
 }
 
 impl MultiwayTree {
@@ -43,7 +44,7 @@ impl MultiwayTree {
     pub fn from_bst(bst: &BinarySearchTree, levels: usize, rows: Vec<f64>, offsets: Vec<usize>) -> Self {
         let d = levels.max(1);
         let n = bst.dim;
-        let mut mw = MultiwayTree { dim: n, depth_per_node: d, nodes: vec![], leaves: vec![], rows, offsets, height: 0 };
+        let mut mw = MultiwayTree { dim: n, depth_per_node: d, nodes: vec![], leaves: vec![], rows, offsets, height: 0, tol: bst.tol };
         // map: BST node -> multiway node, built breadth first
         let mut queue: std::collections::VecDeque<(usize, usize, usize)> = std::collections::VecDeque::new(); // (bst root of node, mw id, height)
         mw.nodes.push(MwNode { planes: vec![], slots: vec![] });
@@ -83,7 +84,7 @@ impl MultiwayTree {
         mw
     }
 
-    /// Largest row violation of region j, infinity once a row exceeds `LOCATE_TOL`.
+    /// Largest row violation of region j, infinity once a row exceeds the tolerance.
     #[inline]
     fn region_violation(&self, j: usize, theta: &[f64]) -> f64 {
         let w = self.dim + 1;
@@ -92,7 +93,7 @@ impl MultiwayTree {
         for k in self.offsets[j]..self.offsets[j + 1] {
             let r = &self.rows[k * w..(k + 1) * w];
             let v = dot(&r[..n], theta) - r[n];
-            if v > LOCATE_TOL {
+            if v > self.tol {
                 return f64::INFINITY;
             }
             worst = worst.max(v);
@@ -134,7 +135,7 @@ impl PointLocator for MultiwayTree {
                         break;
                     }
                     Slot::Leaf(l) => {
-                        return super::pick_strict_first_rescan(self.leaves[l as usize].iter().cloned(), self.offsets.len() - 1, |j| self.region_violation(j, theta));
+                        return super::pick_strict_first_rescan(self.tol, self.leaves[l as usize].iter().cloned(), self.offsets.len() - 1, |j| self.region_violation(j, theta));
                     }
                 }
             }
