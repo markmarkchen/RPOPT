@@ -508,6 +508,8 @@ tests/                  integration tests (one file per method or feature)
 bench/                  problem generators (problems: mpQP MPC, problems_lp: mpLP MPC, problems_large),
                         PPOPT runner, comparison scripts, results (see bench/README.md)
 python/                 rpopt-py, the PPOPT-compatible Python bindings
+docs/                   technical-report (algorithms, speed techniques, benchmarks, results) and
+                        mplcp-report (why pLCP pivoting is fast, and why recent surveys omit it)
 ```
 
 </details>
