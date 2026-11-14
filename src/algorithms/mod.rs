@@ -3,6 +3,7 @@
 pub mod common;
 pub mod incremental;
 pub mod mpmiqp;
+pub mod mpr;
 
 use crate::critical_region::CriticalRegion;
 use crate::linalg::{min_eigenvalue_sym, Mat};
