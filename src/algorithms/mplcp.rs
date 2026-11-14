@@ -563,7 +563,10 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         let rr = &tab.rho[i * tab.w..(i + 1) * tab.w];
         let gi: f64 = (0..nt).map(|k| rr[1 + k] * g[k]).sum();
         gam[i] = gi;
-        if (rr[0] - b * gi).abs() <= ZTOL && (0..nt).map(|k| (rr[1 + k] - gi * g[k]).powi(2)).sum::<f64>().sqrt() <= ZTOL {
+        // relative to the row's magnitude: rows with gradients of 1e6 carry rounding errors above
+        // the absolute tolerance, and an identically-zero row would then be missed (no neighbour)
+        let sc = 1.0f64.max(rr[0].abs()).max((b * gi).abs()).max((0..nt).map(|k| rr[1 + k] * rr[1 + k]).sum::<f64>().sqrt());
+        if (rr[0] - b * gi).abs() <= ZTOL * sc && (0..nt).map(|k| (rr[1 + k] - gi * g[k]).powi(2)).sum::<f64>().sqrt() <= ZTOL * sc {
             zrows.push(i);
         }
     }

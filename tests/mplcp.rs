@@ -27,6 +27,32 @@ fn bench_problems_match_geometric() {
     assert_eq!(n, 12);
 }
 
+/// pop_006 has facet rows with gradients of about 1e6 in the pLCP tableau. The absolute zero-row
+/// test of `adjacent` then missed the identically-zero row and found no neighbour across the
+/// lambda = 0 facet, so two regions of radius 1e-3 were never reached (mplcp 2373 regions,
+/// geometric 2375).
+#[test]
+fn ill_scaled_facet_rows_do_not_hide_regions() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("bench/problems_large/pop_006.json");
+    let p = Arc::new(MpProgram::from_json_file(&path).unwrap());
+    let g = solve_mpqp(&p, MpqpAlgorithm::Geometric);
+    let m = solve_mpqp(&p, MpqpAlgorithm::Mplcp);
+    assert_eq!(region_signature(&m.critical_regions), region_signature(&g.critical_regions));
+}
+
+/// masses4_N3: combinatorial_graph used to add 62 slivers (radius about 5e-8) whose bordered-update
+/// rows were rounding noise (the direct KKT region is empty) and whose laws violate the
+/// constraints by 1e-5 to 1e-4. Every region it returns must also be a region of graph.
+#[test]
+fn combinatorial_graph_has_no_noise_slivers() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("bench/problems_large/masses4_N3.json");
+    let p = Arc::new(MpProgram::from_json_file(&path).unwrap());
+    let g = region_signature(&solve_mpqp(&p, MpqpAlgorithm::Graph).critical_regions);
+    let c = region_signature(&solve_mpqp(&p, MpqpAlgorithm::CombinatorialGraph).critical_regions);
+    let extra: Vec<_> = c.iter().filter(|s| g.binary_search(s).is_err()).collect();
+    assert!(extra.is_empty(), "{} regions of combinatorial_graph are not in graph", extra.len());
+}
+
 #[test]
 fn random_mpqps_match_geometric() {
     for seed in 0..12u64 {

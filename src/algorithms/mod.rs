@@ -631,6 +631,10 @@ fn combinatorial_graph(program: &MpProgram, opts: &SolveOptions, parallel: bool)
     combinatorial_graph_vec(program, opts, parallel)
 }
 
+/// Regions of `combinatorial_graph` built from a bordered-update law and thinner than this are
+/// rebuilt from the direct law.
+const THIN_REBUILD_RADIUS: f64 = 1e-6;
+
 /// Same exploration (same visiting order) with active sets stored as u128 bitmasks, which avoids
 /// allocating one vector per recorded neighbour (m <= 128 constraints).
 fn combinatorial_graph_bits(program: &MpProgram, opts: &SolveOptions, parallel: bool) -> Vec<CriticalRegion> {
@@ -676,6 +680,7 @@ fn combinatorial_graph_bits(program: &MpProgram, opts: &SolveOptions, parallel: 
         // the λ >= 0 and parameter rows are tested before the inactive rows are built: most
         // candidates fail there (same answer as the full test)
         let mut kkt = None;
+        let had_parent = parent.is_some();
         if let Some(p) = parent {
             let i = (k & !to_bits(&p.a)).trailing_zeros() as usize;
             match p.child(program, i) {
@@ -719,8 +724,23 @@ fn combinatorial_graph_bits(program: &MpProgram, opts: &SolveOptions, parallel: 
             if is_lp && a.len() != nx {
                 return (None, true, true, None);
             }
+            // The bordered update certifies full rank when gamma > 1e-10 sigma; a dependent set whose
+            // gamma is rounding noise above that gives a region of a rank-deficient basis (masses3_N5:
+            // two regions, one of radius 7e-3, whose law violates the constraints). Check the rank
+            // directly for sets reached through the update.
+            if had_parent && !program.check_active_set_rank(&a) {
+                return (None, true, false, None);
+            }
             let info = incremental::ParentInfo::new(program, &a, &kkt.law).map(std::sync::Arc::new);
-            return (crate::mpqp_utils::gen_cr_from_kkt(program, &a, kkt, true), true, true, info);
+            let mut region = crate::mpqp_utils::gen_cr_from_kkt(program, &a, kkt, true);
+            // A sliver found from the bordered-update law is often rounding noise: the update
+            // carries errors of about 1e-9 in the rows and 1e-5 in the law of ill-conditioned active
+            // sets, comparable to the sliver's width. Rebuild such regions from the direct law (the
+            // one the other algorithms use) and keep that answer.
+            if had_parent && region.as_ref().is_some_and(|r| r.cheb_radius.is_some_and(|c| c < THIN_REBUILD_RADIUS)) {
+                region = crate::mpqp_utils::gen_cr_from_active_set(program, &a, true);
+            }
+            return (region, true, true, info);
         }
         (None, false, false, None)
     };

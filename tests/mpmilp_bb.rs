@@ -307,9 +307,8 @@ fn probe_process_region_constraints() {
     }
 }
 
-/// Minimal reproducer: two rows equal up to 1 ulp are both dropped by `process_region_constraints`.
+/// Minimal reproducer: two rows equal up to 1 ulp were both dropped by `process_region_constraints`.
 #[test]
-#[ignore]
 fn process_region_constraints_near_duplicates() {
     let e = rows(&[
         &[0.1414213562373095, 0.9899494936611665],
@@ -320,7 +319,15 @@ fn process_region_constraints_near_duplicates() {
     ]);
     let f = vec![0.7071067811865475, 7.187505722312114e-17, 0.7071067811865476, 0.0, 0.0];
     let (e2, f2) = rpopt::utils::process_region_constraints(&e, &f);
-    println!("reduced rows {:?} rhs {:?}", e2.to_rows(), f2);
+    // the facet x2 <= 0.7071/0.98995 must survive (once)
+    let kept = (0..e2.rows).filter(|&i| (e2[(i, 1)] - 0.9899494936611665).abs() < 1e-9).count();
+    assert_eq!(kept, 1, "reduced rows {:?} rhs {:?}", e2.to_rows(), f2);
+    // the reduced system describes the same polytope
+    for k in 0..400 {
+        let th = [-0.2 + 1.4 * ((k * 37) % 101) as f64 / 100.0, -0.2 + 1.4 * ((k * 53) % 103) as f64 / 102.0];
+        let inside = |m: &Mat, rhs: &[f64]| (0..m.rows).all(|i| m[(i, 0)] * th[0] + m[(i, 1)] * th[1] <= rhs[i] + 1e-12);
+        assert_eq!(inside(&e, &f), inside(&e2, &f2), "theta {th:?}");
+    }
 }
 
 #[test]
