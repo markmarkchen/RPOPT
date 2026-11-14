@@ -56,7 +56,7 @@ algorithms. It solves multiparametric linear and quadratic programs (mpLP, mpQP)
 variants, and locates the active region of a parameter vector in tens of nanoseconds. This report states which
 algorithms are implemented, which techniques make them fast, how they were benchmarked against \ppopt{}, and what
 the measured speedups are. On the explicit model predictive control (MPC) benchmarks, the same algorithm on one thread
-runs 389x to 2,703x faster than \ppopt{} (32 of 32 runs at 200x or more, median 1,020x). On degenerate mpLPs, where
+runs 408x to 2,751x faster than \ppopt{} (32 of 32 runs at 200x or more, median 1,034x). On degenerate mpLPs, where
 \ppopt{}'s facet-stepping solver leaves up to 77\% of the feasible parameter set uncovered, \rpopt{} returns a gap-free
 partition 836x to 18,028x faster than \ppopt{}'s fastest gap-free solver, and more than 6,400x faster where \ppopt{}
 has no gap-free answer within 120 s. Against its own previous release, \rpopt{} is 3.48x faster (median) on
@@ -83,10 +83,10 @@ with Gurobi 12 and quadprog, on one Apple M4 Max with no other load, unless mark
 \toprule
 \ppopt{} solver & mpQP & mpLP \\
 \midrule
-\code{combinatorial} & 1,001x (705x to 1,665x) & 922x (780x to 1,475x) \\
-\code{graph} & 1,065x (575x to 2,577x) & 1,195x (1 run) \\
-\code{geometric} & 1,014x (559x to 2,257x) & 231x (185x to 968x) \\
-\code{combinatorial\_graph} & 1,020x (389x to 2,703x) & 234x (213x to 261x) \\
+\code{combinatorial} & 1,003x (705x to 1,656x) & 922x (780x to 1,475x) \\
+\code{graph} & 1,090x (600x to 2,608x) & 1,195x (1 run) \\
+\code{geometric} & 997x (554x to 2,252x) & 231x (185x to 968x) \\
+\code{combinatorial\_graph} & 1,034x (408x to 2,751x) & 234x (213x to 261x) \\
 \bottomrule
 \end{tabular}
 
@@ -97,8 +97,8 @@ with Gurobi 12 and quadprog, on one Apple M4 Max with no other load, unless mark
 \toprule
 comparison & cases & median & range \\
 \midrule
-mpQP, \ppopt{}'s fastest solver against \rpopt{}'s fastest & 9 problems & 1,798x & 755x to 4,167x \\
-mpQP, parallel against parallel & 7 runs & 2,110x & 1,286x to 5,755x \\
+mpQP, \ppopt{}'s fastest solver against \rpopt{}'s fastest & 9 problems & 1,739x & 753x to 4,062x \\
+mpQP, parallel against parallel & 7 runs & 2,063x & 1,387x to 5,889x \\
 mpLP, \rpopt{}'s fastest against \ppopt{}'s fastest gap-free solver & 6 problems & 1,422x & 836x to 18,028x \\
 mpLP, no gap-free \ppopt{} answer within 120 s & 7 problems & $>$134,000x & $>$6,400x to $>$305,000x \\
 point location, per query & 9 problems & 676x & 593x to 3,603x \\
@@ -185,6 +185,7 @@ Table~\ref{tab:exact} lists every exact solver with its literature source, wheth
 name & method & origin & notes \\
 \midrule
 \code{combinatorial}, \code{combinatorial\_parallel} & Gupta, Bhartiya, Nataraj~\cite{gupta2011novel}; parallel form~\cite{kenefake2024parallel} & PPOPT & exhaustive over active sets; exponential in the horizon \\
+\code{combinatorial\_kp}, \code{combinatorial\_kp\_parallel} & Kenefake, Pistikopoulos~\cite{kenefake2024parallel} & paper & \code{combinatorial} plus pruning of constraint pairs that can never be active together (LPs with complementarity branching in place of the MILP); same regions; 1.5x faster on \code{sys3x2\_N5}, 1.2x slower on \code{di\_N10} \\
 \code{graph}, \code{graph\_exp}, \code{graph\_parallel} & connected graph, Oberdieck et al.~\cite{oberdieck2017connected} & PPOPT & \code{graph\_exp} has no pruning list; on mpLPs, one-pivot swaps plus a facet-completion pass make the partition gap-free \\
 \code{geometric}, \code{geometric\_parallel} & facet stepping, Spj{\o}tvold et al.~\cite{spjotvold2006facet} & PPOPT & usually the fastest serial method of the PPOPT set; fixed for degenerate problems \\
 \code{combinatorial\_graph}, \code{combinatorial\_graph\_parallel} & Arnstr{\"o}m and Axehill~\cite{arnstrom2024high}, as simplified in \ppopt{} & PPOPT & breadth-first visit order \\
@@ -265,7 +266,7 @@ conservative: interiors are certified, and thin regions are kept as candidates r
 
 \begin{table}[!htbp]
 \centering\small
-\caption{Point location methods (twelve locators in total, counting variants).}
+\caption{Point location methods (thirteen locators in total, counting variants).}
 \label{tab:pl}
 \begin{tabularx}{\textwidth}{@{}L{5.3cm} l Y@{}}
 \toprule
@@ -281,6 +282,7 @@ descriptor function & \code{descriptor} & Bao\v{t}i\'c, Borrelli, Bemporad, Mora
 YANN & \code{yann} & Braniff and Tian~\cite{braniff2026yann} \\
 subdivision walking & \code{walk} & Wang, Jones, Maciejowski~\cite{wang2007subdivision} (sequences of nearby queries) \\
 graph traversal & \code{graph\_traversal} & Herceg, Mari{\'e}thoz, Morari~\cite{herceg2013graph} (sequences of nearby queries) \\
+weighted nearest neighbour & \code{wnn} & Jones, Grieder, Rakovi{\'c}~\cite{jones2006logarithmic} (power diagrams only; research locator, 5x to 250x slower than the hash table where it applies) \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -598,10 +600,10 @@ in the earlier migration report, \ppopt{} runs repeated on a busy machine were u
 \subsection{mpQP against PPOPT}
 
 \textbf{Same algorithm, one thread.} Figure~\ref{fig:mpqp} and Table~\ref{tab:same} give all 36 pairs. 32 \ppopt{} runs finished: the smallest speedup is
-389x (\code{sys3x2\_N5}, combinatorial graph), the median is 1,020x, and the largest is 2,703x (\code{di\_N6}, combinatorial graph); all 32 are at
-200x or more. Four runs did not finish: combinatorial on \code{di\_N8} and \code{masses2\_N6} exceeded the 300 s limit (against 0.22 s and 0.29 s in
-\rpopt{}, so more than 1,342x and 1,049x), and combinatorial on \code{di\_N10} and \code{sys3x2\_N5} ran for 4 h without finishing (against 6.01 s and 6.53 s, so more than
-2,398x and 2,206x). All finished runs return the same number of regions as \rpopt{}.
+408x (\code{masses2\_N6}, combinatorial graph), the median is 1,034x, and the largest is 2,751x (\code{di\_N6}, combinatorial graph); all 32 are at
+200x or more. Four runs did not finish: combinatorial on \code{di\_N8} and \code{masses2\_N6} exceeded the 300 s limit (against 0.23 s and 0.29 s in
+\rpopt{}, so more than 1,324x and 1,048x), and combinatorial on \code{di\_N10} and \code{sys3x2\_N5} ran for 4 h without finishing (against 6.14 s and 6.54 s, so more than
+2,344x and 2,203x). All finished runs return the same number of regions as \rpopt{}.
 
 \begin{figure}[!htbp]
 \centering
@@ -620,7 +622,7 @@ four runs where \ppopt{} did not finish, so the value is a lower bound.}
 
 \textbf{Fastest against fastest.} The fastest \ppopt{} algorithm on every problem is \code{geometric}, except \code{masses2\_N4}, where it is \code{graph}. The
 fastest \rpopt{} algorithm is \code{mplcp} on 8 of the 9 problems (\code{graph\_exp} on \code{masses2\_N4}). The speedup of fastest over fastest is
-755x to 4,167x (Table~\ref{tab:fast}).
+753x to 4,062x (Table~\ref{tab:fast}).
 
 \begin{table}[!htbp]
 \centering\small
@@ -629,8 +631,8 @@ fastest \rpopt{} algorithm is \code{mplcp} on 8 of the 9 problems (\code{graph\_
 \input{tables/tab_fast.tex}
 \end{table}
 
-\textbf{Parallel against parallel.} \ppopt{}'s \code{combinatorial\_parallel} uses a process pool; \rpopt{} uses 16 threads. On the seven runs that \ppopt{} finished the speedup is 1,286x to
-5,755x, median 2,110x; two runs reached the 300 s limit (Table~\ref{tab:par}).
+\textbf{Parallel against parallel.} \ppopt{}'s \code{combinatorial\_parallel} uses a process pool; \rpopt{} uses 16 threads. On the seven runs that \ppopt{} finished the speedup is 1,387x to
+5,889x, median 2,063x; two runs reached the 300 s limit (Table~\ref{tab:par}).
 
 \begin{table}[!htbp]
 \centering\small
@@ -892,12 +894,13 @@ falls back to serial code on small problems and, per the README, is reported in 
 
 \begin{itemize}
   \item \textbf{Boundary tie rule.} \ppopt{} returns the first region within its tolerance, or the lowest objective among those regions for overlapping solutions. Near a facet, that can be a neighbour whose law, extended
-    past its boundary, is infeasible and looks better than the optimum. \rpopt{} prefers a region that contains the parameter strictly; all locators share the rule (\code{pick\_strict\_first}).
+    past its boundary, is infeasible and looks better than the optimum. \rpopt{} prefers a region that contains the parameter strictly; every locator except the descriptor function and YANN shares the rule (\code{pick\_strict\_first}).
   \item \textbf{Certified interior checks.} The dimension sweep showed 7 to 68 mismatches on instances with 6 to 8 parameters. The cause was the Chebyshev LP that decides whether a region meets a hash cell or a tree cut with positive volume: it
     returned radius 0 for thin or badly scaled polytopes that do have an interior (radii up to 28 times too small on data of magnitude 38). Now a region is dropped only when a known-point hint, the plain LP and a recentred LP all say no (and, in the second fix, a verified multiplier certificate), and regions whose vertex lists may be incomplete are marked thin: trees never classify them
     from vertices and the hash table bounds them by coordinate LPs. After the fix the mass chain \code{mass:3:3}, which had mismatches in every tree variant, has 0 for all trees and tables, and \code{tests/pl\_agreement.rs} checks that all 12 locators agree with \code{Solution::\allowbreak{}get\_region} on
     24,000 uniform and near-facet queries at 6 and 8 parameters.
   \item \textbf{Hash table up to 16 parameters.} The hash table now supports 1 to 16 parameters; \code{try\_with\_storage\_limit} returns an error beyond that.
+  \item \textbf{One tolerance.} \code{Solution} and every locator use one point location tolerance, 1e-9 (\ppopt{} uses 1e-5). Shared facets of neighbouring regions agree to about 1e-13 (at worst 1e-10), while at 1e-5 a point just outside the partition can receive a region whose extended law violates the constraints by up to 0.16.
 \end{itemize}
 
 \subsection{Comparison with the authors' DAQP implementation}
@@ -913,13 +916,10 @@ direct QP solves confirm them, its default \code{lowdim\_tol} discards them, and
 
 \begin{enumerate}
   \item \textbf{The mpQP 1.5x target was not met.} The measured median is 1.10x, and the LP census shows that no LP-only change can reach it for the graph and combinatorial algorithms (\S\ref{sec:census}).
-    The one lever that could, for \code{geometric}, is neighbour search by inspection (an upper bound of 1.53x to 1.80x), but it was not built. An optional change to \code{mplcp}, reading the law from the tableau, is worth about 12\% but is not bit-identical to the
-    current output, so it has not been adopted.
-  \item \textbf{Tolerance mismatch.} \code{Solution::\allowbreak{}point\_location\_tolerance} is 1e-5, while the point locators use 1e-9. The two thresholds differ by four orders of magnitude, so a query within that band of a facet could in principle be classified differently by \code{Solution::\allowbreak{}get\_region} and by a locator. The agreement tests pass on the queries they sample
-    (including near-facet ones), but the two numbers should be unified.
-  \item \textbf{Near-duplicate rows in \code{process\_region\_constraints}.} A known issue in the graph and geometric algorithms: \code{process\_region\_constraints} can leave near-duplicate constraint rows. It is not resolved in this report.
-  \item \textbf{Region-count disagreement on large problems.} On problems with 3,000 or more regions in the large suite, algorithms disagree by a few regions (34 of 44 problems; \S\ref{sec:results}). The cause is not identified. A plausible candidate is thin regions
-    near the tolerance (\code{pdaqp}'s dropped regions are an example of this effect), but this has not been tested.
+    The one lever that could, for \code{geometric}, is neighbour search by inspection (an upper bound of 1.53x to 1.80x), but it was not built. Reading the \code{mplcp} law from the pivot tableau gave only about 2\% and is not bit-identical, so it is an opt-in
+    switch (\code{mplcp::set\_tableau\_law}), off by default.
+  \item \textbf{Remaining region differences on large problems.} A diff of the algorithms' partitions on six large problems found three defects, now fixed: \code{mplcp} missed real regions when facet rows were large (an absolute zero-row tolerance), \code{combinatorial\_graph} kept noise slivers and two rank-deficient regions from its incremental update, and redundancy removal could drop both rows of a near-duplicate pair. What remains are thin regions (Chebyshev radius below 1e-6) and three small regions on \code{masses3\_N5} (radius 1.5e-6 to 2.4e-6) found by \code{graph} only. The benchmark's same-active-set check should compare partitions by sampled coverage instead.
+  \item \textbf{Exact duplicate rows in mpMILP subproblems.} \code{graph} returns no region on one mpMILP root relaxation with exactly duplicated rows (ignored test \code{dump\_repro}).
   \item \textbf{Busy-machine data.} The large suite, horizon scaling, point location sweep, coverage sweep and thread scaling should be rerun on a quiet machine before their absolute values are quoted; the large suite also predates the point location fixes.
   \item \textbf{Scope.} The symbolic modeler, the code generators and the 1-D overlap reduction for mpMILP are not ported. The dynamic programming solver is limited to 128 constraints. A linear machine does not exist for partitions that are not facet-to-facet.
 \end{enumerate}

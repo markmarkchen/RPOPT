@@ -21,17 +21,17 @@ answer; median, then range):
 
 | PPOPT solver | mpQP | mpLP |
 |---|---:|---:|
-| `combinatorial` | **1,001x** (705x to 1,665x) | **922x** (780x to 1,475x) |
-| `graph` | **1,065x** (575x to 2,577x) | **1,195x** (1 run) |
-| `geometric` | **1,014x** (559x to 2,257x) | **231x** (185x to 968x) |
-| `combinatorial_graph` | **1,020x** (389x to 2,703x) | **234x** (213x to 261x) |
+| `combinatorial` | **1,003x** (705x to 1,656x) | **922x** (780x to 1,475x) |
+| `graph` | **1,090x** (600x to 2,608x) | **1,195x** (1 run) |
+| `geometric` | **997x** (554x to 2,252x) | **231x** (185x to 968x) |
+| `combinatorial_graph` | **1,034x** (408x to 2,751x) | **234x** (213x to 261x) |
 
 **Other comparisons:**
 
 | comparison | cases | median | range |
 |---|---:|---:|---:|
-| mpQP, PPOPT's fastest solver against RPOPT's fastest | 9 problems | **1,798x** | 755x to 4,167x |
-| mpQP, parallel against parallel | 7 runs | **2,110x** | 1,286x to 5,755x |
+| mpQP, PPOPT's fastest solver against RPOPT's fastest | 9 problems | **1,739x** | 753x to 4,062x |
+| mpQP, parallel against parallel | 7 runs | **2,063x** | 1,387x to 5,889x |
 | mpLP, RPOPT's fastest against PPOPT's fastest gap-free solver | 6 problems | **1,422x** | 836x to 18,028x |
 | mpLP, no gap-free PPOPT answer within 120 s | 7 problems | **> 134,000x** | > 6,400x to > 305,000x |
 | point location, per query (PPOPT numba, RPOPT hash table) | 9 problems | **676x** | 593x to 3,603x |
@@ -182,7 +182,7 @@ function. Every exact method returns the same set of critical regions as PPOPT o
 ### Which one to use
 
 - **Strictly convex mpQP:** `mplcp`. It is the fastest serial method on 8 of the 9 benchmark problems (1.2x to
-  3.7x faster than `geometric`) and the reference for degenerate mpQPs. `mplcp_parallel`
+  1.8x faster than `geometric`) and the reference for degenerate mpQPs. `mplcp_parallel`
   scales to 4.7x on 8 threads on the larger problems and falls back to serial on small ones.
 - **mpLP:** `mplp_lex`. It is the fastest on every mpLP in the benchmark and gives a unique gap-free partition
   even when the problem is primal and dual degenerate.
@@ -285,9 +285,9 @@ load.
 
 | problem | PPOPT | RPOPT | speedup |
 |---|---:|---:|---:|
-| mpQP sys3x2_N5, 973 regions, `geometric` in both | 18.6 s | 17.5 ms | 1,062x |
-| mpQP sys3x2_N5, fastest solver (PPOPT `geometric`, RPOPT `mplcp`) | 18.6 s | 9.6 ms | 1,943x |
-| mpQP di_N10, `combinatorial` in both | > 4 h, unfinished | 6.0 s | > 2,398x |
+| mpQP sys3x2_N5, 973 regions, `geometric` in both | 18.6 s | 17.6 ms | 1,061x |
+| mpQP sys3x2_N5, fastest solver (PPOPT `geometric`, RPOPT `mplcp`) | 18.6 s | 9.7 ms | 1,920x |
+| mpQP di_N10, `combinatorial` in both | > 4 h, unfinished | 6.1 s | > 2,344x |
 | mpLP masses2one_N2, 828 regions (PPOPT `geometric`, RPOPT `mplp_lex`) | 44.6 s | 24 ms | 1,869x |
 | point location, sys3x2_N5, per query | 68.5 µs | 19 ns | 3,603x |
 
@@ -295,17 +295,17 @@ load.
 
 | | completed runs | min | median | max |
 |---|---|---|---|---|
-| speedup | 32 of 32 at 200x or more | 389x (sys3x2_N5, combinatorial_graph) | 1,020x | 2,703x |
+| speedup | 32 of 32 at 200x or more | 408x (masses2_N6, combinatorial_graph) | 1,034x | 2,751x |
 
 RPOPT times are the faster median of two full runs.
 
-- **Combinatorial on di_N10 and sys3x2_N5:** PPOPT ran 4 hours without finishing, against 6.0 s and 6.5 s in
-  RPOPT: more than 2,398x and 2,206x.
-- **Combinatorial on di_N8 and masses2_N6:** PPOPT exceeded 300 s, against 0.22 s and 0.29 s: more than 1,342x
-  and 1,049x.
-- **Parallel against parallel** (PPOPT's process pool, RPOPT's threads): 1,286x to 5,755x, median 2,110x, on the 7
+- **Combinatorial on di_N10 and sys3x2_N5:** PPOPT ran 4 hours without finishing, against 6.1 s and 6.5 s in
+  RPOPT: more than 2,344x and 2,203x.
+- **Combinatorial on di_N8 and masses2_N6:** PPOPT exceeded 300 s, against 0.23 s and 0.29 s: more than 1,324x
+  and 1,048x.
+- **Parallel against parallel** (PPOPT's process pool, RPOPT's threads): 1,387x to 5,889x, median 2,063x, on the 7
   runs PPOPT finished.
-- **Fastest against fastest:** PPOPT's fastest algorithm against RPOPT's fastest is 755x to 4,167x per problem.
+- **Fastest against fastest:** PPOPT's fastest algorithm against RPOPT's fastest is 753x to 4,062x per problem.
   RPOPT's fastest is `mplcp` on 8 of the 9 problems.
 - **Time to reach full coverage of the feasible parameter set:** 275x or more on every run.
   [bench/README.md](bench/README.md) has the method and all tables (`bench/results/speedup.md`).
@@ -360,10 +360,10 @@ thin but real: direct QP solves confirm them, and its default `lowdim_tol` disca
 
 | problem | regions | time |
 |---|---|---|
-| double integrator problems | 7 to 11 | 27 to 63 µs (`mplcp`) |
+| double integrator problems | 7 to 11 | 27 to 65 µs (`mplcp`) |
 | sys3x2_N3 | 211 | 1.4 ms (`mplcp`) |
 | masses2_N4 | 307 | 6.5 ms (`graph_exp`) |
-| sys3x2_N5 | 973 | 9.6 ms (`mplcp`) |
+| sys3x2_N5 | 973 | 9.7 ms (`mplcp`) |
 | masses2_N6 | 901 | 27.5 ms (`mplcp`) |
 
 **Larger problems** (`bench/problems_large`, 131 MPC, POP and random problems with up to 428,841 regions and 10

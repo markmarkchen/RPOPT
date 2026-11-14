@@ -79,14 +79,14 @@ sets equal the Rust ones.
 ### Speedup over PPOPT (measured)
 
 Same algorithm, single thread, on an idle machine (PPOPT runs one at a time, 300 s limit; RPOPT times are the
-faster median of two full runs): 32 of 32 completed runs at 200x or more (min 389x, sys3x2_N5/combinatorial_graph;
-median 1,020x; max 2,703x). Combinatorial runs that hit the 300 s limit are lower bounds: di_N8 > 1,342x and
-masses2_N6 > 1,049x. di_N10 and sys3x2_N5 ran in PPOPT for 4 hours without finishing (`results/ppopt_long_*.json`,
-merged into `results/ppopt.json`): > 2,398x and > 2,206x. Fastest PPOPT algorithm against fastest RPOPT
-algorithm: 755x to 4,167x per problem.
+faster median of two full runs): 32 of 32 completed runs at 200x or more (min 408x, masses2_N6/combinatorial_graph;
+median 1,034x; max 2,751x). Combinatorial runs that hit the 300 s limit are lower bounds: di_N8 > 1,324x and
+masses2_N6 > 1,048x. di_N10 and sys3x2_N5 ran in PPOPT for 4 hours without finishing (`results/ppopt_long_*.json`,
+merged into `results/ppopt.json`): > 2,344x and > 2,203x. Fastest PPOPT algorithm against fastest RPOPT
+algorithm: 753x to 4,062x per problem.
 
-Parallel against parallel (PPOPT `combinatorial_parallel`, pathos processes, vs Rust, 16 threads): 1,286x to
-5,755x, median 2,110x, where PPOPT finished; di_N10 and sys3x2_N5 are lower bounds (> 525x, > 478x).
+Parallel against parallel (PPOPT `combinatorial_parallel`, pathos processes, vs Rust, 16 threads): 1,387x to
+5,889x, median 2,063x, where PPOPT finished; di_N10 and sys3x2_N5 are lower bounds (> 515x, > 471x).
 
 The mpLP comparison is in the "mpLP suite" section below.
 
