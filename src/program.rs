@@ -246,6 +246,7 @@ impl MpProgram {
     pub fn theta_bbox(&self) -> Option<&(Vec<f64>, Vec<f64>)> {
         self.theta_bbox
             .get_or_init(|| {
+                crate::census_purpose!(Bbox);
                 let n = self.num_t();
                 let bbox = |a: &Mat, b: &[f64], off: usize| -> Option<(Vec<f64>, Vec<f64>)> {
                     let mut lo = vec![0.0; n];
@@ -535,6 +536,7 @@ impl MpProgram {
 
     /// Substitutes θ and solves the resulting LP/QP.
     pub fn solve_theta(&self, theta: &[f64]) -> Option<SolverOutput> {
+        crate::census_purpose!(Init);
         if !self.valid_parameter_realization(theta) {
             return None;
         }
@@ -593,6 +595,7 @@ impl MpProgram {
 
     /// Leaves θ as a variable: min c'x over the (x, θ) polytope.
     pub fn solve_theta_variable(&self) -> Option<SolverOutput> {
+        crate::census_purpose!(Init);
         let (pa, pb) = self.xtheta_polytope();
         let mut c = self.c.clone();
         c.extend(std::iter::repeat(0.0).take(self.num_t()));
@@ -806,6 +809,7 @@ impl MpProgram {
 
     /// Is there an (x, θ) with the active set at equality? (PPOPT `check_feasibility`)
     pub fn check_feasibility(&self, active_set: &[usize], check_rank: bool) -> bool {
+        crate::census_purpose!(Feasibility);
         if check_rank {
             crate::stats::rank();
             if !is_full_rank_rows(&self.a, active_set) {
@@ -819,6 +823,7 @@ impl MpProgram {
 
     /// `check_feasibility` that also returns a feasible (x, θ) point; the LP starts from `x0`.
     pub fn check_feasibility_from(&self, active_set: &[usize], x0: Option<&[f64]>) -> Option<Vec<f64>> {
+        crate::census_purpose!(Feasibility);
         crate::stats::rank();
         if !is_full_rank_rows(&self.a, active_set) {
             return None;
@@ -940,6 +945,7 @@ impl MpProgram {
     /// θ-space form of `check_optimality`: with LICQ, x and λ are affine in θ, so the KKT system
     /// is feasible iff the unreduced critical region is nonempty. Same answer as the big LP below.
     pub fn check_optimality_fast(&self, active_set: &[usize]) -> bool {
+        crate::census_purpose!(Feasibility);
         if !self.is_qp() && active_set.len() != self.num_x() {
             return false;
         }
@@ -1067,6 +1073,7 @@ impl MpProgram {
 
     /// Chebyshev ball of the (x, θ) feasible space.
     pub fn feasible_space_chebychev_ball(&self) -> Option<crate::solver::lp::LpSolution> {
+        crate::census_purpose!(Init);
         crate::stats::lp(1);
         let (pa, pb) = self.xtheta_polytope();
         chebyshev_ball(&pa, &pb, &self.equality_indices)
@@ -1098,6 +1105,7 @@ impl MpProgram {
 
     /// Random walk in θ (PPOPT `sample_theta_space`); returns the distinct active sets found.
     pub fn sample_theta_space<R: Rng>(&self, num_samples: usize, rng: &mut R) -> Vec<Vec<usize>> {
+        crate::census_purpose!(Init);
         let Some(s) = self.feasible_space_chebychev_ball() else { return vec![] };
         let nx = self.num_x();
         let nt = self.num_t();

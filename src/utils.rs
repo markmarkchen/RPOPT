@@ -125,6 +125,7 @@ pub fn remove_near_duplicate_rows(a: &Mat, b: &[f64], tol: f64) -> (Mat, Vec<f64
 /// Keeps constraint i iff the polytope with row i (plus `equality_set`) held at equality is
 /// nonempty; returns the kept indices (PPOPT `find_redundant_constraints`).
 pub fn find_redundant_constraints(a: &Mat, b: &[f64], equality_set: &[usize]) -> Vec<usize> {
+    crate::census_purpose!(Redundancy);
     let mut is_eq = vec![false; a.rows];
     for &e in equality_set {
         is_eq[e] = true;
@@ -147,6 +148,7 @@ pub fn find_redundant_constraints(a: &Mat, b: &[f64], equality_set: &[usize]) ->
 
 /// Removes strongly redundant constraints (rows that can never be active).
 pub fn remove_strongly_redundant_constraints(a: &Mat, b: &[f64]) -> (Mat, Vec<f64>, Vec<usize>) {
+    crate::census_purpose!(Redundancy);
     let keep: Vec<usize> = (0..a.rows).filter(|&i| crate::solver::lp::lp_feasible(a, b, &[i])).collect();
     (a.select_rows(&keep), keep.iter().map(|&i| b[i]).collect(), keep)
 }
@@ -160,6 +162,7 @@ pub fn facet_ball_elimination(a: &Mat, b: &[f64]) -> (Mat, Vec<f64>) {
 }
 
 pub fn calculate_redundant_constraints(a: &Mat, b: &[f64]) -> Vec<usize> {
+    crate::census_purpose!(Redundancy);
     let (ap, bp) = scale_constraint(a, b);
     let n = ap.cols;
     let mut out = vec![];

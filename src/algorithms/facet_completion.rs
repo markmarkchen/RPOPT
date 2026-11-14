@@ -24,6 +24,7 @@ type Rows = Vec<(Vec<f64>, f64)>;
 /// rows}, with the radius measured in the hyperplane. Rows parallel to the normal are constants
 /// there: they make the set empty (violated at `c0`) or are dropped.
 fn cheb_in_plane(rows: &Rows, plane: &(Vec<f64>, f64), nhat: &[f64], c0: &[f64], min_radius: f64, strict_last: bool) -> Option<(Vec<f64>, f64)> {
+    crate::census_purpose!(Neighbour);
     let n = plane.0.len();
     let mut ab = Mat::zeros(rows.len() + 2, n + 1);
     let mut bb = Vec::with_capacity(rows.len() + 2);

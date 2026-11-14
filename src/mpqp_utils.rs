@@ -30,12 +30,14 @@ pub fn kkt_region_from_law(program: &MpProgram, active_set: &[usize], law: crate
 impl KktRegion {
     /// Is the unreduced region nonempty? Stores the point found.
     pub fn nonempty(&mut self) -> bool {
+        crate::census_purpose!(Feasibility);
         self.point = crate::solver::lp::lp_feasible_point(&self.e, &self.f, &[], None);
         self.point.is_some()
     }
 
     /// `nonempty` on the rows that can bind inside the parameter box (same answer, smaller LP).
     pub fn nonempty_in(&mut self, program: &MpProgram) -> bool {
+        crate::census_purpose!(Feasibility);
         match program.box_reduced(&self.e, &self.f) {
             Some((e, f)) => {
                 self.point = crate::solver::lp::lp_feasible_point(&e, &f, &[], None);
@@ -87,6 +89,7 @@ pub fn gen_cr_from_law_lambda_first(program: &MpProgram, active_set: &[usize], l
 /// `gen_cr_from_active_set_lambda_first`); None when one of them is a numerically zero row with a
 /// negative right hand side (the full construction returns None there before its LP).
 fn lambda_omega_feasible(program: &MpProgram, law: &crate::program::ControlLaw) -> Option<bool> {
+    crate::census_purpose!(Feasibility);
     thread_local! {
         static BUF: std::cell::RefCell<(Mat, Vec<f64>)> = std::cell::RefCell::new((Mat::zeros(0, 0), vec![]));
     }
@@ -134,6 +137,7 @@ fn lambda_omega_feasible(program: &MpProgram, law: &crate::program::ControlLaw) 
 /// raw rows (no filtering or scaling) that `MpProgram::region_rows` puts first and last. An
 /// infeasible subsystem makes `KktRegion::nonempty` false.
 pub fn lambda_rows_feasible_raw(program: &MpProgram, a_l: &Mat, b_l: &[f64]) -> bool {
+    crate::census_purpose!(Feasibility);
     thread_local! {
         static BUF: std::cell::RefCell<(Mat, Vec<f64>)> = std::cell::RefCell::new((Mat::zeros(0, 0), vec![]));
     }
@@ -169,6 +173,8 @@ pub fn gen_cr_from_kkt(program: &MpProgram, active_set: &[usize], kkt: KktRegion
     if program.num_t() == 1 {
         return gen_cr_from_active_set_1d(program, active_set, check_full_dim);
     }
+    crate::census_purpose!(Chebyshev);
+    crate::census_build!(cbuild);
     let neq = program.num_equality_constraints();
     let KktRegion { mut law, e: e_all, f: f_all, n_lambda, inactive, point } = kkt;
     program.complete_primal_law(active_set, &mut law);
@@ -245,9 +251,11 @@ pub fn gen_cr_from_kkt(program: &MpProgram, active_set: &[usize], kkt: KktRegion
     let flags: Option<Vec<bool>> = center.as_ref().map(|c| row_flags(program, &e, &f, c));
     let bbox = if flags.is_some() { None } else { center.as_ref().and_then(|c| region_bbox(&e, &f, c)) };
     let test = |p: usize| -> bool {
+        crate::census_bump!(RedRowsIn, 1);
         if let Some(fl) = &flags {
             return fl[p];
         }
+        crate::census_purpose!(Redundancy);
         let Some(c) = &center else { return crate::solver::lp::lp_feasible(&e, &f, &[p]) };
         let a = e.row(p);
         let fp = f[p];
@@ -297,6 +305,8 @@ pub fn gen_cr_from_kkt(program: &MpProgram, active_set: &[usize], kkt: KktRegion
     let f_red: Vec<f64> = non_redundant.iter().map(|&p| f[p]).collect();
     let (e_red, f_red) = remove_duplicate_rows(&e_red, &f_red);
     crate::stats::region_built(active_set);
+    crate::census_bump!(RedRowsKept, non_redundant.len());
+    crate::census_keep!(cbuild);
     Some(CriticalRegion {
         a: law.a_x,
         b: law.b_x,
@@ -337,6 +347,7 @@ fn chebyshev_ball_from(a: &Mat, b: &[f64], x0: &[f64]) -> Option<crate::solver::
 
 /// Bounding box of {Eθ <= f} (2n LPs started at the interior point `c`); None if unbounded.
 fn region_bbox(e: &Mat, f: &[f64], c: &[f64]) -> Option<(Vec<f64>, Vec<f64>)> {
+    crate::census_purpose!(Bbox);
     let n = e.cols;
     let mut lo = vec![0.0; n];
     let mut hi = vec![0.0; n];
@@ -366,6 +377,7 @@ fn get_bounds_1d(e: &Mat, f: &[f64]) -> (f64, f64) {
 }
 
 pub fn gen_cr_from_active_set_1d(program: &MpProgram, active_set: &[usize], check_full_dim: bool) -> Option<CriticalRegion> {
+    crate::census_build!(cbuild);
     let neq = program.num_equality_constraints();
     let law = program.optimal_control_law(active_set)?;
     let (e_all, f_all, n_lambda, inactive) = program.region_rows(active_set, &law);
@@ -419,6 +431,7 @@ pub fn gen_cr_from_active_set_1d(program: &MpProgram, active_set: &[usize], chec
     }
     let active: Vec<usize> = active_set[neq..].to_vec();
     crate::stats::region_built(active_set);
+    crate::census_keep!(cbuild);
     Some(CriticalRegion {
         a: law.a_x,
         b: law.b_x,
@@ -447,6 +460,7 @@ pub fn build_suboptimal_critical_region(program: &MpProgram, active_set: &[usize
 
 /// Is {x : A x <= b} full dimensional (Chebyshev radius > 1e-8)?
 pub fn is_full_dimensional(a: &Mat, b: &[f64]) -> bool {
+    crate::census_purpose!(Chebyshev);
     match chebyshev_ball(a, b, &[]) {
         Some(s) => s.x[a.cols] > 1e-8,
         None => false,
@@ -530,6 +544,7 @@ fn propagate_box(e: &Mat, f: &[f64], lo: &mut [f64], hi: &mut [f64], rounds: usi
 
 /// `region_bbox` that also returns the 2n optimal vertices.
 fn region_bbox_pts(e: &Mat, f: &[f64], c: &[f64]) -> Option<(Vec<f64>, Vec<f64>, Vec<Vec<f64>>)> {
+    crate::census_purpose!(Bbox);
     let n = e.cols;
     let mut lo = vec![0.0; n];
     let mut hi = vec![0.0; n];
@@ -746,6 +761,8 @@ pub fn gen_cr_from_law_hinted(program: &MpProgram, active_set: &[usize], law: cr
     if nt == 1 {
         return gen_cr_from_active_set_1d(program, active_set, true).map(|c| (c, vec![0.0]));
     }
+    crate::census_purpose!(Chebyshev);
+    crate::census_build!(cbuild);
     let neq = program.num_equality_constraints();
     let KktRegion { mut law, e: e_all, f: f_all, n_lambda, inactive, point: _ } = kkt_region_from_law(program, active_set, law);
     program.complete_primal_law(active_set, &mut law);
@@ -793,7 +810,9 @@ pub fn gen_cr_from_law_hinted(program: &MpProgram, active_set: &[usize], law: cr
         None => (vec![f64::NEG_INFINITY; nt], vec![f64::INFINITY; nt]),
     };
     propagate_box(&e, &f, &mut blo, &mut bhi, 6);
+    crate::census_bump!(RedRowsIn, e.rows);
     let flags: Vec<bool> = {
+        crate::census_purpose!(Redundancy);
         let mut order: Vec<usize> = (0..e.rows).collect();
         let slack: Vec<f64> = (0..e.rows).map(|i| f[i] - crate::linalg::dot(e.row(i), &center)).collect();
         order.sort_by(|&x, &y| slack[x].partial_cmp(&slack[y]).unwrap_or(std::cmp::Ordering::Equal));
@@ -837,6 +856,8 @@ pub fn gen_cr_from_law_hinted(program: &MpProgram, active_set: &[usize], law: cr
     let f_red: Vec<f64> = non_redundant.iter().map(|&p| f[p]).collect();
     let (e_red, f_red) = remove_duplicate_rows(&e_red, &f_red);
     crate::stats::region_built(active_set);
+    crate::census_bump!(RedRowsKept, non_redundant.len());
+    crate::census_keep!(cbuild);
     Some((CriticalRegion {
         a: law.a_x,
         b: law.b_x,

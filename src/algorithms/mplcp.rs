@@ -464,9 +464,12 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
                 continue;
             }
             if d1 > 0 {
-                match chebyshev_ball(&ef, &ff, &[]) {
-                    Some(s) if s.x[d1] > 1e-9 => {
-                    }
+                let ball = {
+                    crate::census_purpose!(Neighbour);
+                    chebyshev_ball(&ef, &ff, &[])
+                };
+                match ball {
+                    Some(s) if s.x[d1] > 1e-9 => {}
                     _ => continue,
                 }
             }
@@ -1085,6 +1088,7 @@ impl<'a> Enumerator<'a> {
     /// θ in Θ, nonnegative w and z, z_k = 0 for k < i with w_k basic, and w_k = 0 for k < i with
     /// z_k basic? (The undecided pairs are only required to be nonnegative.) Returns a point (z, θ).
     fn feasible(&mut self, i: usize) -> Option<(Vec<f64>, Vec<f64>)> {
+        crate::census_purpose!(Feasibility);
         let p = self.p;
         let (n, nt) = (p.n, p.nt);
         self.zsel.clear();

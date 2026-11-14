@@ -47,26 +47,30 @@ pub static LP_CALLS: crate::stats::Sharded = crate::stats::Sharded::new();
 pub fn solve_lp(c: Option<&[f64]>, a: &Mat, b: &[f64], eq: &[usize]) -> Option<LpSolution> {
     LP_CALLS.add(1);
     capture::hook(capture::Call::SolveLp, c, a, b, eq, None);
-    let core = solve(c, a, b, eq, Want::Full)?;
-    let m = a.rows;
-    let x = core.x;
-    let slack: Vec<f64> = (0..m).map(|i| b[i] - dot(a.row(i), &x)).collect();
-    let obj = c.map(|c| dot(c, &x)).unwrap_or(0.0);
-    let dual = core.dual;
-    let active_set = (0..m).filter(|&i| slack[i].abs() <= 1e-10 || dual[i] != 0.0).collect();
-    Some(LpSolution { x, obj, dual, slack, active_set })
+    crate::census_call!(Lp, {
+        let core = solve(c, a, b, eq, Want::Full)?;
+        let m = a.rows;
+        let x = core.x;
+        let slack: Vec<f64> = (0..m).map(|i| b[i] - dot(a.row(i), &x)).collect();
+        let obj = c.map(|c| dot(c, &x)).unwrap_or(0.0);
+        let dual = core.dual;
+        let active_set = (0..m).filter(|&i| slack[i].abs() <= 1e-10 || dual[i] != 0.0).collect();
+        Some(LpSolution { x, obj, dual, slack, active_set })
+    })
 }
 
 /// Feasibility of {A x <= b, A[eq] x = b[eq]} without building the solution.
 pub fn lp_feasible(a: &Mat, b: &[f64], eq: &[usize]) -> bool {
     LP_CALLS.add(1);
     capture::hook(capture::Call::Feasible, None, a, b, eq, None);
-    match small_feasible(a, b, eq) {
-        Verdict::Feasible(_) => return true,
-        Verdict::Infeasible => return false,
-        Verdict::Undecided => {}
-    }
-    solve(None, a, b, eq, Want::Feasible).is_some()
+    crate::census_call!(Lp, {
+        match small_feasible(a, b, eq) {
+            Verdict::Feasible(_) => return true,
+            Verdict::Infeasible => return false,
+            Verdict::Undecided => {}
+        }
+        solve(None, a, b, eq, Want::Feasible).is_some()
+    })
 }
 
 /// Revised-simplex fast path for inequality-only feasibility LPs with n <= 4 variables.
@@ -92,29 +96,31 @@ fn small_point(z: &[f64; 4], n: usize, x0: Option<&[f64]>) -> Vec<f64> {
 pub fn lp_feasible_from(a: &Mat, b: &[f64], eq: &[usize], x0: &[f64]) -> bool {
     LP_CALLS.add(1);
     capture::hook(capture::Call::FeasibleFrom, None, a, b, eq, Some(x0));
-    super::lp_core::solve_from(None, a, b, eq, Some(x0), Want::Feasible).is_some()
+    crate::census_call!(Lp, { super::lp_core::solve_from(None, a, b, eq, Some(x0), Want::Feasible).is_some() })
 }
 
 /// A feasible point (or None), starting the simplex from `x0` when given.
 pub fn lp_feasible_point(a: &Mat, b: &[f64], eq: &[usize], x0: Option<&[f64]>) -> Option<Vec<f64>> {
     LP_CALLS.add(1);
     capture::hook(capture::Call::FeasiblePoint, None, a, b, eq, x0);
-    if eq.is_empty() && a.cols <= 4 {
-        let shifted;
-        let bb: &[f64] = match x0 {
-            Some(x0) => {
-                shifted = (0..a.rows).map(|i| b[i] - crate::linalg::dot(a.row(i), x0)).collect::<Vec<f64>>();
-                &shifted
+    crate::census_call!(Lp, {
+        if eq.is_empty() && a.cols <= 4 {
+            let shifted;
+            let bb: &[f64] = match x0 {
+                Some(x0) => {
+                    shifted = (0..a.rows).map(|i| b[i] - crate::linalg::dot(a.row(i), x0)).collect::<Vec<f64>>();
+                    &shifted
+                }
+                None => b,
+            };
+            match small_feasible(a, bb, eq) {
+                Verdict::Feasible(z) => return Some(small_point(&z, a.cols, x0)),
+                Verdict::Infeasible => return None,
+                Verdict::Undecided => {}
             }
-            None => b,
-        };
-        match small_feasible(a, bb, eq) {
-            Verdict::Feasible(z) => return Some(small_point(&z, a.cols, x0)),
-            Verdict::Infeasible => return None,
-            Verdict::Undecided => {}
         }
-    }
-    super::lp_core::solve_from(None, a, b, eq, x0, Want::Point).map(|c| c.x)
+        super::lp_core::solve_from(None, a, b, eq, x0, Want::Point).map(|c| c.x)
+    })
 }
 
 /// `lp_feasible_point(a, b, eq, Some(x0))` given the shifted right hand side
@@ -122,28 +128,30 @@ pub fn lp_feasible_point(a: &Mat, b: &[f64], eq: &[usize], x0: Option<&[f64]>) -
 pub fn lp_feasible_point_shifted(a: &Mat, bs: &[f64], eq: &[usize], x0: &[f64]) -> Option<Vec<f64>> {
     LP_CALLS.add(1);
     capture::hook(capture::Call::FeasiblePointShifted, None, a, bs, eq, Some(x0));
-    if eq.is_empty() && a.cols <= 4 {
-        return match super::lp_small::verdict(a, bs) {
-            Verdict::Feasible(z) => Some(small_point(&z, a.cols, Some(x0))),
-            Verdict::Infeasible => None,
-            Verdict::Undecided => super::lp_core::solve_shifted(a, bs, eq, x0, Want::Point).map(|c| c.x),
-        };
-    }
-    super::lp_core::solve_shifted(a, bs, eq, x0, Want::Point).map(|c| c.x)
+    crate::census_call!(Lp, {
+        if eq.is_empty() && a.cols <= 4 {
+            return match super::lp_small::verdict(a, bs) {
+                Verdict::Feasible(z) => Some(small_point(&z, a.cols, Some(x0))),
+                Verdict::Infeasible => None,
+                Verdict::Undecided => super::lp_core::solve_shifted(a, bs, eq, x0, Want::Point).map(|c| c.x),
+            };
+        }
+        super::lp_core::solve_shifted(a, bs, eq, x0, Want::Point).map(|c| c.x)
+    })
 }
 
 /// `lp_point` starting the simplex from `x0`.
 pub fn lp_point_from(c: Option<&[f64]>, a: &Mat, b: &[f64], eq: &[usize], x0: &[f64]) -> Option<Vec<f64>> {
     LP_CALLS.add(1);
     capture::hook(capture::Call::PointFrom, c, a, b, eq, Some(x0));
-    super::lp_core::solve_from(c, a, b, eq, Some(x0), Want::Point).map(|c| c.x)
+    crate::census_call!(Lp, { super::lp_core::solve_from(c, a, b, eq, Some(x0), Want::Point).map(|c| c.x) })
 }
 
 /// Optimal point only (no duals, slacks or active set).
 pub fn lp_point(c: Option<&[f64]>, a: &Mat, b: &[f64], eq: &[usize]) -> Option<Vec<f64>> {
     LP_CALLS.add(1);
     capture::hook(capture::Call::Point, c, a, b, eq, None);
-    solve(c, a, b, eq, Want::Point).map(|c| c.x)
+    crate::census_call!(Lp, { solve(c, a, b, eq, Want::Point).map(|c| c.x) })
 }
 
 /// Benchmarking hooks (`examples/lp_replay.rs scale`).
