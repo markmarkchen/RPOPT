@@ -10,7 +10,7 @@ mpLP, mpQP, mpMILP and mpMIQP solvers, plus fast exact point location.
 ![license](https://img.shields.io/badge/license-MIT-blue)
 ![rust](https://img.shields.io/badge/rust-2024%20edition-orange)
 ![python](https://img.shields.io/badge/python-PPOPT--compatible%20bindings-3776AB)
-![tests](https://img.shields.io/badge/tests-118%20Rust%20%2B%2072%20Python-brightgreen)
+![tests](https://img.shields.io/badge/tests-121%20Rust%20%2B%2072%20Python-brightgreen)
 
 </div>
 
@@ -369,7 +369,7 @@ time of `graph`. Those runs come from a shared, busy machine.
 - **`examples/mplp_bench.rs`** checks every mpLP solution at 2,000 random parameters against direct LP solves (no
   gaps, feasible laws, optimal objective). Every exact RPOPT solver has 0 gaps and 0 errors on all
   `bench/problems_lp` problems it finishes.
-- **`cargo test --release`** (118 tests) covers:
+- **`cargo test --release`** (121 tests) covers:
   - parity with PPOPT's results and examples;
   - each new algorithm against `geometric` and `combinatorial`, on the benchmark and on random problems;
   - degenerate problems (gaps and overlaps on 20,000 samples), including gap-free graph solvers on degenerate
@@ -460,6 +460,11 @@ Bugs found and fixed while porting:
   the search never left lower-dimensional optimal bases. PPOPT's graph solver leaves 10% to 24% of the parameter
   set uncovered on several of the mpLP benchmarks. RPOPT generates the pivot swaps directly and finishes with a
   facet-completion pass, so the partition is gap-free.
+- **Large, badly scaled problems.** Three RPOPT defects found by diffing the algorithms' partitions on the large suite:
+  `mplcp` tested facet rows for zero with an absolute tolerance and missed regions when the rows were large (2 real
+  regions on pop_006); `combinatorial_graph` kept noise slivers and two rank-deficient regions reached through its
+  incremental update; and redundancy removal could drop both rows of a near-duplicate pair. All three are fixed. The
+  remaining differences between algorithms on these problems are thin regions (Chebyshev radius below 1e-6).
 - **Point location at boundaries.** PPOPT returns the first region within its tolerance, or the lowest objective
   among those regions for overlapping solutions. Near a facet, that can be a neighbour whose law, extended past
   its boundary, is infeasible and looks better than the optimum. RPOPT prefers a region that contains the
