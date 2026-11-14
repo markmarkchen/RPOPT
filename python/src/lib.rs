@@ -551,6 +551,32 @@ impl Solution {
         Ok(py.detach(|| s.verify_theta(&t)))
     }
 
+    /// Writes the solution and its program to `path`; `format` is "binary" (default) or "json".
+    #[pyo3(signature = (path, format="binary"))]
+    fn save(&self, py: Python<'_>, path: &str, format: &str) -> PyResult<()> {
+        let f = match format {
+            "binary" => rpopt::Format::Binary,
+            "json" => rpopt::Format::Json,
+            _ => return Err(PyValueError::new_err("format must be \"binary\" or \"json\"")),
+        };
+        let s = self.sol.clone();
+        py.detach(|| s.save(path, f)).map_err(|e| PyRuntimeError::new_err(e.to_string()))
+    }
+
+    /// Loads a solution saved by `save` (format detected automatically), including its program.
+    #[staticmethod]
+    fn load(py: Python<'_>, path: &str) -> PyResult<Solution> {
+        let sol = py.detach(|| rpopt::Solution::load(path)).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+        let inner = sol.continuous.clone().ok_or_else(|| PyRuntimeError::new_err("file has no program"))?;
+        let base = MplpProgram { inner: inner.clone() };
+        let program: Bound<'_, PyAny> = if inner.is_qp() {
+            Bound::new(py, PyClassInitializer::from(base).add_subclass(MpqpProgram))?.into_any()
+        } else {
+            Bound::new(py, base)?.into_any()
+        };
+        make_solution(py, &program, sol)
+    }
+
     fn __repr__(&self) -> String {
         format!("Solution({} critical regions)", self.sol.len())
     }
