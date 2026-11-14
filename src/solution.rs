@@ -73,8 +73,30 @@ impl Solution {
         self.get_region_index(theta).map(|i| &self.critical_regions[i])
     }
 
+    /// The first region that contains θ strictly (tolerance 0). If none does, the first region
+    /// that contains θ within the point location tolerance. Taking a region that holds θ only
+    /// within the tolerance when its neighbour holds it strictly would extrapolate that region's
+    /// law past its own boundary (an infeasible x near a facet). Interior points return at the
+    /// first strict hit, as before.
     pub fn get_region_no_overlap(&self, theta: &[f64]) -> Option<usize> {
-        self.critical_regions.iter().position(|r| r.is_inside(theta, self.point_location_tolerance))
+        let tol = self.point_location_tolerance;
+        let mut near = None;
+        for (i, r) in self.critical_regions.iter().enumerate() {
+            let mut viol = f64::NEG_INFINITY;
+            for k in 0..r.e.rows {
+                viol = viol.max(crate::linalg::dot(r.e.row(k), theta) - r.f[k]);
+                if viol >= tol {
+                    break;
+                }
+            }
+            if viol <= 0.0 {
+                return Some(i);
+            }
+            if viol < tol && near.is_none() {
+                near = Some(i);
+            }
+        }
+        near
     }
 
     /// Among the regions containing θ, the one with the lowest objective. Regions that contain θ
