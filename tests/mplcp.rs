@@ -166,10 +166,12 @@ fn enumeration_mplp_matches_geometric_and_combinatorial() {
 }
 
 #[test]
-fn unsupported_programs_warn_instead_of_panicking() {
+fn mplp_is_routed_to_mplp_lex() {
     let p = Arc::new(generate_mplp(2, 2, 4, 0));
     let s = solve_mpqp(&p, MpqpAlgorithm::Mplcp);
-    assert_eq!(s.len(), 0);
+    let lex = solve_mpqp(&p, MpqpAlgorithm::MplpLex);
+    assert!(s.len() > 0);
+    assert_eq!(region_signature(&s.critical_regions), region_signature(&lex.critical_regions));
 }
 
 /// Degenerate mpLP: min θ'x over a square with an extra plane through the vertex (1,1). Several

@@ -38,7 +38,7 @@
 
 use crate::critical_region::CriticalRegion;
 use crate::fxhash::FxHashSet as HashSet;
-use crate::linalg::{dot, norm, rank, Lu, Mat};
+use crate::linalg::{norm, rank, Lu, Mat};
 use crate::mpqp_utils::gen_cr_from_active_set_lambda_first;
 use crate::program::MpProgram;
 use crate::utils::chebyshev_ball;
@@ -49,11 +49,6 @@ use std::collections::VecDeque;
 
 const TOL: f64 = 1e-9;
 
-// TEMP PROFILE
-use std::sync::atomic::{AtomicU64, Ordering as AO};
-static T: [AtomicU64; 8] = [const { AtomicU64::new(0) }; 8];
-fn tadd(i: usize, t: std::time::Instant) { T[i].fetch_add(t.elapsed().as_nanos() as u64, AO::Relaxed); }
-fn cadd(i: usize, n: u64) { T[i].fetch_add(n, AO::Relaxed); }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Fail {
@@ -276,7 +271,6 @@ impl<'a> Lex<'a> {
                 self.fresh(&b, w)?;
                 since = 0;
             }
-            let t0 = std::time::Instant::now();
             // x = β q_B and the numeric slack columns
             for k in 0..nx {
                 let row = &w.binv[k * nx..(k + 1) * nx];
@@ -313,8 +307,6 @@ impl<'a> Lex<'a> {
             sc.bs.clear();
             sc.bs.extend(w.b.iter().enumerate().map(|(p, &c)| (c, p)));
             sc.bs.sort_unstable();
-            tadd(0, t0);
-            let t0 = std::time::Instant::now();
             // phase 1: a lex-negative slack row
             let mut worst: Option<usize> = None;
             for j in self.neq..m {
@@ -346,7 +338,6 @@ impl<'a> Lex<'a> {
                 let Some((p, _)) = pick else { return Err(Fail::Infeasible) };
                 self.pivot(w, p, j);
                 since += 1;
-                tadd(4, t0);
                 continue;
             }
             // phase 2: a lex-negative multiplier row leaves
@@ -381,7 +372,6 @@ impl<'a> Lex<'a> {
             let Some((j, _)) = best else { return Err(Fail::Unbounded) };
             self.pivot(w, p, j);
             since += 1;
-            tadd(4, t0);
         }
         Err(Fail::Stalled)
     }
@@ -507,22 +497,31 @@ pub fn solve(program: &MpProgram, seed: u64) -> Result<Vec<CriticalRegion>, Stri
     let mut seen: HashSet<Vec<usize>> = HashSet::default();
     seen.insert(basis0.clone());
     let mut regions: Vec<CriticalRegion> = vec![];
-    let mut queue: VecDeque<(CriticalRegion, Vec<usize>)> = VecDeque::new();
-    regions.push(cr0.clone());
-    queue.push_back((cr0, basis0));
+    // facets already crossed from the other side: basis -> (unit normal, offset) of its facets whose
+    // neighbour is known (each facet is shared by exactly two regions, Corollary 20)
+    let mut crossed: crate::fxhash::FxHashMap<Vec<usize>, Vec<(Vec<f64>, f64)>> = Default::default();
+    let mut queue: VecDeque<(usize, Vec<usize>)> = VecDeque::new();
+    regions.push(cr0);
+    queue.push_back((0, basis0));
     let mut parent = Work { b: vec![], binv: vec![], t: vec![] };
     let mut wk = parent.clone();
-    while let Some((cr, basis)) = queue.pop_front() {
+    while let Some((ri, basis)) = queue.pop_front() {
+        let known = crossed.remove(&basis).unwrap_or_default();
         // the basis is sorted: equality rows first
         if lex.fresh(&basis, &mut parent).is_err() {
             continue;
         }
-        let ne = cr.e.rows;
-        let facets: Vec<(Vec<f64>, f64)> = (0..ne).filter_map(|k| unit(cr.e.row(k), cr.f[k])).collect();
+        let facets: Vec<(Vec<f64>, f64)> = {
+            let cr = &regions[ri];
+            (0..cr.e.rows).filter_map(|k| unit(cr.e.row(k), cr.f[k])).collect()
+        };
         for k in 0..facets.len() {
             let (nk, fk) = (&facets[k].0, facets[k].1);
             // facet on the boundary of Θ
             if theta_rows.iter().any(|(t, ft)| t.iter().zip(nk).all(|(a, b)| (a - b).abs() < 1e-7) && (ft - fk).abs() < 1e-6 * (1.0 + fk.abs())) {
+                continue;
+            }
+            if known.iter().any(|(t, ft)| t.iter().zip(nk).all(|(a, b)| (a - b).abs() < 1e-7) && (ft - fk).abs() < 1e-6 * (1.0 + fk.abs())) {
                 continue;
             }
             // relative interior point θ0 of the facet (rows on the same plane are dropped)
@@ -536,9 +535,7 @@ pub fn solve(program: &MpProgram, seed: u64) -> Result<Vec<CriticalRegion>, Stri
                 rhs.push(*fi);
             }
             let kk = rows.iter().position(|r| r == nk).unwrap_or(0);
-            let t0 = std::time::Instant::now();
             let ball = chebyshev_ball(&Mat::from_rows(&rows), &rhs, &[kk]);
-            tadd(2, t0);
             let Some(ball) = ball else { continue };
             if ball.x[nt] <= 1e-9 {
                 continue;
@@ -550,29 +547,23 @@ pub fn solve(program: &MpProgram, seed: u64) -> Result<Vec<CriticalRegion>, Stri
             let d0 = cost_at(program, th0);
             let d1 = program.h.matvec(nk);
             let cp = artificial(&mut rng, &basis);
-            let t0 = std::time::Instant::now();
             wk.clone_from(&parent);
             let r = lex.solve(&mut wk, &mut sc, &q0, &q1, &d0, &d1, &cp);
-            tadd(1, t0);
-            cadd(6, 1);
             if r.is_err() {
                 continue;
             }
             let mut nb = wk.b.clone();
             nb.sort_unstable();
+            crossed.entry(nb.clone()).or_default().push((nk.iter().map(|v| -v).collect(), -fk));
             if !seen.insert(nb.clone()) {
                 continue;
             }
-            let t0 = std::time::Instant::now();
-            let ncr = gen_cr_from_active_set_lambda_first(program, &nb, true);
-            tadd(3, t0); cadd(7, 1);
-            if let Some(ncr) = ncr {
-                regions.push(ncr.clone());
-                queue.push_back((ncr, nb));
+            if let Some(ncr) = gen_cr_from_active_set_lambda_first(program, &nb, true) {
+                regions.push(ncr);
+                queue.push_back((regions.len() - 1, nb));
             }
         }
     }
-    if std::env::var("LEX_PROF").is_ok() { let g = |i: usize| T[i].load(AO::Relaxed); eprintln!("state {:.1}ms solve_total {:.1}ms cheb {:.1}ms gencr {:.1}ms | state_calls {} neighbours {} newbases {}", g(0) as f64/1e6, g(1) as f64/1e6, g(2) as f64/1e6, g(3) as f64/1e6, g(5), g(6), g(7)); }
     Ok(regions)
 }
 
