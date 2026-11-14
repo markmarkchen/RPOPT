@@ -1,5 +1,6 @@
 //! Port of `ppopt.mp_solvers` (mpLP/mpQP algorithms) with rayon-parallel variants.
 
+pub mod approx;
 pub mod common;
 pub mod incremental;
 pub mod mpmiqp;
