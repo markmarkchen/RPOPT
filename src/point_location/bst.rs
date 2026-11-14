@@ -25,6 +25,8 @@ pub struct BinarySearchTree {
     geom_rows: Vec<f64>, // [a | b] per row, per region
     offsets: Vec<usize>,
     pub depth: usize,
+    /// construction stopped at `max_nodes`
+    pub truncated: bool,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -40,11 +42,16 @@ pub struct BstOptions {
     /// re-check split regions on the node polytope with an LP (Tøndel refinement)
     pub exact_refinement: bool,
     pub max_depth: usize,
+    /// per-region query probability: balance probability mass instead of region counts (expected
+    /// query depth for that query distribution); None counts regions
+    pub weights: Option<Vec<f64>>,
+    /// stop splitting once the tree has this many nodes (the open work becomes big leaves, still exact)
+    pub max_nodes: usize,
 }
 
 impl Default for BstOptions {
     fn default() -> Self {
-        BstOptions { leaf_size: 1, exact_refinement: true, max_depth: 64 }
+        BstOptions { leaf_size: 1, exact_refinement: true, max_depth: 64, weights: None, max_nodes: usize::MAX }
     }
 }
 
@@ -80,6 +87,7 @@ impl BinarySearchTree {
                 };
             }
         }
+        let wts = opts.weights.as_deref();
         let mut geom_rows = vec![];
         for i in 0..r {
             let (e, f) = geom.region_rows(i);
@@ -88,28 +96,40 @@ impl BinarySearchTree {
                 geom_rows.push(f[k]);
             }
         }
-        let mut tree = BinarySearchTree { dim: n, nodes: vec![], geom_rows, offsets: geom.offsets.clone(), depth: 0 };
+        let mut tree = BinarySearchTree { dim: n, nodes: vec![], geom_rows, offsets: geom.offsets.clone(), depth: 0, truncated: false };
         // iterative build: (node index, candidate set, path halfspaces, depth)
         tree.nodes.push(BstNode::Leaf { candidates: vec![] });
         let mut work: Vec<(usize, Vec<usize>, Vec<Vec<f64>>, usize)> = vec![(0, (0..r).collect(), vec![], 0)];
         while let Some((node, set, path, depth)) = work.pop() {
             tree.depth = tree.depth.max(depth);
-            if set.len() <= opts.leaf_size || depth >= opts.max_depth {
+            if tree.nodes.len() >= opts.max_nodes {
+                tree.truncated = true;
+            }
+            if set.len() <= opts.leaf_size || depth >= opts.max_depth || tree.truncated {
                 tree.nodes[node] = BstNode::Leaf { candidates: set };
                 continue;
             }
             // choose the most balanced plane
-            let mut best: Option<(usize, usize, usize)> = None; // (plane, max, sum)
+            let mut best: Option<(usize, f64, f64)> = None; // (plane, max, sum)
             for p in 0..np {
-                let mut nb = 0;
-                let mut na = 0;
+                let (mut nb, mut na) = (0usize, 0usize);
+                let (mut wb, mut wa) = (0.0f64, 0.0f64);
                 for &i in &set {
+                    let w = wts.map(|w| w[i]).unwrap_or(1.0);
                     match side[i * np + p] {
-                        Side::Below => nb += 1,
-                        Side::Above => na += 1,
+                        Side::Below => {
+                            nb += 1;
+                            wb += w;
+                        }
+                        Side::Above => {
+                            na += 1;
+                            wa += w;
+                        }
                         Side::Both => {
                             nb += 1;
                             na += 1;
+                            wb += w;
+                            wa += w;
                         }
                     }
                 }
@@ -119,7 +139,7 @@ impl BinarySearchTree {
                 if nb == 0 || na == 0 {
                     continue;
                 }
-                let key = (nb.max(na), nb + na);
+                let key = (wb.max(wa), wb + wa);
                 if best.map(|(_, m, s)| key < (m, s)).unwrap_or(true) {
                     best = Some((p, key.0, key.1));
                 }

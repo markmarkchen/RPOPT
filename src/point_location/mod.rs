@@ -12,6 +12,7 @@ pub mod graph_traversal;
 pub mod hash_table;
 pub mod linear_machine;
 pub mod multiway;
+pub mod opt_tree;
 pub mod sequential;
 pub mod walk;
 pub mod yann;
@@ -24,6 +25,7 @@ pub use geometry::PartitionGeometry;
 pub use hash_table::HashTable;
 pub use linear_machine::LinearMachine;
 pub use multiway::MultiwayTree;
+pub use opt_tree::{Candidates, Criterion, OptTreeOptions, OptimizedTree};
 pub use sequential::{FlatSequential, SequentialSearch};
 pub use yann::Yann;
 
