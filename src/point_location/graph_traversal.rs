@@ -73,8 +73,13 @@ impl GraphTraversal {
             if v.is_nan() {
                 return Err(step);
             }
-            if v <= LOCATE_TOL {
+            if v <= 0.0 {
                 return Ok((cur, step));
+            }
+            if v <= LOCATE_TOL {
+                // strict-first rule: theta lies in this region only within the tolerance and may
+                // lie strictly in a neighbour; the exact fallback decides
+                return Err(step);
             }
             let nbs = self.g.neighbors(self.g.row0(cur) + k);
             cur = match nbs.len() {

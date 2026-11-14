@@ -62,8 +62,8 @@ impl HashTable {
     pub fn from_bytes(bytes: &[u8]) -> Result<HashTable, Error> {
         let mut rd = Reader::open(bytes, HT_MAGIC, HASH_TABLE_FORMAT_VERSION)?;
         let dim = rd.len()?;
-        if !(1..=8).contains(&dim) {
-            return Err(Error::Corrupt(format!("hash table dimension {dim} outside 1..=8")));
+        if !(1..=super::MAX_DIM).contains(&dim) {
+            return Err(Error::Corrupt(format!("hash table dimension {dim} outside 1..={}", super::MAX_DIM)));
         }
         let compact = match rd.u8()? {
             0 => false,

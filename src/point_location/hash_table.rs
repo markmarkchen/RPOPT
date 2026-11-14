@@ -12,14 +12,15 @@
 //! below the base grid) while a storage budget allows, greedily where the expected query cost is
 //! highest, so most queries end at an empty or covered leaf after a few table loads.
 //!
+//! Supports 1 to [`MAX_DIM`] parameters.
+//!
 //! Exactness: a row is dropped from a box only if every point of the (slightly enlarged) box
 //! satisfies it with margin 1e-8, a candidate is dropped only if some row is violated by every
 //! point of the enlarged box by more than the tolerance. Neither can change the answer.
 
-use super::geometry::PartitionGeometry;
+use super::geometry::{has_interior, PartitionGeometry};
 use super::{PointLocator, LOCATE_TOL};
 use crate::linalg::Mat;
-use crate::utils::chebyshev_ball;
 use rayon::prelude::*;
 use std::collections::BinaryHeap;
 
@@ -34,6 +35,8 @@ const MARGIN: f64 = 1e-8;
 /// leaves whose test cost (3 per candidate + rows) is at most this are not split further
 const SPLIT_COST: f64 = 8.0;
 const MAX_DEPTH: u32 = 12;
+/// largest parameter dimension the table supports (the query is monomorphised per dimension)
+pub const MAX_DIM: usize = 16;
 /// storage limit used when a caller gives none
 pub const DEFAULT_STORAGE_BYTES: usize = 4 << 20;
 
@@ -133,7 +136,7 @@ fn refine(parent: &Cands, grows: &[f64], n: usize, elo: &[f64], ehi: &[f64]) -> 
 
 /// Drop candidates whose region does not meet the box in a set of positive volume (Chebyshev
 /// radius LP over the candidate's active rows plus the box).
-fn lp_filter(cands: Cands, grows: &[f64], n: usize, blo: &[f64], bhi: &[f64]) -> Cands {
+fn lp_filter(geom: &PartitionGeometry, cands: Cands, grows: &[f64], n: usize, blo: &[f64], bhi: &[f64]) -> Cands {
     let w = n + 1;
     let mut out: Cands = vec![];
     for (j, rows) in cands {
@@ -154,7 +157,10 @@ fn lp_filter(cands: Cands, grows: &[f64], n: usize, blo: &[f64], bhi: &[f64]) ->
                 a[(m + 2 * k + 1, k)] = -1.0;
                 b[m + 2 * k + 1] = -blo[k];
             }
-            if !chebyshev_ball(&a, &b, &[]).map(|s| s.x[n] > 1e-12).unwrap_or(false) {
+            let centre: Vec<f64> = (0..n).map(|k| 0.5 * (blo[k] + bhi[k])).collect();
+            let scale = (0..n).map(|k| 0.5 * (bhi[k] - blo[k])).fold(0.0f64, f64::max);
+            let hint: Vec<&[f64]> = geom.centers.get(j as usize).map(|c| c.as_slice()).into_iter().collect();
+            if !has_interior(&a, &b, 1e-12, &hint, &centre, scale, scale) {
                 continue;
             }
         }
@@ -184,6 +190,20 @@ fn sample_points(geom: &PartitionGeometry, count: usize) -> Vec<Vec<f64>> {
 }
 
 impl HashTable {
+    /// Whether a table can be built for `n` parameters (1 to [`MAX_DIM`]).
+    pub fn supports_dim(n: usize) -> bool {
+        (1..=MAX_DIM).contains(&n)
+    }
+
+    /// [`HashTable::with_storage_limit`] that returns an error for an unsupported parameter
+    /// dimension instead of panicking.
+    pub fn try_with_storage_limit(geom: &PartitionGeometry, max_bytes: usize) -> Result<Self, String> {
+        if !Self::supports_dim(geom.dim) {
+            return Err(format!("hash table supports 1 to {MAX_DIM} parameters, got {}", geom.dim));
+        }
+        Ok(Self::with_storage_limit(geom, max_bytes))
+    }
+
     /// Uniform grid with about `target_cells` boxes (split evenly across dimensions), no splitting.
     pub fn new(geom: &PartitionGeometry, target_cells: usize) -> Self {
         let n = geom.dim;
@@ -293,7 +313,7 @@ impl HashTable {
         let n = self.dim;
         let mut cell = 0usize;
         let mut inside = true;
-        let mut fr = [0.0f64; 8];
+        let mut fr = [0.0f64; MAX_DIM];
         for k in 0..n {
             let u = (theta[k] - self.lo[k]) * self.inv_h[k];
             let m = self.cells_per_dim[k];
@@ -370,7 +390,7 @@ impl HashTable {
 
     fn build_scored(geom: &PartitionGeometry, cells_per_dim: &[usize], cap: usize, name: &'static str, hard_cap: usize, compact: bool) -> (f64, Self) {
         let n = geom.dim;
-        assert!(n >= 1 && n <= 8, "hash table supports 1 to 8 parameters");
+        assert!(Self::supports_dim(n), "hash table supports 1 to {MAX_DIM} parameters, got {n} (use HashTable::try_with_storage_limit to get an error instead)");
         let w = n + 1;
         let lo = geom.global_lo.clone();
         let hi = geom.global_hi.clone();
@@ -427,7 +447,7 @@ impl HashTable {
                 let elo: Vec<f64> = (0..n).map(|k| blo[k] - eps[k]).collect();
                 let ehi: Vec<f64> = (0..n).map(|k| bhi[k] + eps[k]).collect();
                 let parent: Cands = lists[c].iter().map(|&j| (j, (geom.offsets[j as usize] as u32..geom.offsets[j as usize + 1] as u32).collect())).collect();
-                let cands = lp_filter(refine(&parent, &grows, n, &elo, &ehi), &grows, n, &blo, &bhi);
+                let cands = lp_filter(geom, refine(&parent, &grows, n, &elo, &ehi), &grows, n, &blo, &bhi);
                 Node { cands, depth: 0, lo: blo, hi: bhi, children: vec![] }
             })
             .collect();
@@ -480,7 +500,7 @@ impl HashTable {
                             }
                             let elo: Vec<f64> = (0..n).map(|k| clo[k] - eps[k]).collect();
                             let ehi: Vec<f64> = (0..n).map(|k| chi[k] + eps[k]).collect();
-                            let cands = lp_filter(refine(&arena[idx].cands, &grows, n, &elo, &ehi), &grows, n, &clo, &chi);
+                            let cands = lp_filter(geom, refine(&arena[idx].cands, &grows, n, &elo, &ehi), &grows, n, &clo, &chi);
                             Node { cands, depth: depth + 1, lo: clo, hi: chi, children: vec![] }
                         })
                         .collect()
@@ -648,47 +668,61 @@ impl HashTable {
         let mut p = (e & PAYLOAD) as usize;
         let nc = self.stream[p] as usize;
         p += 1;
+        // strict-first rule (see `pick_strict_first`): the first candidate whose tested rows hold
+        // with tolerance 0 answers at once; a candidate that holds only within `LOCATE_TOL` is
+        // kept as the fallback. Rows left out of a record hold with margin on the whole box.
+        let mut fallback: Option<usize> = None;
         if self.compact {
             for &j in &self.stream[p..p + nc] {
                 let (s, t) = (self.offs[j as usize] as usize, self.offs[j as usize + 1] as usize);
-                let mut ok = true;
+                let mut worst = f64::NEG_INFINITY;
                 for row in self.grows[s * (N + 1)..t * (N + 1)].chunks_exact(N + 1) {
                     let mut d = 0.0;
                     for k in 0..N {
                         d += row[k] * theta[k];
                     }
-                    if d > row[N] + LOCATE_TOL {
-                        ok = false;
+                    let v = d - row[N];
+                    if v > LOCATE_TOL {
+                        worst = f64::INFINITY;
                         break;
                     }
+                    worst = worst.max(v);
                 }
-                if ok {
+                if worst <= 0.0 {
                     return Some(j as usize);
                 }
+                if worst <= LOCATE_TOL && fallback.is_none() {
+                    fallback = Some(j as usize);
+                }
             }
-            return None;
+            return fallback;
         }
         for _ in 0..nc {
             let j = self.stream[p];
             let nr = self.stream[p + 1] as usize;
-            let mut ok = true;
+            let mut worst = f64::NEG_INFINITY;
             for &id in &self.stream[p + 2..p + 2 + nr] {
                 let row = &self.grows[id as usize * (N + 1)..(id as usize + 1) * (N + 1)];
                 let mut d = 0.0;
                 for k in 0..N {
                     d += row[k] * theta[k];
                 }
-                if d > row[N] + LOCATE_TOL {
-                    ok = false;
+                let v = d - row[N];
+                if v > LOCATE_TOL {
+                    worst = f64::INFINITY;
                     break;
                 }
+                worst = worst.max(v);
             }
-            if ok {
+            if worst <= 0.0 {
                 return Some(j as usize);
+            }
+            if worst <= LOCATE_TOL && fallback.is_none() {
+                fallback = Some(j as usize);
             }
             p += 2 + nr;
         }
-        None
+        fallback
     }
 
     /// leaves that need row tests
@@ -737,7 +771,15 @@ impl PointLocator for HashTable {
             5 => self.locate_g::<5>(theta),
             6 => self.locate_g::<6>(theta),
             7 => self.locate_g::<7>(theta),
-            _ => self.locate_g::<8>(theta),
+            8 => self.locate_g::<8>(theta),
+            9 => self.locate_g::<9>(theta),
+            10 => self.locate_g::<10>(theta),
+            11 => self.locate_g::<11>(theta),
+            12 => self.locate_g::<12>(theta),
+            13 => self.locate_g::<13>(theta),
+            14 => self.locate_g::<14>(theta),
+            15 => self.locate_g::<15>(theta),
+            _ => self.locate_g::<16>(theta),
         }
     }
 
@@ -785,6 +827,7 @@ mod tests {
             domain_planes: vec![],
             global_lo: vec![0.0, 0.0],
             global_hi: vec![1.0, 1.0],
+            thin: vec![false; k * k],
         }
     }
 

@@ -28,10 +28,9 @@
 //! With `weights` (per-region query probabilities) the cost uses probability mass instead of
 //! region counts, which minimizes expected depth for that query distribution.
 
-use super::geometry::PartitionGeometry;
+use super::geometry::{has_interior, PartitionGeometry};
 use super::{PointLocator, LOCATE_TOL};
 use crate::linalg::{dot, Mat};
-use crate::utils::chebyshev_ball;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use rayon::prelude::*;
@@ -182,7 +181,8 @@ impl<'a> Builder<'a> {
         set.iter()
             .map(|&i| {
                 let vs = &self.geom.vertices[i];
-                if vs.is_empty() {
+                // a thin region's vertex list may be incomplete: never classify it from vertices
+                if vs.is_empty() || self.geom.thin[i] {
                     return (f64::NEG_INFINITY, f64::INFINITY);
                 }
                 let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
@@ -573,13 +573,21 @@ fn split_check(geom: &PartitionGeometry, i: usize, path: &[Vec<f64>], pl: &[f64]
         rows.push_row(&h[..n]);
         rhs.push(h[n]);
     }
+    // known points of the region (a hint that the cut piece has an interior) and the scale of the
+    // shifted second LP; a missed region is a wrong answer, so "no" needs more than one LP
+    let centroid: Vec<f64> = {
+        let vs = &geom.vertices[i];
+        (0..n).map(|k| if vs.is_empty() { geom.centers[i][k] } else { vs.iter().map(|v| v[k]).sum::<f64>() / vs.len() as f64 }).collect()
+    };
+    let hints = [geom.centers[i].as_slice(), centroid.as_slice()];
+    let scale = (0..n).map(|k| 0.5 * (geom.bbox_hi[i][k] - geom.bbox_lo[i][k])).fold(0.0f64, f64::max);
     let check = |sign: f64| -> bool {
         let mut r2 = rows.clone();
         let mut b2 = rhs.clone();
         let row: Vec<f64> = pl[..n].iter().map(|v| sign * v).collect();
         r2.push_row(&row);
         b2.push(sign * pl[n]);
-        matches!(chebyshev_ball(&r2, &b2, &[]), Some(s) if s.x[n] > 1e-11)
+        has_interior(&r2, &b2, 1e-11, &hints, &geom.centers[i], scale, geom.extent())
     };
     (check(1.0), check(-1.0))
 }
@@ -713,7 +721,7 @@ impl OptimizedTree {
         let (off, d) = self.descend(theta);
         let cnt = self.leaves[off] as usize;
         let mut tested = 0;
-        let r = super::pick_strict_first(self.leaves[off + 1..off + 1 + cnt].iter().map(|&j| j as usize), |j| {
+        let r = super::pick_strict_first_rescan(self.leaves[off + 1..off + 1 + cnt].iter().map(|&j| j as usize), self.offsets.len() - 1, |j| {
             tested += 1;
             self.region_violation(j, theta)
         });
@@ -730,7 +738,7 @@ impl PointLocator for OptimizedTree {
     fn locate(&self, theta: &[f64]) -> Option<usize> {
         let (off, _) = self.descend(theta);
         let cnt = self.leaves[off] as usize;
-        super::pick_strict_first(self.leaves[off + 1..off + 1 + cnt].iter().map(|&j| j as usize), |j| self.region_violation(j, theta))
+        super::pick_strict_first_rescan(self.leaves[off + 1..off + 1 + cnt].iter().map(|&j| j as usize), self.offsets.len() - 1, |j| self.region_violation(j, theta))
     }
 
     fn storage_floats(&self) -> usize {

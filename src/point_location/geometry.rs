@@ -39,9 +39,19 @@ pub struct PartitionGeometry {
     pub domain_planes: Vec<Vec<f64>>,
     pub global_lo: Vec<f64>,
     pub global_hi: Vec<f64>,
+    /// Regions whose vertex list cannot be trusted to be complete: a basic solution missed the
+    /// acceptance tolerance narrowly (`enumerate_vertices_checked`), inradius below
+    /// `THIN_REL_RADIUS` times the extent of the partition, or no vertices. The bases of such a
+    /// region are ill-conditioned, so `enumerate_vertices` drops true vertices (and relaxing its
+    /// tolerance instead adds many spurious ones). Locators must not classify a thin region as
+    /// lying on one side of a plane or outside a cell from its vertices; `bbox_lo` / `bbox_hi` of
+    /// a thin region come from LPs and are conservative.
+    pub thin: Vec<bool>,
 }
 
 const PLANE_TOL: f64 = 1e-7;
+/// A region is thin when its Chebyshev radius is below this fraction of the partition extent.
+pub const THIN_REL_RADIUS: f64 = 1e-6;
 
 impl PartitionGeometry {
     pub fn new(sol: &Solution) -> Self {
@@ -66,7 +76,7 @@ impl PartitionGeometry {
         };
 
         // centers, vertices, bounding boxes
-        let per_region: Vec<(Vec<f64>, f64, Vec<Vec<f64>>)> = (0..r)
+        let per_region: Vec<(Vec<f64>, f64, Vec<Vec<f64>>, bool)> = (0..r)
             .into_par_iter()
             .map(|i| {
                 let (a, b) = region_mat(i);
@@ -74,17 +84,20 @@ impl PartitionGeometry {
                     Some(s) => (s.x[..n].to_vec(), s.x[n]),
                     None => (vec![0.0; n], 0.0),
                 };
-                (c, rad, enumerate_vertices(&a, &b))
+                let (v, sus) = enumerate_vertices_checked(&a, &b);
+                (c, rad, v, sus)
             })
             .collect();
         let mut centers = vec![];
         let mut radii = vec![];
         let mut vertices = vec![];
+        let mut suspicious = vec![];
         let mut bbox_lo = vec![];
         let mut bbox_hi = vec![];
         let mut global_lo = vec![f64::INFINITY; n];
         let mut global_hi = vec![f64::NEG_INFINITY; n];
-        for (c, rad, v) in per_region {
+        for (c, rad, v, sus) in per_region {
+            suspicious.push(sus);
             let mut lo = vec![f64::INFINITY; n];
             let mut hi = vec![f64::NEG_INFINITY; n];
             for p in &v {
@@ -102,6 +115,40 @@ impl PartitionGeometry {
             vertices.push(v);
             bbox_lo.push(lo);
             bbox_hi.push(hi);
+        }
+
+        // thin regions: untrusted vertex lists. Their bounding boxes come from coordinate LPs
+        // (merged with the vertex box), a safe enclosure for the hash table cells.
+        let extent = (0..n).map(|k| global_hi[k] - global_lo[k]).fold(0.0f64, f64::max);
+        let thin: Vec<bool> = (0..r).map(|i| suspicious[i] || vertices[i].is_empty() || !(radii[i] >= THIN_REL_RADIUS * extent)).collect();
+        let boxes: Vec<Option<(Vec<f64>, Vec<f64>)>> = (0..r)
+            .into_par_iter()
+            .map(|i| {
+                if !thin[i] {
+                    return None;
+                }
+                let (a, b) = region_mat(i);
+                let mut lo = bbox_lo[i].clone();
+                let mut hi = bbox_hi[i].clone();
+                for k in 0..n {
+                    let mut c = vec![0.0; n];
+                    c[k] = 1.0;
+                    if let Some(s) = crate::solver::lp::solve_lp(Some(&c), &a, &b, &[]) {
+                        lo[k] = lo[k].min(s.obj);
+                    }
+                    c[k] = -1.0;
+                    if let Some(s) = crate::solver::lp::solve_lp(Some(&c), &a, &b, &[]) {
+                        hi[k] = hi[k].max(-s.obj);
+                    }
+                }
+                Some((lo, hi))
+            })
+            .collect();
+        for (i, bx) in boxes.into_iter().enumerate() {
+            if let Some((lo, hi)) = bx {
+                bbox_lo[i] = lo;
+                bbox_hi[i] = hi;
+            }
         }
 
         // distinct hyperplanes by a sweep over the first component plus union-find
@@ -248,6 +295,7 @@ impl PartitionGeometry {
             domain_planes,
             global_lo,
             global_hi,
+            thin,
         }
     }
 
@@ -267,6 +315,11 @@ impl PartitionGeometry {
             }
         }
         true
+    }
+
+    /// Largest side of the bounding box of the partition.
+    pub fn extent(&self) -> f64 {
+        (0..self.dim).map(|k| self.global_hi[k] - self.global_lo[k]).fold(0.0f64, f64::max)
     }
 
     pub fn in_domain(&self, theta: &[f64], tol: f64) -> bool {
@@ -308,11 +361,20 @@ impl PartitionGeometry {
 
 /// Vertices of a bounded polytope {x : A x <= b} by enumerating n-subsets of rows.
 pub fn enumerate_vertices(a: &Mat, b: &[f64]) -> Vec<Vec<f64>> {
+    enumerate_vertices_checked(a, b).0
+}
+
+/// [`enumerate_vertices`] plus a flag that is true when the list may be incomplete: some basic
+/// solution violated a row by more than the acceptance tolerance (1e-9 of the row scale) but by at
+/// most 1e-7 of it, which is how ill-conditioned bases of a thin region show up (the true vertex
+/// is computed with an error larger than the tolerance and gets rejected).
+pub fn enumerate_vertices_checked(a: &Mat, b: &[f64]) -> (Vec<Vec<f64>>, bool) {
     let n = a.cols;
     let m = a.rows;
     let mut out: Vec<Vec<f64>> = vec![];
+    let mut suspicious = false;
     if m < n || n == 0 {
-        return out;
+        return (out, false);
     }
     if n == 1 {
         let mut lo = f64::NEG_INFINITY;
@@ -331,7 +393,7 @@ pub fn enumerate_vertices(a: &Mat, b: &[f64]) -> Vec<Vec<f64>> {
         if hi.is_finite() && (hi - lo).abs() > 1e-12 {
             out.push(vec![hi]);
         }
-        return out;
+        return (out, false);
     }
     let mut idx: Vec<usize> = (0..n).collect();
     let scale = b.iter().fold(1.0f64, |s, v| s.max(v.abs()));
@@ -340,9 +402,14 @@ pub fn enumerate_vertices(a: &Mat, b: &[f64]) -> Vec<Vec<f64>> {
         if let Some(lu) = Lu::new(&sub) {
             let rhs: Vec<f64> = idx.iter().map(|&i| b[i]).collect();
             let x = lu.solve(&rhs);
-            if x.iter().all(|v| v.is_finite()) && (0..m).all(|i| dot(a.row(i), &x) - b[i] <= 1e-9 * scale) {
-                if !out.iter().any(|p| p.iter().zip(&x).all(|(u, v)| (u - v).abs() <= 1e-9 * (1.0 + u.abs()))) {
-                    out.push(x);
+            if x.iter().all(|v| v.is_finite()) {
+                let viol = (0..m).map(|i| dot(a.row(i), &x) - b[i]).fold(f64::NEG_INFINITY, f64::max);
+                if viol <= 1e-9 * scale {
+                    if !out.iter().any(|p| p.iter().zip(&x).all(|(u, v)| (u - v).abs() <= 1e-9 * (1.0 + u.abs()))) {
+                        out.push(x);
+                    }
+                } else if viol <= 1e-7 * scale {
+                    suspicious = true;
                 }
             }
         }
@@ -350,7 +417,7 @@ pub fn enumerate_vertices(a: &Mat, b: &[f64]) -> Vec<Vec<f64>> {
         let mut k = n;
         loop {
             if k == 0 {
-                return out;
+                return (out, suspicious);
             }
             k -= 1;
             if idx[k] < m - n + k {
@@ -361,5 +428,77 @@ pub fn enumerate_vertices(a: &Mat, b: &[f64]) -> Vec<Vec<f64>> {
                 break;
             }
         }
+    }
+}
+
+/// Does {x : A x <= b} contain a ball of radius above `thr`? Used to decide that a region misses a
+/// cell or a cut with positive volume, so a wrong "no" drops a region a query can fall into.
+///
+/// The answer is conservative: `false` is returned only with a verified certificate. The plain
+/// Chebyshev LP is not reliable enough on its own: for thin or badly scaled polytopes (a slab of
+/// width 2.5e-4 at coordinates of magnitude 38) it returned a radius 0 to 28 times too small
+/// although the polytope contained a known interior point. So:
+///   * a hint point (for example a region center) inside with slack above `thr` answers `true`;
+///   * the Chebyshev LP is solved on data shifted to `centre` and scaled by `scale`, and a radius
+///     above `thr` answers `true`;
+///   * otherwise the LP multipliers `y` are used as a Farkas-type certificate: for any `y >= 0`,
+///     every ball (x, r) inside satisfies `r <= (y'b + |A'y|_1 |x - centre|_inf) / (y'|a|)`. If that
+///     bound is at most `thr` the answer is `false`; if the multipliers do not prove it (or the LP
+///     fails), the answer is `true`.
+/// `xbound` bounds `|x - centre|_inf` over the polytope.
+/// Diagnostics of [`has_interior`]: calls answered `false` (certified), and calls where the LP
+/// radius was at most `thr` but the multipliers did not certify it (kept conservatively).
+pub static INTERIOR_CERTIFIED_NO: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+pub static INTERIOR_UNCERTIFIED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+pub fn has_interior(a: &Mat, b: &[f64], thr: f64, hints: &[&[f64]], centre: &[f64], scale: f64, xbound: f64) -> bool {
+    let n = a.cols;
+    let m = a.rows;
+    for h in hints {
+        if h.len() == n && (0..m).all(|i| b[i] - dot(a.row(i), h) > thr * crate::linalg::norm(a.row(i)).max(1e-300) * 1.0000001) {
+            return true;
+        }
+    }
+    let scale = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
+    let norms: Vec<f64> = (0..m).map(|i| crate::linalg::norm(a.row(i))).collect();
+    let mut ab = Mat::zeros(m + 1, n + 1);
+    let mut bb = Vec::with_capacity(m + 1);
+    for i in 0..m {
+        ab.row_mut(i)[..n].copy_from_slice(a.row(i));
+        ab[(i, n)] = norms[i];
+        bb.push((b[i] - dot(a.row(i), centre)) / scale);
+    }
+    ab[(m, n)] = -1.0;
+    bb.push(0.0);
+    let mut c = vec![0.0; n + 1];
+    c[n] = -1.0;
+    let Some(sol) = crate::solver::lp::solve_lp(Some(&c), &ab, &bb, &[]) else {
+        // empty polytope or numerical failure: only an independent infeasibility verdict prunes
+        return crate::solver::lp::lp_feasible(a, b, &[]);
+    };
+    if sol.x[n] * scale > thr {
+        return true;
+    }
+    // certificate from the multipliers of the m region rows (clamped at zero)
+    let y: Vec<f64> = sol.dual[..m].iter().map(|v| if v.is_finite() { v.max(0.0) } else { 0.0 }).collect();
+    let q: f64 = (0..m).map(|i| y[i] * norms[i]).sum();
+    if !(q > 0.0) {
+        INTERIOR_UNCERTIFIED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        return true;
+    }
+    let d: f64 = (0..m).map(|i| y[i] * bb[i]).sum();
+    let mut gsum = 0.0;
+    for k in 0..n {
+        gsum += (0..m).map(|i| y[i] * a[(i, k)]).sum::<f64>().abs();
+    }
+    let ubound = xbound / scale;
+    let bound = (d + gsum * ubound) / q;
+    // margin for the rounding of the bound itself
+    if bound * scale <= 0.5 * thr {
+        INTERIOR_CERTIFIED_NO.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        false
+    } else {
+        INTERIOR_UNCERTIFIED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        true
     }
 }

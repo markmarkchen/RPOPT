@@ -86,17 +86,27 @@ impl RowGraph {
         &self.nb[self.nb_off[g] as usize..self.nb_off[g + 1] as usize]
     }
 
-    /// The membership test shared with the other locators.
+    /// The membership test shared with the other locators (within `LOCATE_TOL`).
     #[inline]
     pub fn contains(&self, i: usize, theta: &[f64]) -> bool {
+        self.violation(i, theta) <= LOCATE_TOL
+    }
+
+    /// Largest row violation of region i at theta; infinity once a row exceeds `LOCATE_TOL`.
+    /// A value at most 0 means that theta lies in the region strictly.
+    #[inline]
+    pub fn violation(&self, i: usize, theta: &[f64]) -> f64 {
         let n = self.dim;
         let (e, f) = self.rows(i);
+        let mut worst = f64::NEG_INFINITY;
         for (k, fk) in f.iter().enumerate() {
-            if dot(&e[k * n..(k + 1) * n], theta) > fk + LOCATE_TOL {
-                return false;
+            let v = dot(&e[k * n..(k + 1) * n], theta) - fk;
+            if v > LOCATE_TOL {
+                return f64::INFINITY;
             }
+            worst = worst.max(v);
         }
-        true
+        worst
     }
 
     pub fn storage_floats(&self) -> usize {
@@ -176,7 +186,7 @@ impl SubdivisionWalk {
             return Err(0);
         }
         // the common case in a sequence: the previous region still contains the point
-        if self.g.contains(start, theta) {
+        if self.g.violation(start, theta) <= 0.0 {
             return Ok((start, 0));
         }
         if !self.seed_ok[start] {
@@ -206,7 +216,9 @@ impl SubdivisionWalk {
                 }
             }
             if bk == usize::MAX || best >= 1.0 {
-                return if self.g.contains(cur, theta) { Ok((cur, step)) } else { Err(step) };
+                // strict-first rule: a point that lies in this region only within the tolerance may
+                // lie strictly in a neighbour, which the exact fallback decides
+                return if self.g.violation(cur, theta) <= 0.0 { Ok((cur, step)) } else { Err(step) };
             }
             if best < t_prev - 1e-9 {
                 return Err(step);

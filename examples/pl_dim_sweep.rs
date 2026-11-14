@@ -195,9 +195,18 @@ fn main() {
     let t0 = Instant::now();
     let geom = PartitionGeometry::new(&sol);
     let geom_s = t0.elapsed().as_secs_f64();
-    println!("# geometry {:.1}s", geom_s);
+    println!("# geometry {:.1}s, thin regions {} of {}", geom_s, geom.thin.iter().filter(|&&t| t).count(), geom.num_regions);
     let nt = prog.num_t();
     let nreg = geom.num_regions;
+    if let Ok(list) = std::env::var("SWEEP_VERT_DIAG") {
+        // vertex completeness of the given regions at several feasibility tolerances
+        for j in list.split(',').map(|v| v.parse::<usize>().unwrap()) {
+            let (a, b) = geom.region_mat(j);
+            let counts: Vec<String> = [1e-9, 1e-8, 1e-7, 1e-6, 1e-5].iter().map(|&t| format!("{:e}:{}", t, rpopt::point_location::opt_tree::robust_vertices(&a, &b, t).len())).collect();
+            println!("region {j} rows {} radius {:e} geometry verts {} robust {}", a.rows, geom.radii[j], geom.vertices[j].len(), counts.join(" "));
+        }
+        return;
+    }
     let (lo, hi) = theta_box(&prog);
     let seq = FlatSequential::new(&sol);
     let mut rng = StdRng::seed_from_u64(11);
@@ -224,7 +233,7 @@ fn main() {
             x
         })
         .collect();
-    let ht_gen: Box<dyn PointLocator> = if nt <= 8 { Box::new(HashTable::with_storage_limit(&geom, 8 << 20)) } else { Box::new(FlatSequential::new(&sol)) };
+    let ht_gen: Box<dyn PointLocator> = if HashTable::supports_dim(nt) { Box::new(HashTable::with_storage_limit(&geom, 8 << 20)) } else { Box::new(FlatSequential::new(&sol)) };
     let walk_of = |len: usize, seed: u64| -> Vec<Vec<f64>> {
         let mut rng = StdRng::seed_from_u64(seed);
         let mut x = geom.centers[rng.gen_range(0..nreg)].clone();
@@ -344,8 +353,8 @@ fn main() {
             (d, c)
         })) });
     }
-    // the hash table supports 1 to 8 parameters
-    let hash_limits: Vec<(&str, usize)> = if nt <= 8 { vec![("hash 1MB", 1usize << 20), ("hash 8MB", 8 << 20), ("hash 64MB", 64 << 20)] } else { vec![] };
+    // the hash table supports 1 to MAX_DIM parameters
+    let hash_limits: Vec<(&str, usize)> = if HashTable::supports_dim(nt) { vec![("hash 1MB", 1usize << 20), ("hash 8MB", 8 << 20), ("hash 64MB", 64 << 20)] } else { vec![] };
     for (nm, lim) in hash_limits {
         let t = Instant::now();
         let ht = Arc::new(HashTable::with_storage_limit(&geom, lim));
@@ -355,10 +364,12 @@ fn main() {
         ms.push(M { name: nm.into(), loc: Box::new(ArcLoc(ht)), build_s: b, bytes, depth_max: dm, depth_of: None });
     }
 
+    eprintln!("# has_interior: certified no {} uncertified {}", rpopt::point_location::geometry::INTERIOR_CERTIFIED_NO.load(std::sync::atomic::Ordering::Relaxed), rpopt::point_location::geometry::INTERIOR_UNCERTIFIED.load(std::sync::atomic::Ordering::Relaxed));
     // ---- mismatches, depth statistics
     println!("spec\ttheta\tregions\tmethod\tbuild_s\tbytes\tns_uniform\tns_inside\tns_walk\tdepth_max\tdepth_avg_walk\tcand_avg_walk\tmismatch");
     let mut times: Vec<Vec<Vec<f64>>> = vec![vec![vec![]; modes.len()]; ms.len()];
     let mut mism = vec![0usize; ms.len()];
+    let dump = std::env::var("SWEEP_DUMP").is_ok();
     for (mi, m) in ms.iter().enumerate() {
         for (k, (_, qs)) in modes.iter().enumerate() {
             for (q, r) in qs.iter().zip(&refs[k]) {
@@ -369,6 +380,21 @@ fn main() {
                     _ => true,
                 };
                 mism[mi] += bad as usize;
+                if bad && dump {
+                    let viol = |j: usize| seq.region_violation(j, q);
+                    let strict: Vec<usize> = (0..nreg).filter(|&j| geom_viol(&geom, j, q) <= 0.0).collect();
+                    let near: Vec<usize> = (0..nreg).filter(|&j| geom_viol(&geom, j, q) <= LOCATE_TOL).collect();
+                    let gv = got.map(|j| geom_viol(&geom, j, q));
+                    let _ = viol;
+                    if let Some(jr) = r {
+                        let (a, b) = geom.region_mat(*jr);
+                        let rv = rpopt::point_location::opt_tree::robust_vertices(&a, &b, 1e-7);
+                        let (mut mx, mut mn) = (f64::NEG_INFINITY, f64::INFINITY);
+                        let _ = (&mut mx, &mut mn);
+                        println!("  region {} rows {} radius {:e} verts {} robust_verts {}", jr, a.rows, geom.radii[*jr], geom.vertices[*jr].len(), rv.len());
+                    }
+                    println!("MISMATCH\t{}\t{}\tgot={:?} got_viol={:?} ref={:?} strict={:?} near={:?}\ttheta={:?}", spec, m.name, got, gv, r, strict, near, q);
+                }
             }
         }
     }
@@ -424,4 +450,11 @@ impl<T: PointLocator> PointLocator for ArcLoc<T> {
     fn storage_floats(&self) -> usize {
         self.0.storage_floats()
     }
+}
+
+/// Largest row violation of region j at q (normalized rows, unscaled; matches the locators' scale only up to normalization).
+fn geom_viol(geom: &PartitionGeometry, j: usize, q: &[f64]) -> f64 {
+    let (e, f) = geom.region_rows(j);
+    let n = geom.dim;
+    (0..f.len()).map(|k| rpopt::linalg::dot(&e[k * n..(k + 1) * n], q) - f[k]).fold(f64::NEG_INFINITY, f64::max)
 }
