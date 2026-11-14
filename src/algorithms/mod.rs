@@ -140,6 +140,7 @@ pub fn solve_mpqp_with(program: &Arc<MpProgram>, algorithm: MpqpAlgorithm, opts:
         }
         ParametricDaqp => pdaqp::pdaqp(program),
     };
+    let regions = if program.is_qp() { drop_weakly_active_duplicates(regions) } else { regions };
     let mut sol = Solution::new(program.clone(), regions);
     // PPOPT flags every solution as overlapping (its isinstance check also matches MPQP). We only
     // flag the cases where overlap is actually possible: mpLPs (degeneracy) and non-convex mpQPs.
@@ -148,6 +149,55 @@ pub fn solve_mpqp_with(program: &Arc<MpProgram>, algorithm: MpqpAlgorithm, opts:
         Some(q) => min_eigenvalue_sym(q) <= 0.0,
     };
     sol
+}
+
+/// Removes regions that repeat another region under a smaller active set. When a constraint i is
+/// weakly active on a whole full-dimensional region (active with λ_i ≡ 0), the active sets A and
+/// A \ {i} have the same law and the same region: row i holds with equality on an open set, so its
+/// primal-feasibility row for A \ {i} is identically 0 <= 0, and its λ_i >= 0 row for A is
+/// identically 0 >= 0 (strict complementarity failure, Ahmadi-Moshkenani et al. 2018, Def. 4).
+/// Enumerating methods report both labels (pop_031: {} and {3}, overlapping on 31% of the samples);
+/// `geometric` reports one. The larger label is kept, which is the one `geometric` returns there.
+fn drop_weakly_active_duplicates(regions: Vec<CriticalRegion>) -> Vec<CriticalRegion> {
+    use std::collections::HashMap;
+    let key = |r: &CriticalRegion| {
+        let mut s = r.active_set.clone();
+        s.sort_unstable();
+        s
+    };
+    let index: HashMap<Vec<usize>, usize> = regions.iter().enumerate().map(|(k, r)| (key(r), k)).collect();
+    let close = |x: f64, y: f64| (x - y).abs() <= 1e-8 * (1.0 + x.abs().max(y.abs()));
+    let same_law = |p: &CriticalRegion, q: &CriticalRegion| {
+        p.b.len() == q.b.len()
+            && p.a.rows == q.a.rows
+            && p.a.cols == q.a.cols
+            && p.b.iter().zip(&q.b).all(|(&x, &y)| close(x, y))
+            && (0..p.a.rows).all(|i| p.a.row(i).iter().zip(q.a.row(i)).all(|(&x, &y)| close(x, y)))
+    };
+    let mut drop = vec![false; regions.len()];
+    for r in &regions {
+        // λ rows follow the order of `active_set`; skip regions stored in another layout
+        if r.c.rows != r.active_set.len() || r.d.len() != r.active_set.len() {
+            continue;
+        }
+        for (k, &i) in r.active_set.iter().enumerate() {
+            let zero = r.d[k].abs() <= 1e-9 && r.c.row(k).iter().all(|v| v.abs() <= 1e-9);
+            if !zero {
+                continue;
+            }
+            let mut smaller = key(r);
+            smaller.retain(|&j| j != i);
+            if let Some(&s) = index.get(&smaller) {
+                if same_law(r, &regions[s]) {
+                    drop[s] = true;
+                }
+            }
+        }
+    }
+    if !drop.iter().any(|&d| d) {
+        return regions;
+    }
+    regions.into_iter().zip(drop).filter(|(_, d)| !d).map(|(r, _)| r).collect()
 }
 
 // ---------------------------------------------------------------------------- combinatorial
