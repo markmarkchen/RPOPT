@@ -60,12 +60,12 @@ fn check(name: &str, prog: Arc<MpProgram>) {
     }
     let weights: Vec<f64> = (0..geom.num_regions).map(|i| 1.0 + (i % 7) as f64).collect();
     let trees: Vec<Box<dyn PointLocator>> = vec![
-        Box::new(OptimizedTree::new(&geom)),
-        Box::new(OptimizedTree::with_options(&geom, &OptTreeOptions { weights: Some(weights.clone()), ..Default::default() })),
-        Box::new(OptimizedTree::with_options(&geom, &OptTreeOptions { candidates: Candidates::Facets, ..Default::default() })),
-        Box::new(OptimizedTree::with_options(&geom, &OptTreeOptions { candidates: Candidates::Axes, leaf_size: 3, ..Default::default() })),
-        Box::new(OptimizedTree::with_options(&geom, &OptTreeOptions { criterion: Criterion::ExpDepth, exact_refinement: false, ..Default::default() })),
-        Box::new(BinarySearchTree::with_options(&geom, &BstOptions { weights: Some(weights), ..Default::default() })),
+        Box::new(OptimizedTree::with_options(&geom, &OptTreeOptions { max_seconds: 6.0, ..Default::default() })),
+        Box::new(OptimizedTree::with_options(&geom, &OptTreeOptions { max_seconds: 6.0, weights: Some(weights.clone()), ..Default::default() })),
+        Box::new(OptimizedTree::with_options(&geom, &OptTreeOptions { max_seconds: 6.0, candidates: Candidates::Facets, ..Default::default() })),
+        Box::new(OptimizedTree::with_options(&geom, &OptTreeOptions { max_seconds: 6.0, candidates: Candidates::Axes, leaf_size: 3, ..Default::default() })),
+        Box::new(OptimizedTree::with_options(&geom, &OptTreeOptions { max_seconds: 6.0, criterion: Criterion::ExpDepth, exact_refinement: false, ..Default::default() })),
+        Box::new(BinarySearchTree::with_options(&geom, &BstOptions { weights: Some(weights), max_nodes: 200_000, ..Default::default() })),
     ];
     for t in &trees {
         let mut bad = 0;

@@ -224,7 +224,7 @@ fn main() {
             x
         })
         .collect();
-    let ht_gen = HashTable::with_storage_limit(&geom, 8 << 20);
+    let ht_gen: Box<dyn PointLocator> = if nt <= 8 { Box::new(HashTable::with_storage_limit(&geom, 8 << 20)) } else { Box::new(FlatSequential::new(&sol)) };
     let walk_of = |len: usize, seed: u64| -> Vec<Vec<f64>> {
         let mut rng = StdRng::seed_from_u64(seed);
         let mut x = geom.centers[rng.gen_range(0..nreg)].clone();
@@ -332,7 +332,7 @@ fn main() {
             break;
         }
         let t = Instant::now();
-        let o = OptTreeOptions { max_bytes: tree_bytes, max_seconds: tree_secs, ..o };
+        let o = OptTreeOptions { max_bytes: tree_bytes, max_seconds: tree_secs, exact_refinement: o.exact_refinement && std::env::var("SWEEP_NOREFINE").is_err(), ..o };
         let tr = Arc::new(OptimizedTree::with_options(&geom, &o));
         let b = tsec(t);
         eprintln!("# {nm} built {b:.1}s depth {} nodes {}", tr.depth, tr.num_nodes());
@@ -344,7 +344,9 @@ fn main() {
             (d, c)
         })) });
     }
-    for (nm, lim) in [("hash 1MB", 1usize << 20), ("hash 8MB", 8 << 20), ("hash 64MB", 64 << 20)] {
+    // the hash table supports 1 to 8 parameters
+    let hash_limits: Vec<(&str, usize)> = if nt <= 8 { vec![("hash 1MB", 1usize << 20), ("hash 8MB", 8 << 20), ("hash 64MB", 64 << 20)] } else { vec![] };
+    for (nm, lim) in hash_limits {
         let t = Instant::now();
         let ht = Arc::new(HashTable::with_storage_limit(&geom, lim));
         let b = tsec(t);
