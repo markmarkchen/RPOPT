@@ -129,11 +129,15 @@ struct Piece {
     g: Vec<f64>,
     k: f64,
     src: usize,
+    /// binary vectors already analysed on this piece (integer cuts of the decomposition algorithm)
+    tried: Vec<Vec<i8>>,
+    /// no feasible solution known yet (upper bound +infinity)
+    inf: bool,
 }
 
 impl Piece {
     fn with_poly(&self, (e, f): (Mat, Vec<f64>)) -> Piece {
-        Piece { e, f, g: self.g.clone(), k: self.k, src: self.src }
+        Piece { e, f, g: self.g.clone(), k: self.k, src: self.src, tried: self.tried.clone(), inf: self.inf }
     }
 }
 
@@ -307,7 +311,7 @@ pub fn compare_regions(program: &Arc<MpmiProgram>, enumeration: &Solution) -> Re
             return Err("region without constraints".into());
         }
         let (g, k) = region_affine(program, cr);
-        insert_piece(&mut pieces, Piece { e: cr.e.clone(), f: cr.f.clone(), g, k, src: i });
+        insert_piece(&mut pieces, Piece { e: cr.e.clone(), f: cr.f.clone(), g, k, src: i, tried: vec![], inf: false });
     }
     Ok(pieces_to_solution(program, &templates, pieces, true))
 }
@@ -330,6 +334,8 @@ pub struct BbStats {
     pub pruned_regions: usize,
     /// integral regions offered to the incumbent
     pub incumbent_updates: usize,
+    /// distinct binary fixations visited (tree nodes in the sense of the paper)
+    pub distinct_fixations: usize,
     /// regions of the final partition
     pub regions: usize,
     pub seconds: f64,
@@ -401,6 +407,14 @@ fn solve_node(p: &MpmiProgram, fixed: &[Option<f64>], te: &Mat, tf: &[f64], alg:
         rhs.push(0.0);
     }
     let f = Mat::vstack(&[&f, &Mat::zeros(2 * free_bins.len(), nt)]);
+    // the program usually already holds 0 <= y <= 1; exact duplicate rows make Graph/Geometric fail
+    let (a, rhs, f) = {
+        let comb = Mat::hstack(&[&a, &f]);
+        let (c2, r2) = crate::utils::remove_duplicate_rows(&comb, &rhs);
+        let cols: Vec<usize> = (0..a.cols).collect();
+        let fcols: Vec<usize> = (a.cols..a.cols + nt).collect();
+        (c2.select_cols(&cols), r2, c2.select_cols(&fcols))
+    };
     let c_free: Vec<f64> = free.iter().map(|&i| b.c[i]).collect();
     let c_c = b.c_c + fix_cols.iter().zip(&fix_vals).map(|(&i, v)| b.c[i] * v).sum::<f64>();
     let h_free = b.h.select_rows(&free);
@@ -442,8 +456,23 @@ fn solve_node(p: &MpmiProgram, fixed: &[Option<f64>], te: &Mat, tf: &[f64], alg:
     out
 }
 
-/// Branch and bound for mpMILP with binary variables.
+/// Options of [`solve_mpmilp_bb_with`].
+#[derive(Clone, Copy, Debug)]
+pub struct BbOptions {
+    /// true: children are solved only over the surviving part of the parent region (one mpLP per
+    /// surviving region, as in Oberdieck et al.); false: every binary fixation is solved once over
+    /// the whole parameter set and a fixation is expanded when any of its regions survives.
+    pub restrict_domain: bool,
+    /// remove redundant facets of the final regions (exact LP test); false keeps the raw cuts
+    pub reduce_final: bool,
+}
+
+/// Branch and bound for mpMILP with binary variables (restricted-domain variant).
 pub fn solve_mpmilp_bb(program: &Arc<MpmiProgram>, alg: MpqpAlgorithm, opts: &SolveOptions) -> Result<(Solution, BbStats), String> {
+    solve_mpmilp_bb_with(program, alg, opts, BbOptions { restrict_domain: true, reduce_final: true })
+}
+
+pub fn solve_mpmilp_bb_with(program: &Arc<MpmiProgram>, alg: MpqpAlgorithm, opts: &SolveOptions, bbo: BbOptions) -> Result<(Solution, BbStats), String> {
     check_affine(program)?;
     let t0 = Instant::now();
     let p = program.as_ref();
@@ -453,8 +482,13 @@ pub fn solve_mpmilp_bb(program: &Arc<MpmiProgram>, alg: MpqpAlgorithm, opts: &So
     let mut templates: Vec<CriticalRegion> = vec![];
     let mut inc: Vec<Piece> = vec![];
     let mut stack: Vec<(Vec<Option<f64>>, Mat, Vec<f64>)> = vec![(vec![None; nb], p.base.a_t.clone(), p.base.b_t.clone())];
+    let mut seen: std::collections::HashSet<Vec<i8>> = Default::default();
+    let key = |f: &[Option<f64>]| f.iter().map(|v| v.map(|x| x as i8).unwrap_or(-1)).collect::<Vec<i8>>();
+    seen.insert(key(&stack[0].0));
+    let mut distinct = std::collections::HashSet::new();
     while let Some((fixed, te, tf)) = stack.pop() {
         stats.nodes += 1;
+        distinct.insert(key(&fixed));
         let regions = solve_node(p, &fixed, &te, &tf, alg, opts);
         stats.relaxed_regions += regions.len();
         // integral regions first: they tighten the upper bound before pruning
@@ -467,8 +501,9 @@ pub fn solve_mpmilp_bb(program: &Arc<MpmiProgram>, alg: MpqpAlgorithm, opts: &So
             cr.x_indices = Some(p.cont_indices.clone());
             templates.push(cr);
             stats.incumbent_updates += 1;
-            insert_piece(&mut inc, Piece { e: r.cr.e.clone(), f: r.cr.f.clone(), g: r.g.clone(), k: r.k, src: templates.len() - 1 });
+            insert_piece(&mut inc, Piece { e: r.cr.e.clone(), f: r.cr.f.clone(), g: r.g.clone(), k: r.k, src: templates.len() - 1, tried: vec![], inf: false });
         }
+        let mut full_branch: Option<usize> = None;
         for r in regions.iter().filter(|r| r.branch.is_some()) {
             let surv = prune_against(&r.cr.e, &r.cr.f, &r.g, r.k, &inc);
             if surv.is_empty() {
@@ -476,6 +511,10 @@ pub fn solve_mpmilp_bb(program: &Arc<MpmiProgram>, alg: MpqpAlgorithm, opts: &So
                 continue;
             }
             let j = r.branch.unwrap();
+            if !bbo.restrict_domain {
+                full_branch = Some(full_branch.map_or(j, |b| b.min(j)));
+                continue;
+            }
             // a single surviving fragment is a tighter domain; several are replaced by the whole region
             let (ce, cf) = if surv.len() == 1 { surv.into_iter().next().unwrap() } else { (r.cr.e.clone(), r.cr.f.clone()) };
             for v in [1.0, 0.0] {
@@ -484,11 +523,143 @@ pub fn solve_mpmilp_bb(program: &Arc<MpmiProgram>, alg: MpqpAlgorithm, opts: &So
                 stack.push((fx, ce.clone(), cf.clone()));
             }
         }
+        if let Some(j) = full_branch {
+            for v in [1.0, 0.0] {
+                let mut fx = fixed.clone();
+                fx[j] = Some(v);
+                if seen.insert(key(&fx)) {
+                    stack.push((fx, p.base.a_t.clone(), p.base.b_t.clone()));
+                }
+            }
+        }
     }
-    let sol = pieces_to_solution(program, &templates, inc, true);
+    stats.distinct_fixations = distinct.len();
+    let sol = pieces_to_solution(program, &templates, inc, bbo.reduce_final);
     stats.regions = sol.critical_regions.len();
     stats.seconds = t0.elapsed().as_secs_f64();
     Ok((sol, stats))
+}
+
+// ------------------------------------------------------------------------------------ decomposition
+
+#[derive(Clone, Debug, Default)]
+pub struct DecompStats {
+    /// mpLPs solved (one per new integer solution on a region)
+    pub mplps: usize,
+    /// MILP master problems solved
+    pub milps: usize,
+    pub regions: usize,
+    pub seconds: f64,
+}
+
+/// MILP master problem (4) of Dua and Pistikopoulos on one piece: theta is a variable restricted to
+/// the piece, the parametric cut `c'x + d'y <= zhat(theta) - eps` removes solutions that are not
+/// better than the current upper bound (absent while the bound is infinite), and one integer cut
+/// per binary vector already analysed on the piece removes repeats.
+fn master_milp(p: &MpmiProgram, piece: &Piece) -> Option<Vec<f64>> {
+    let b = &p.base;
+    let (nx, nt) = (b.num_x(), b.num_t());
+    let (pa, pb) = b.xtheta_polytope();
+    let mut a = pa;
+    let mut rhs = pb;
+    for i in 0..piece.e.rows {
+        let mut row = vec![0.0; nx + nt];
+        row[nx..].copy_from_slice(piece.e.row(i));
+        a.push_row(&row);
+        rhs.push(piece.f[i]);
+    }
+    if !piece.inf {
+        let mut row = vec![0.0; nx + nt];
+        row[..nx].copy_from_slice(&b.c);
+        for j in 0..nt {
+            row[nx + j] = b.c_t[j] - piece.g[j];
+        }
+        a.push_row(&row);
+        rhs.push(piece.k - b.c_c - 1e-7 * piece.k.abs().max(1.0));
+    }
+    for t in &piece.tried {
+        let mut row = vec![0.0; nx + nt];
+        let mut ones = 0.0;
+        for (j, &yi) in p.binary_indices.iter().enumerate() {
+            if t[j] == 1 {
+                row[yi] = 1.0;
+                ones += 1.0;
+            } else {
+                row[yi] = -1.0;
+            }
+        }
+        a.push_row(&row);
+        rhs.push(ones - 1.0);
+    }
+    let mut c = b.c.clone();
+    c.extend_from_slice(&b.c_t);
+    let s = b.solver.solve_milp(Some(&c), &a, &rhs, &b.equality_indices, &p.binary_indices)?;
+    Some(p.binary_indices.iter().map(|&i| s.sol[i].round()).collect())
+}
+
+/// The decomposition algorithm of Dua and Pistikopoulos (2000, Sec. 2): an MILP with theta free
+/// gives a first integer vector; the mpLP for that vector gives a parametric upper bound on each
+/// of its critical regions; on every region an MILP (integer cuts plus the parametric cut) looks
+/// for a better vector, whose mpLP is compared with the current bound (Appendix A); regions where
+/// the MILP is infeasible are final. Regions where no vector is feasible are left uncovered.
+pub fn solve_mpmilp_decomposition(program: &Arc<MpmiProgram>, alg: MpqpAlgorithm, opts: &SolveOptions) -> Result<(Solution, DecompStats), String> {
+    check_affine(program)?;
+    let t0 = Instant::now();
+    let p = program.as_ref();
+    let nt = p.base.num_t();
+    let mut st = DecompStats::default();
+    let mut templates: Vec<CriticalRegion> = vec![];
+    let mut done: Vec<Piece> = vec![];
+    let mut work = vec![Piece { e: p.base.a_t.clone(), f: p.base.b_t.clone(), g: vec![0.0; nt], k: 0.0, src: usize::MAX, tried: vec![], inf: true }];
+    let nc = p.cont_indices.len();
+    while let Some(s) = work.pop() {
+        st.milps += 1;
+        let Some(y) = master_milp(p, &s) else {
+            if !s.inf {
+                done.push(s);
+            }
+            continue;
+        };
+        let mut tried = s.tried.clone();
+        tried.push(y.iter().map(|&v| v as i8).collect());
+        st.mplps += 1;
+        let fixed: Vec<Option<f64>> = y.iter().map(|&v| Some(v)).collect();
+        let mut news = vec![];
+        for r in solve_node(p, &fixed, &s.e, &s.f, alg, opts) {
+            let mut cr = r.cr.clone();
+            cr.a = cr.a.select_rows(&(0..nc).collect::<Vec<_>>());
+            cr.b.truncate(nc);
+            cr.y_fixation = Some(r.y.clone());
+            cr.y_indices = Some(p.binary_indices.clone());
+            cr.x_indices = Some(p.cont_indices.clone());
+            templates.push(cr);
+            news.push(Piece { e: r.cr.e.clone(), f: r.cr.f.clone(), g: r.g, k: r.k, src: templates.len() - 1, tried: tried.clone(), inf: false });
+        }
+        let mut local: Vec<Piece>;
+        if s.inf {
+            // parts of the region where this vector is infeasible stay at infinity (Appendix B)
+            let mut rem = vec![(s.e.clone(), s.f.clone())];
+            for n in &news {
+                rem = rem.into_iter().flat_map(|(e, f)| diff(&e, &f, &n.e, &n.f)).collect();
+            }
+            local = news;
+            for (e, f) in rem {
+                local.push(Piece { e, f, g: vec![0.0; nt], k: 0.0, src: usize::MAX, tried: tried.clone(), inf: true });
+            }
+        } else {
+            let mut base = s.clone();
+            base.tried = tried;
+            local = vec![base];
+            for n in news {
+                insert_piece(&mut local, n);
+            }
+        }
+        work.extend(local);
+    }
+    let sol = pieces_to_solution(program, &templates, done, true);
+    st.regions = sol.critical_regions.len();
+    st.seconds = t0.elapsed().as_secs_f64();
+    Ok((sol, st))
 }
 
 // ------------------------------------------------------------------------------------ general integers
@@ -628,7 +799,7 @@ pub fn solve_mpmilp_bb_general(program: &Arc<MpmiProgram>, upper: &[u32], alg: M
                     t.x_indices = Some(p.cont_indices.clone());
                     templates.push(t);
                     stats.incumbent_updates += 1;
-                    insert_piece(&mut inc, Piece { e: cr.e.clone(), f: cr.f.clone(), g, k, src: templates.len() - 1 });
+                    insert_piece(&mut inc, Piece { e: cr.e.clone(), f: cr.f.clone(), g, k, src: templates.len() - 1, tried: vec![], inf: false });
                 }
                 Some(br) => frac.push((cr, g, k, br)),
             }

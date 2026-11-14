@@ -175,6 +175,15 @@ fn run(name: &str, p: MpmiProgram, n: usize) -> Row {
     }
     let feas = check(&p, &cmp, n, 1, &format!("{name}/compare"));
     check(&p, &bb, n, 2, &format!("{name}/bb"));
+    let (dc, dst) = solve_mpmilp_decomposition(&p, alg, &opts).unwrap();
+    check(&p, &dc, n, 4, &format!("{name}/decomp"));
+    eprintln!("{name}: decomposition mpLPs {} MILPs {} regions {} t {:.2}s", dst.mplps, dst.milps, dc.len(), dst.seconds);
+    let (bb2, st2) = solve_mpmilp_bb_with(&p, bb_alg(), &opts, BbOptions { restrict_domain: false, reduce_final: true }).unwrap();
+    check(&p, &bb2, n, 3, &format!("{name}/bb_full"));
+    eprintln!(
+        "{name}: bb_restricted mpLPs {} fixations {} | bb_fulldomain mpLPs {} fixations {} regions {} t {:.2}s | enumeration mpLPs {nodes}",
+        st.nodes, st.distinct_fixations, st2.nodes, st2.distinct_fixations, bb2.len(), st2.seconds
+    );
     Row {
         name: name.into(),
         nb: p.binary_indices.len(),
@@ -209,6 +218,137 @@ fn mpmilp_suite() {
             r.name, r.nb, r.nt, r.en_t, r.en_regions, r.en_nodes, r.cmp_t, r.cmp_regions, r.bb_t, r.bb_nodes, r.bb_regions, r.feas
         );
     }
+}
+
+/// Root relaxation (all binaries in [0,1]) of a program as an mpLP.
+fn root_relaxation(p: &MpmiProgram) -> rpopt::program::MpProgram {
+    let b = &p.base;
+    let nx = b.num_x();
+    let mut a = b.a.clone();
+    let mut rhs = b.b.clone();
+    for &j in &p.binary_indices {
+        let mut up = vec![0.0; nx];
+        up[j] = 1.0;
+        a.push_row(&up);
+        rhs.push(1.0);
+        let mut lo = vec![0.0; nx];
+        lo[j] = -1.0;
+        a.push_row(&lo);
+        rhs.push(0.0);
+    }
+    let f = Mat::vstack(&[&b.f, &Mat::zeros(2 * p.binary_indices.len(), b.num_t())]);
+    rpopt::program::MpProgram::new(a, rhs, b.c.clone(), b.h.clone(), None, b.a_t.clone(), b.b_t.clone(), f, b.equality_indices.clone(), true)
+}
+
+/// Probe: which algorithms leave gaps on the root relaxation of small fixed-charge programs.
+#[test]
+#[ignore]
+fn probe_relaxation_gaps() {
+    use rpopt::algorithms::solve_mpqp;
+    for (nb, nd, t) in [(1, 1, 1), (2, 1, 1), (2, 2, 1), (3, 1, 1), (3, 2, 1), (3, 2, 2), (4, 2, 2)] {
+        for seed in 100..110u64 {
+            let p = generate_mpmilp(nb, nd, t, seed);
+            let r = Arc::new(root_relaxation(&p));
+            for (name, alg) in [("graph", MpqpAlgorithm::Graph), ("geometric", MpqpAlgorithm::Geometric), ("combinatorial", MpqpAlgorithm::Combinatorial)] {
+                let sol = solve_mpqp(&r, alg);
+                let mut rng = StdRng::seed_from_u64(5);
+                let mut gaps = 0;
+                for _ in 0..300 {
+                    let th: Vec<f64> = (0..t).map(|_| rng.gen_range(0.0..1.0)).collect();
+                    if r.solve_theta(&th).is_some() && !sol.critical_regions.iter().any(|c| (0..c.e.rows).all(|i| rpopt::linalg::dot(c.e.row(i), &th) - c.f[i] <= 1e-7)) {
+                        gaps += 1;
+                    }
+                }
+                if gaps > 0 {
+                    println!("GAP {name} nb={nb} nd={nd} t={t} seed={seed}: {gaps}/300 gaps, {} regions", sol.len());
+                }
+            }
+        }
+    }
+}
+
+/// Does `process_region_constraints` change the polytope of a region?
+#[test]
+#[ignore]
+fn probe_process_region_constraints() {
+    let mut worst: Option<(usize, Mat, Vec<f64>, Mat, Vec<f64>)> = None;
+    let mut bad = 0;
+    let mut total = 0;
+    for (nb, nd, t) in [(3, 2, 1), (3, 2, 2), (4, 2, 2), (5, 2, 2), (6, 3, 2)] {
+        for seed in 100..104u64 {
+            let p = Arc::new(generate_mpmilp(nb, nd, t, seed));
+            let (sol, _) = solve_mpmilp_bb_with(&p, MpqpAlgorithm::MplpLex, &SolveOptions::default(), BbOptions { restrict_domain: true, reduce_final: false }).unwrap();
+            let mut rng = StdRng::seed_from_u64(1);
+            for r in &sol.critical_regions {
+                total += 1;
+                let (e2, f2) = rpopt::utils::process_region_constraints(&r.e, &r.f);
+                let mut differs = false;
+                for _ in 0..4000 {
+                    let th: Vec<f64> = (0..t).map(|_| rng.gen_range(-0.5..1.5)).collect();
+                    let a = (0..r.e.rows).all(|i| rpopt::linalg::dot(r.e.row(i), &th) <= r.f[i]);
+                    let b = (0..e2.rows).all(|i| rpopt::linalg::dot(e2.row(i), &th) <= f2[i]);
+                    if a != b {
+                        differs = true;
+                        break;
+                    }
+                }
+                if differs {
+                    bad += 1;
+                    if worst.as_ref().map_or(true, |w| r.e.rows < w.0) {
+                        worst = Some((r.e.rows, r.e.clone(), r.f.clone(), e2, f2));
+                    }
+                }
+            }
+        }
+    }
+    println!("process_region_constraints changed the polytope of {bad} of {total} regions");
+    if let Some((_, e, f, e2, f2)) = worst {
+        println!("smallest: E={:?}\nf={:?}\nreduced E={:?}\nf={:?}", e.to_rows(), f, e2.to_rows(), f2);
+    }
+}
+
+/// Minimal reproducer: two rows equal up to 1 ulp are both dropped by `process_region_constraints`.
+#[test]
+#[ignore]
+fn process_region_constraints_near_duplicates() {
+    let e = rows(&[
+        &[0.1414213562373095, 0.9899494936611665],
+        &[0.8574929257125442, -0.5144957554275266],
+        &[0.14142135623730953, 0.9899494936611666],
+        &[-1.0, 0.0],
+        &[0.0, -1.0],
+    ]);
+    let f = vec![0.7071067811865475, 7.187505722312114e-17, 0.7071067811865476, 0.0, 0.0];
+    let (e2, f2) = rpopt::utils::process_region_constraints(&e, &f);
+    println!("reduced rows {:?} rhs {:?}", e2.to_rows(), f2);
+}
+
+#[test]
+#[ignore]
+fn dump_repro() {
+    use rpopt::algorithms::solve_mpqp;
+    let p = generate_mpmilp(3, 1, 1, 101);
+    let r = root_relaxation(&p);
+    println!("A={:?}\nb={:?}\nc={:?}\nF={:?}\nA_t={:?}\nb_t={:?}\neq={:?}", r.a.to_rows(), r.b, r.c, r.f.to_rows(), r.a_t.to_rows(), r.b_t, r.equality_indices);
+    let r = Arc::new(r);
+    for th in [0.1, 0.5, 0.9] {
+        println!("theta {th}: lp obj {:?}", r.solve_theta(&[th]).map(|s| s.obj));
+    }
+    for (n, alg) in [("graph", MpqpAlgorithm::Graph), ("graph_exp", MpqpAlgorithm::GraphExp), ("combinatorial", MpqpAlgorithm::Combinatorial)] {
+        println!("{n}: {} regions", solve_mpqp(&r, alg).len());
+    }
+    // the same program without the duplicated bound rows
+    let b = &p.base;
+    let nodup = Arc::new(rpopt::program::MpProgram::new(b.a.clone(), b.b.clone(), b.c.clone(), b.h.clone(), None, b.a_t.clone(), b.b_t.clone(), b.f.clone(), b.equality_indices.clone(), true));
+    println!("graph without duplicate bound rows: {} regions", solve_mpqp(&nodup, MpqpAlgorithm::Graph).len());
+    let p6 = generate_mpmilp(6, 3, 2, 104);
+    let r6 = Arc::new(root_relaxation(&p6));
+    let t = Instant::now();
+    println!("geometric nb=6 nd=3 t=2 seed=104: {} regions, {:.1}s", solve_mpqp(&r6, MpqpAlgorithm::Geometric).len(), t.elapsed().as_secs_f64());
+    let b6 = &p6.base;
+    let nodup6 = Arc::new(rpopt::program::MpProgram::new(b6.a.clone(), b6.b.clone(), b6.c.clone(), b6.h.clone(), None, b6.a_t.clone(), b6.b_t.clone(), b6.f.clone(), b6.equality_indices.clone(), true));
+    let t = Instant::now();
+    println!("geometric without duplicate rows: {} regions, {:.1}s", solve_mpqp(&nodup6, MpqpAlgorithm::Geometric).len(), t.elapsed().as_secs_f64());
 }
 
 /// 1-D case: the explicit solution agrees with a fine grid of MILP solves.
