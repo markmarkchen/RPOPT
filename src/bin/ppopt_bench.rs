@@ -219,11 +219,28 @@ fn main() {
         let df = DescriptorFunction::new(&sol, &geom, 7);
         let dinfo = json!({"compared_facets": df.compared_facets, "explicit_rows": df.explicit_rows});
         locators.push(timed(&mut || (Box::new(DescriptorFunction::new(&sol, &geom, 7)), dinfo.clone())));
-        for mult in [1usize, 4, 16, 64, 256] {
+        for mult in [1usize, 4, 16] {
             let target = (geom.num_regions * mult).max(4);
             let ht = HashTable::new(&geom, target);
             let info = json!({"cells": ht.num_cells(), "mean_candidates": ht.mean_candidates(), "max_candidates": ht.max_candidates(), "mixed_cells": ht.mixed_cells(), "rows_per_mixed": ht.mean_rows_per_mixed_cell()});
             locators.push(timed(&mut || (Box::new(HashTable::new(&geom, target)), info.clone())));
+        }
+        {
+            // storage cap: 4x the storage of the original uniform 16x-regions hash table
+            let old16: usize = match name.as_str() {
+                "di_doc_N3" => 405,
+                "di_N4" => 505,
+                "di_N6" | "di_N10" | "di_N8" => 591,
+                "masses2_N4" => 34647,
+                "masses2_N6" => 112707,
+                "sys3x2_N3" => 18938,
+                "sys3x2_N5" => 84650,
+                _ => HashTable::new(&geom, (geom.num_regions * 16).max(4)).storage_floats(),
+            };
+            let cap = 4 * old16;
+            let ht = HashTable::new_adaptive(&geom, cap);
+            let info = json!({"cap": cap, "base_cells": ht.num_cells(), "leaves": ht.leaves(), "max_depth": ht.max_depth(), "mean_candidates": ht.mean_candidates(), "max_candidates": ht.max_candidates(), "mixed_leaves": ht.mixed_cells(), "rows_per_mixed": ht.mean_rows_per_mixed_cell()});
+            locators.push(timed(&mut || (Box::new(HashTable::new_adaptive(&geom, cap)), info.clone())));
         }
         locators.push(timed(&mut || (Box::new(Yann::new(&sol)), json!({}))));
 
