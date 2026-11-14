@@ -19,7 +19,45 @@ use std::time::Instant;
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+#[repr(C)]
+struct Timespec {
+    sec: i64,
+    nsec: i64,
+}
+unsafe extern "C" {
+    fn clock_gettime(clk: i32, ts: *mut Timespec) -> i32;
+}
+
+/// CPU time of the calling thread (the machine is shared and loaded; wall time is noisy).
+fn thread_cpu() -> f64 {
+    let mut ts = Timespec { sec: 0, nsec: 0 };
+    #[cfg(target_os = "macos")]
+    let clk = 16; // CLOCK_THREAD_CPUTIME_ID
+    #[cfg(not(target_os = "macos"))]
+    let clk = 3;
+    unsafe { clock_gettime(clk, &mut ts) };
+    ts.sec as f64 + ts.nsec as f64 * 1e-9
+}
+
 fn median_time<T>(limit: f64, mut f: impl FnMut() -> T) -> (f64, T) {
+    if std::env::var("DP_CPU").is_ok() {
+        let mut times = vec![];
+        let mut total = 0.0;
+        let mut last;
+        loop {
+            let t0 = thread_cpu();
+            last = f();
+            let dt = thread_cpu() - t0;
+            times.push(dt);
+            total += dt;
+            if dt > limit || (times.len() >= 15 && total >= 0.5) || times.len() >= 200 {
+                break;
+            }
+        }
+        times.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let idx = if std::env::var("DP_MIN").is_ok() { 0 } else { times.len() / 2 };
+        return (times[idx], last);
+    }
     let mut times = vec![];
     let mut total = 0.0;
     let mut last;
@@ -44,6 +82,7 @@ fn main() {
     let mut limit = 2.0;
     let mut only_dp = false;
     let mut threads = 4usize;
+    let mut only_variant: Option<String> = None;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -56,6 +95,10 @@ fn main() {
                 i += 1;
             }
             "--dp-only" => only_dp = true,
+            "--variant" => {
+                only_variant = Some(args[i + 1].clone());
+                i += 1;
+            }
             "--threads" => {
                 threads = args[i + 1].parse().unwrap();
                 i += 1;
@@ -82,7 +125,8 @@ fn main() {
         let mpc = MpcProblem::from_json_file(&path).unwrap();
         let prog = Arc::new(MpProgram::from_json_file(&path).unwrap());
         if !only_dp {
-            for algo in [MpqpAlgorithm::Geometric, MpqpAlgorithm::Combinatorial, MpqpAlgorithm::CombinatorialGraph] {
+            let algos: &[MpqpAlgorithm] = if std::env::var("DP_GEO").is_ok() { &[MpqpAlgorithm::Geometric] } else { &[MpqpAlgorithm::Geometric, MpqpAlgorithm::Combinatorial, MpqpAlgorithm::CombinatorialGraph] };
+            for &algo in algos {
                 let (t, s) = median_time(limit, || solve_mpqp(&prog, algo));
                 println!("{:<12} {:<18} {:>10.4} {:>8}", name, algo.name(), t, s.critical_regions.len());
             }
@@ -95,6 +139,12 @@ fn main() {
             vs.push(("dp2023sym+cor3", DpOptions { terminal_invariant: true, ..DpOptions::symmetric() }));
         }
         for (label, opts) in &vs {
+            if std::env::var("DP_GEO").is_ok() {
+                break;
+            }
+            if only_variant.as_deref().is_some_and(|v| v != *label) {
+                continue;
+            }
             let (t, r) = median_time(limit, || solve_mpc_dp(&mpc, &prog, opts));
             let s = &r.stats;
             println!("{:<12} {:<18} {:>10.4} {:>8} {:>10} {:>9} {:>9}  (horizon {}, outcomes opt/infeas/other {:?}, lp s {:.3}+{:.3}, enum {:.3}, regions {:.3})", name, label, t, r.solution.critical_regions.len(), s.candidates, s.optimality_lps, s.feasibility_lps, s.horizon_reached, s.outcomes, s.seconds_opt_lp, s.seconds_feas_lp, s.seconds_enumeration, s.seconds_regions);
