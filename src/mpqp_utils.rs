@@ -438,3 +438,443 @@ pub fn is_full_dimensional(a: &Mat, b: &[f64]) -> bool {
         None => false,
     }
 }
+
+// ------------------------------------------------------------------------------------------
+// Region construction for pivoting algorithms (mplcp): same rows as `gen_cr_from_kkt`, fewer LPs.
+
+/// max of a'θ over the box [lo, hi].
+fn box_max(a: &[f64], lo: &[f64], hi: &[f64]) -> f64 {
+    let mut s = 0.0;
+    for k in 0..a.len() {
+        if a[k] > 0.0 {
+            s += a[k] * hi[k];
+        } else if a[k] < 0.0 {
+            s += a[k] * lo[k];
+        }
+    }
+    s
+}
+
+/// Tightens the box [lo, hi] with the rows of {E θ <= f} (interval constraint propagation). Every
+/// point of the polytope stays inside the box.
+fn propagate_box(e: &Mat, f: &[f64], lo: &mut [f64], hi: &mut [f64], rounds: usize) {
+    let n = e.cols;
+    for _ in 0..rounds {
+        let mut changed = false;
+        for i in 0..e.rows {
+            let a = e.row(i);
+            // minimum of a'θ over the box, and the number of infinite contributions
+            let mut s = 0.0;
+            let mut ninf = 0;
+            for k in 0..n {
+                let t = if a[k] > 0.0 {
+                    a[k] * lo[k]
+                } else if a[k] < 0.0 {
+                    a[k] * hi[k]
+                } else {
+                    continue;
+                };
+                if t.is_finite() {
+                    s += t;
+                } else {
+                    ninf += 1;
+                }
+            }
+            if ninf > 1 {
+                continue;
+            }
+            for k in 0..n {
+                if a[k] == 0.0 {
+                    continue;
+                }
+                let own = if a[k] > 0.0 { a[k] * lo[k] } else { a[k] * hi[k] };
+                let m = if own.is_finite() {
+                    if ninf > 0 {
+                        continue;
+                    }
+                    s - own
+                } else {
+                    s
+                };
+                let v = (f[i] - m) / a[k];
+                if a[k] > 0.0 {
+                    if v < hi[k] - 1e-9 {
+                        hi[k] = v;
+                        changed = true;
+                    }
+                } else if v > lo[k] + 1e-9 {
+                    lo[k] = v;
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+}
+
+/// `region_bbox` that also returns the 2n optimal vertices.
+fn region_bbox_pts(e: &Mat, f: &[f64], c: &[f64]) -> Option<(Vec<f64>, Vec<f64>, Vec<Vec<f64>>)> {
+    let n = e.cols;
+    let mut lo = vec![0.0; n];
+    let mut hi = vec![0.0; n];
+    let mut pts = Vec::with_capacity(2 * n);
+    let mut obj = vec![0.0; n];
+    for k in 0..n {
+        obj[k] = 1.0;
+        let x = crate::solver::lp::lp_point_from(Some(&obj), e, f, &[], c)?;
+        lo[k] = x[k];
+        pts.push(x);
+        obj[k] = -1.0;
+        let x = crate::solver::lp::lp_point_from(Some(&obj), e, f, &[], c)?;
+        hi[k] = x[k];
+        pts.push(x);
+        obj[k] = 0.0;
+    }
+    Some((lo, hi, pts))
+}
+
+/// For every row of {E θ <= f}: does its hyperplane touch the polytope? Computed from all vertices
+/// of {lo <= θ <= hi} ∩ {E θ <= f}, found by cutting the box with the rows one at a time (rows in
+/// `order`). A vertex carries the set of hyperplanes (one bit per distinct row or box face) it is
+/// tight on; the new vertices of a cut lie on the edges (pairs of vertices sharing at least nt - 1
+/// tight hyperplanes) that cross the cutting hyperplane. A hyperplane touches a bounded polytope
+/// exactly when it contains a vertex. In degenerate cases extra points of the polytope can appear
+/// in the list; they change neither a maximum nor a "some point lies on this hyperplane" answer.
+/// Result per row: 1 touches (a vertex within 1e-9 of it), 0 does not (all vertices at least 1e-7
+/// away), -1 undecided (in between). None when the problem does not fit (nt outside 2..=6, more
+/// than 128 hyperplanes, an infinite box, too many vertices) or a vertex violates a row.
+fn clip_flags(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &[f64]) -> Option<Vec<i8>> {
+    if lo.iter().chain(hi).any(|v| !v.is_finite()) || e.rows + 2 * e.cols > 128 {
+        return None;
+    }
+    match e.cols {
+        2 => clip_n::<2>(e, f, order, lo, hi),
+        3 => clip_n::<3>(e, f, order, lo, hi),
+        4 => clip_n::<4>(e, f, order, lo, hi),
+        5 => clip_n::<5>(e, f, order, lo, hi),
+        6 => clip_n::<6>(e, f, order, lo, hi),
+        _ => None,
+    }
+}
+
+#[inline(always)]
+fn dotn<const N: usize>(a: &[f64], x: &[f64; N]) -> f64 {
+    let a: &[f64; N] = a[..N].try_into().unwrap();
+    let mut s = 0.0;
+    for k in 0..N {
+        s += a[k] * x[k];
+    }
+    s
+}
+
+fn clip_n<const N: usize>(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &[f64]) -> Option<Vec<i8>> {
+    let m = e.rows;
+    let mut pts: Vec<[f64; N]> = Vec::with_capacity(64);
+    let mut tight: Vec<u128> = Vec::with_capacity(64);
+    for mask in 0..(1usize << N) {
+        let mut t = 0u128;
+        let mut x = [0.0; N];
+        for k in 0..N {
+            let hi_k = (mask >> k) & 1 == 1;
+            x[k] = if hi_k { hi[k] } else { lo[k] };
+            t |= 1u128 << (m + 2 * k + hi_k as usize);
+        }
+        pts.push(x);
+        tight.push(t);
+    }
+    // one bit per distinct hyperplane: rows equal to a box face or to an earlier row share its bit
+    let mut bit: Vec<usize> = (0..m).collect();
+    {
+        let hkey = |a: &[f64], fr: f64| -> [i64; 7] {
+            let mut k = [0i64; 7];
+            for (o, v) in k.iter_mut().zip(a) {
+                *o = (v * 1e8).round() as i64;
+            }
+            k[6] = (fr * 1e8).round() as i64;
+            k
+        };
+        let mut seen: crate::fxhash::FxHashMap<[i64; 7], usize> = crate::fxhash::FxHashMap::with_capacity_and_hasher(m + 2 * N, Default::default());
+        let mut unit = [0.0; N];
+        for k in 0..N {
+            unit[k] = 1.0;
+            seen.insert(hkey(&unit, hi[k]), m + 2 * k + 1);
+            unit[k] = -1.0;
+            seen.insert(hkey(&unit, -lo[k]), m + 2 * k);
+            unit[k] = 0.0;
+        }
+        for r in 0..m {
+            match seen.get(&hkey(e.row(r), f[r])) {
+                Some(&b) => bit[r] = b,
+                None => {
+                    seen.insert(hkey(e.row(r), f[r]), r);
+                }
+            }
+        }
+    }
+    let mut npts: Vec<[f64; N]> = Vec::with_capacity(64);
+    let mut ntight: Vec<u128> = Vec::with_capacity(64);
+    let mut val: Vec<f64> = Vec::with_capacity(64);
+    let mut ins: Vec<usize> = vec![];
+    let mut outs: Vec<usize> = vec![];
+    for &r in order {
+        let a = e.row(r);
+        let fr = f[r];
+        let tol = 1e-8 * (1.0 + fr.abs());
+        let nv = pts.len();
+        val.clear();
+        ins.clear();
+        outs.clear();
+        let rbit = 1u128 << bit[r];
+        for v in 0..nv {
+            let s = dotn::<N>(a, &pts[v]) - fr;
+            val.push(s);
+            if s > tol {
+                outs.push(v);
+            } else if s < -tol {
+                ins.push(v);
+            } else {
+                tight[v] |= rbit;
+            }
+        }
+        if outs.is_empty() {
+            continue;
+        }
+        npts.clear();
+        ntight.clear();
+        for v in 0..nv {
+            if val[v] <= tol {
+                npts.push(pts[v]);
+                ntight.push(tight[v]);
+            }
+        }
+        let kept = npts.len();
+        for &u in &ins {
+            for &w in &outs {
+                let common = tight[u] & tight[w];
+                if (common.count_ones() as usize) < N - 1 {
+                    continue;
+                }
+                let t = val[u] / (val[u] - val[w]);
+                let mut px = [0.0; N];
+                for k in 0..N {
+                    px[k] = pts[u][k] + t * (pts[w][k] - pts[u][k]);
+                }
+                let bits = common | rbit;
+                // skip a point already present among the vertices on the cut and the new ones
+                let mut dup = false;
+                for idx in 0..npts.len() {
+                    if idx >= kept || val_on(idx, &ntight, rbit) {
+                        let q = &npts[idx];
+                        let mut d = 0.0f64;
+                        for k in 0..N {
+                            d = d.max((q[k] - px[k]).abs());
+                        }
+                        if d <= 1e-9 {
+                            ntight[idx] |= bits;
+                            dup = true;
+                            break;
+                        }
+                    }
+                }
+                if !dup {
+                    npts.push(px);
+                    ntight.push(bits);
+                }
+            }
+        }
+        if npts.len() > 600 || npts.len() <= N {
+            return None;
+        }
+        std::mem::swap(&mut pts, &mut npts);
+        std::mem::swap(&mut tight, &mut ntight);
+    }
+    let mut out = Vec::with_capacity(m);
+    for r in 0..m {
+        let a = e.row(r);
+        let fp = f[r];
+        let sc = 1.0 + fp.abs();
+        let mut smin = f64::INFINITY;
+        for x in &pts {
+            smin = smin.min(fp - dotn::<N>(a, x));
+        }
+        if smin < -1e-7 * sc {
+            return None;
+        }
+        out.push(if smin <= 1e-9 * sc {
+            1
+        } else if smin >= 1e-7 * sc {
+            0
+        } else {
+            -1
+        });
+    }
+    Some(out)
+}
+
+/// Is vertex `idx` (of the kept ones) tight on the cutting hyperplane `rbit`?
+#[inline(always)]
+fn val_on(idx: usize, tight: &[u128], rbit: u128) -> bool {
+    tight[idx] & rbit != 0
+}
+
+/// `gen_cr_from_law_lambda_first(.., check_full_dim = true)` with the same result rows but fewer
+/// LPs (two or more parameters):
+/// * `hint`, a point believed to lie in the region (e.g. on a facet shared with a neighbour),
+///   starts the Chebyshev LP, so the two feasibility LPs are skipped (an infeasible hint only
+///   costs a longer first phase);
+/// * rows that cannot touch the region because of an interval-propagated bounding box are dropped
+///   from the LPs that follow (a redundant row never changes a feasibility answer);
+/// * a row tight at one of the bounding-box vertices is kept without its own LP.
+pub fn gen_cr_from_law_hinted(program: &MpProgram, active_set: &[usize], law: crate::program::ControlLaw, hint: Option<&[f64]>) -> Option<(CriticalRegion, Vec<f64>)> {
+    let nt = program.num_t();
+    if nt == 1 {
+        return gen_cr_from_active_set_1d(program, active_set, true).map(|c| (c, vec![0.0]));
+    }
+    let neq = program.num_equality_constraints();
+    let KktRegion { mut law, e: e_all, f: f_all, n_lambda, inactive, point: _ } = kkt_region_from_law(program, active_set, law);
+    program.complete_primal_law(active_set, &mut law);
+    let n_inactive = inactive.len();
+    let n_omega = program.a_t.rows;
+
+    let kept_rows = numerically_nonzero_rows(&e_all);
+    let mut pos = vec![usize::MAX; e_all.rows];
+    for (p, &r) in kept_rows.iter().enumerate() {
+        pos[r] = p;
+    }
+    let mut e = e_all.select_rows(&kept_rows);
+    let mut f: Vec<f64> = kept_rows.iter().map(|&r| f_all[r]).collect();
+    for i in 0..e.rows {
+        let nrm = crate::linalg::norm(e.row(i));
+        for v in e.row_mut(i) {
+            *v /= nrm;
+        }
+        f[i] /= nrm;
+    }
+    crate::stats::lp(1);
+    for r in 0..e_all.rows {
+        if pos[r] == usize::MAX && f_all[r] < -1e-8 {
+            return None;
+        }
+    }
+    let start = match hint {
+        Some(h) => h.to_vec(),
+        None => crate::solver::lp::lp_feasible_point(&e, &f, &[], None)?,
+    };
+    let mut start_r = start;
+    start_r.push(0.0);
+    let s = chebyshev_ball_from(&e, &f, &start_r)?;
+    if s.x[nt] <= 1e-8 {
+        return None;
+    }
+    let cheb_radius = Some(s.x[nt]);
+    let center: Vec<f64> = s.x[..nt].to_vec();
+
+    crate::stats::lp(kept_rows.len() as u64);
+    // rows that provably cannot touch the region (interval propagation from the parameter box)
+    let (mut blo, mut bhi) = match program.theta_bbox() {
+        Some((l, h)) => (l.clone(), h.clone()),
+        None => (vec![f64::NEG_INFINITY; nt], vec![f64::INFINITY; nt]),
+    };
+    propagate_box(&e, &f, &mut blo, &mut bhi, 6);
+    let flags: Vec<bool> = {
+        let mut order: Vec<usize> = (0..e.rows).collect();
+        let slack: Vec<f64> = (0..e.rows).map(|i| f[i] - crate::linalg::dot(e.row(i), &center)).collect();
+        order.sort_by(|&x, &y| slack[x].partial_cmp(&slack[y]).unwrap_or(std::cmp::Ordering::Equal));
+        match clip_flags(&e, &f, &order, &blo, &bhi) {
+            Some(fl) => fl.iter().enumerate().map(|(p, &v)| if v >= 0 { v == 1 } else { crate::solver::lp::lp_feasible_from(&e, &f, &[p], &center) }).collect(),
+            None => lp_flags(&e, &f, &center, &blo, &bhi),
+        }
+    };
+    let test = |p: usize| -> bool { flags[p] };
+    let mut kept_lambda = vec![];
+    let mut kept_ineq = vec![];
+    let mut kept_omega = vec![];
+    let mut non_redundant = vec![];
+    for idx in 0..n_lambda {
+        let p = pos[idx];
+        if p != usize::MAX && test(p) {
+            kept_lambda.push(idx);
+            non_redundant.push(p);
+        }
+    }
+    for idx in 0..n_inactive {
+        let p = pos[n_lambda + idx];
+        if p != usize::MAX && test(p) {
+            kept_ineq.push(idx);
+            non_redundant.push(p);
+        }
+    }
+    for idx in 0..n_omega {
+        let p = pos[n_lambda + n_inactive + idx];
+        if p != usize::MAX && test(p) {
+            kept_omega.push(idx);
+            non_redundant.push(p);
+        }
+    }
+    let active: Vec<usize> = active_set[neq..].to_vec();
+    let relevant_lambda: Vec<usize> = kept_lambda.iter().map(|&i| active[i]).collect();
+    let real_regular: Vec<usize> = kept_ineq.iter().map(|&i| inactive[i]).collect();
+    let e_red = e.select_rows(&non_redundant);
+    let f_red: Vec<f64> = non_redundant.iter().map(|&p| f[p]).collect();
+    let (e_red, f_red) = remove_duplicate_rows(&e_red, &f_red);
+    crate::stats::region_built(active_set);
+    Some((CriticalRegion {
+        a: law.a_x,
+        b: law.b_x,
+        c: law.a_l,
+        d: law.b_l,
+        e: e_red,
+        f: f_red,
+        active_set: active_set.to_vec(),
+        omega_set: kept_omega,
+        lambda_set: relevant_lambda,
+        regular_set: (kept_ineq, real_regular),
+        y_fixation: None,
+        y_indices: None,
+        x_indices: None,
+        cheb_radius,
+    }, center))
+}
+
+/// Per-row "touches the region" flags by bounding-box screening and LPs (the general path).
+fn lp_flags(e: &Mat, f: &[f64], center: &[f64], blo: &[f64], bhi: &[f64]) -> Vec<bool> {
+    let reject_by = |a: &[f64], fp: f64, lo: &[f64], hi: &[f64]| -> bool { box_max(a, lo, hi) < fp - 1e-7 * (1.0 + fp.abs()) };
+    let mut live_pos = vec![usize::MAX; e.rows];
+    let mut live: Vec<usize> = vec![];
+    for p in 0..e.rows {
+        if !reject_by(e.row(p), f[p], blo, bhi) {
+            live_pos[p] = live.len();
+            live.push(p);
+        }
+    }
+    let el = e.select_rows(&live);
+    let fl: Vec<f64> = live.iter().map(|&p| f[p]).collect();
+    let bbox = region_bbox_pts(&el, &fl, center);
+    let test = |p: usize| -> bool {
+        let lp_ = live_pos[p];
+        if lp_ == usize::MAX {
+            return false;
+        }
+        let a = el.row(lp_);
+        let fp = fl[lp_];
+        let tol = 1e-9 * (1.0 + fp.abs());
+        if let Some((lo, hi, pts)) = &bbox {
+            if reject_by(a, fp, lo, hi) {
+                return false;
+            }
+            if pts.iter().any(|v| (crate::linalg::dot(a, v) - fp).abs() <= tol) {
+                return true;
+            }
+        }
+        let sft = fp - crate::linalg::dot(a, center);
+        let q: Vec<f64> = center.iter().zip(a).map(|(ci, ai)| ci + sft * ai).collect();
+        let inside = (0..el.rows).all(|i| i == lp_ || crate::linalg::dot(el.row(i), &q) <= fl[i] + 1e-9 * (1.0 + fl[i].abs()));
+        if inside && (crate::linalg::dot(a, &q) - fp).abs() <= tol {
+            return true;
+        }
+        crate::solver::lp::lp_feasible_from(&el, &fl, &[lp_], center)
+    };
+    (0..e.rows).map(test).collect()
+}
