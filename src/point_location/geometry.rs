@@ -23,6 +23,12 @@ pub struct Facet {
 pub struct PartitionGeometry {
     pub dim: usize,
     pub num_regions: usize,
+    /// Point location tolerance of the solution this geometry was built from. Every locator built
+    /// from the geometry uses it for its membership tests (and widens its build-time
+    /// classification so that no region within it is dropped). Distances are measured on the
+    /// normalized rows of this geometry; `Solution` measures the same quantity on its own rows
+    /// (identical when those rows have unit norm, which the generators of this crate produce).
+    pub tol: f64,
     /// region rows (normalized), region i occupies rows offsets[i]..offsets[i+1]
     pub e: Vec<f64>,
     pub f: Vec<f64>,
@@ -54,6 +60,12 @@ const PLANE_TOL: f64 = 1e-7;
 pub const THIN_REL_RADIUS: f64 = 1e-6;
 
 impl PartitionGeometry {
+    /// The same geometry with another point location tolerance for the locators built from it.
+    pub fn with_tol(mut self, tol: f64) -> Self {
+        self.tol = tol;
+        self
+    }
+
     pub fn new(sol: &Solution) -> Self {
         let regions = &sol.critical_regions;
         let n = sol.theta_dim();
@@ -282,6 +294,7 @@ impl PartitionGeometry {
         PartitionGeometry {
             dim: n,
             num_regions: r,
+            tol: sol.point_location_tolerance,
             e,
             f,
             offsets,

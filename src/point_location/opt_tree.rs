@@ -29,7 +29,7 @@
 //! region counts, which minimizes expected depth for that query distribution.
 
 use super::geometry::{has_interior, PartitionGeometry};
-use super::{PointLocator, LOCATE_TOL};
+use super::PointLocator;
 use crate::linalg::{dot, Mat};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -125,6 +125,7 @@ pub struct OptimizedTree {
     pub num_leaves: usize,
     /// the storage or time budget stopped the construction before all leaves were small
     pub truncated: bool,
+    tol: f64,
     pub candidates: Candidates,
     name: &'static str,
 }
@@ -133,6 +134,8 @@ pub struct OptimizedTree {
 // construction
 // ---------------------------------------------------------------------------------------------
 
+/// Floor of the separation tolerance used while building; the geometry's point location tolerance
+/// raises it so that no region within that tolerance of a point is cut off from its leaf.
 const TOL: f64 = 1e-9;
 
 struct Builder<'a> {
@@ -176,6 +179,11 @@ fn gaussian(rng: &mut StdRng) -> f64 {
 }
 
 impl<'a> Builder<'a> {
+    #[inline]
+    fn tol(&self) -> f64 {
+        self.geom.tol.max(TOL)
+    }
+
     /// (lo, hi) of alpha'x over each region of `set` (from the region vertices).
     fn intervals(&self, set: &[usize], alpha: &[f64]) -> Vec<(f64, f64)> {
         set.iter()
@@ -238,8 +246,8 @@ impl<'a> Builder<'a> {
         }
         let mut best: Option<(f64, f64)> = None;
         for &beta in &cand {
-            let nb = hs.partition_point(|x| x.0 <= beta + TOL);
-            let nl = ls.partition_point(|x| x.0 < beta - TOL);
+            let nb = hs.partition_point(|x| x.0 <= beta + self.tol());
+            let nl = ls.partition_point(|x| x.0 < beta - self.tol());
             let na = m - nl;
             if nb == 0 || na == 0 {
                 continue;
@@ -392,10 +400,10 @@ impl<'a> Builder<'a> {
             let iv = self.intervals(set, a);
             let (mut nb, mut na, mut wb, mut wa) = (0usize, 0usize, 0.0, 0.0);
             for (k, &i) in set.iter().enumerate() {
-                if iv[k].1 <= beta + TOL {
+                if iv[k].1 <= beta + self.tol() {
                     nb += 1;
                     wb += self.w[i];
-                } else if iv[k].0 >= beta - TOL {
+                } else if iv[k].0 >= beta - self.tol() {
                     na += 1;
                     wa += self.w[i];
                 }
@@ -436,9 +444,9 @@ impl<'a> Builder<'a> {
         let cls: Vec<(bool, bool)> = {
             let f = |k: usize| -> (bool, bool) {
                 let (lo, hi) = iv[k];
-                if hi <= beta + TOL {
+                if hi <= beta + self.tol() {
                     (true, false)
-                } else if lo >= beta - TOL {
+                } else if lo >= beta - self.tol() {
                     (false, true)
                 } else if self.opts.exact_refinement {
                     split_check(self.geom, set[k], path, pl)
@@ -446,7 +454,7 @@ impl<'a> Builder<'a> {
                     (true, true)
                 }
             };
-            let cut = iv.iter().filter(|&&(lo, hi)| !(hi <= beta + TOL || lo >= beta - TOL)).count();
+            let cut = iv.iter().filter(|&&(lo, hi)| !(hi <= beta + self.tol() || lo >= beta - self.tol())).count();
             if cut >= 4 {
                 (0..set.len()).into_par_iter().map(f).collect()
             } else {
@@ -649,6 +657,7 @@ impl OptimizedTree {
             depth: b.depth,
             num_leaves: b.num_leaves,
             truncated,
+            tol: geom.tol,
             candidates: opts.candidates,
             name,
         }
@@ -694,7 +703,7 @@ impl OptimizedTree {
         for k in self.offsets[j] as usize..self.offsets[j + 1] as usize {
             let r = &self.rows[k * w..(k + 1) * w];
             let v = dot(&r[..n], theta) - r[n];
-            if v > LOCATE_TOL {
+            if v > self.tol {
                 return f64::INFINITY;
             }
             worst = worst.max(v);
@@ -709,7 +718,7 @@ impl OptimizedTree {
         let w = n + 1;
         for k in self.offsets[j] as usize..self.offsets[j + 1] as usize {
             let r = &self.rows[k * w..(k + 1) * w];
-            if dot(&r[..n], theta) > r[n] + LOCATE_TOL {
+            if dot(&r[..n], theta) > r[n] + self.tol {
                 return false;
             }
         }
@@ -721,7 +730,7 @@ impl OptimizedTree {
         let (off, d) = self.descend(theta);
         let cnt = self.leaves[off] as usize;
         let mut tested = 0;
-        let r = super::pick_strict_first_rescan(self.leaves[off + 1..off + 1 + cnt].iter().map(|&j| j as usize), self.offsets.len() - 1, |j| {
+        let r = super::pick_strict_first_rescan(self.tol, self.leaves[off + 1..off + 1 + cnt].iter().map(|&j| j as usize), self.offsets.len() - 1, |j| {
             tested += 1;
             self.region_violation(j, theta)
         });
@@ -738,7 +747,7 @@ impl PointLocator for OptimizedTree {
     fn locate(&self, theta: &[f64]) -> Option<usize> {
         let (off, _) = self.descend(theta);
         let cnt = self.leaves[off] as usize;
-        super::pick_strict_first_rescan(self.leaves[off + 1..off + 1 + cnt].iter().map(|&j| j as usize), self.offsets.len() - 1, |j| self.region_violation(j, theta))
+        super::pick_strict_first_rescan(self.tol, self.leaves[off + 1..off + 1 + cnt].iter().map(|&j| j as usize), self.offsets.len() - 1, |j| self.region_violation(j, theta))
     }
 
     fn storage_floats(&self) -> usize {

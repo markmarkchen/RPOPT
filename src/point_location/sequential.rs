@@ -6,7 +6,7 @@
 //! keeps PPOPT's first-within-tolerance rule. [`FlatSequential`] stops at the first violated row
 //! of each region instead.
 
-use super::{PointLocator, LOCATE_TOL};
+use super::PointLocator;
 use crate::linalg::dot;
 use crate::solution::Solution;
 
@@ -16,6 +16,7 @@ pub struct SequentialSearch {
     b: Vec<f64>,
     offsets: Vec<usize>,
     ppopt_rule: bool,
+    tol: f64,
 }
 
 impl SequentialSearch {
@@ -30,11 +31,17 @@ impl SequentialSearch {
             b.extend_from_slice(&r.f);
             offsets.push(b.len());
         }
-        SequentialSearch { dim, a, b, offsets, ppopt_rule: false }
+        SequentialSearch { dim, a, b, offsets, ppopt_rule: false, tol: sol.point_location_tolerance }
     }
 
-    /// PPOPT's rule: the first region (in index order) that holds θ within `LOCATE_TOL`, even if
-    /// a later region contains θ strictly.
+    /// Use another tolerance than the solution's `point_location_tolerance`.
+    pub fn with_tol(mut self, tol: f64) -> Self {
+        self.tol = tol;
+        self
+    }
+
+    /// PPOPT's rule: the first region (in index order) that holds θ within the solution's
+    /// `point_location_tolerance`, even if a later region contains θ strictly.
     pub fn ppopt(sol: &Solution) -> Self {
         SequentialSearch { ppopt_rule: true, ..Self::new(sol) }
     }
@@ -51,9 +58,10 @@ impl PointLocator for SequentialSearch {
 
     fn locate(&self, theta: &[f64]) -> Option<usize> {
         let n = self.dim;
+        let tol = self.tol;
         if self.ppopt_rule {
             // test = A θ <= b for every stacked row, as in PPOPT
-            let test: Vec<bool> = (0..self.b.len()).map(|k| dot(&self.a[k * n..(k + 1) * n], theta) <= self.b[k] + LOCATE_TOL).collect();
+            let test: Vec<bool> = (0..self.b.len()).map(|k| dot(&self.a[k * n..(k + 1) * n], theta) <= self.b[k] + tol).collect();
             for j in 0..self.offsets.len() - 1 {
                 if test[self.offsets[j]..self.offsets[j + 1]].iter().all(|&t| t) {
                     return Some(j);
@@ -63,9 +71,9 @@ impl PointLocator for SequentialSearch {
         }
         // violation A θ - b of every stacked row first, then the strict-first pick
         let viol: Vec<f64> = (0..self.b.len()).map(|k| dot(&self.a[k * n..(k + 1) * n], theta) - self.b[k]).collect();
-        super::pick_strict_first(0..self.offsets.len() - 1, |j| {
+        super::pick_strict_first(self.tol, 0..self.offsets.len() - 1, |j| {
             let v = viol[self.offsets[j]..self.offsets[j + 1]].iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-            if v > LOCATE_TOL {
+            if v > tol {
                 f64::INFINITY
             } else {
                 v
@@ -83,6 +91,7 @@ pub struct FlatSequential {
     dim: usize,
     rows: Vec<f64>,
     offsets: Vec<usize>,
+    tol: f64,
 }
 
 impl FlatSequential {
@@ -97,7 +106,13 @@ impl FlatSequential {
             }
             offsets.push(offsets.last().unwrap() + r.e.rows);
         }
-        FlatSequential { dim, rows, offsets }
+        FlatSequential { dim, rows, offsets, tol: sol.point_location_tolerance }
+    }
+
+    /// Use another tolerance than the solution's `point_location_tolerance`.
+    pub fn with_tol(mut self, tol: f64) -> Self {
+        self.tol = tol;
+        self
     }
 
     #[inline]
@@ -106,14 +121,14 @@ impl FlatSequential {
         let n = self.dim;
         for k in self.offsets[j]..self.offsets[j + 1] {
             let r = &self.rows[k * w..(k + 1) * w];
-            if dot(&r[..n], theta) > r[n] + LOCATE_TOL {
+            if dot(&r[..n], theta) > r[n] + self.tol {
                 return false;
             }
         }
         true
     }
 
-    /// Largest row violation of region j, infinity once a row exceeds `LOCATE_TOL`.
+    /// Largest row violation of region j, infinity once a row exceeds the tolerance.
     #[inline]
     pub fn region_violation(&self, j: usize, theta: &[f64]) -> f64 {
         let w = self.dim + 1;
@@ -122,7 +137,7 @@ impl FlatSequential {
         for k in self.offsets[j]..self.offsets[j + 1] {
             let r = &self.rows[k * w..(k + 1) * w];
             let v = dot(&r[..n], theta) - r[n];
-            if v > LOCATE_TOL {
+            if v > self.tol {
                 return f64::INFINITY;
             }
             worst = worst.max(v);
@@ -141,7 +156,7 @@ impl PointLocator for FlatSequential {
     }
 
     fn locate(&self, theta: &[f64]) -> Option<usize> {
-        super::pick_strict_first(0..self.num_regions(), |j| self.region_violation(j, theta))
+        super::pick_strict_first(self.tol, 0..self.num_regions(), |j| self.region_violation(j, theta))
     }
 
     fn storage_floats(&self) -> usize {

@@ -13,7 +13,7 @@
 //! `locate` runs layers 1-3 (the region selector), `evaluate` runs all five. Everything is computed
 //! in f64 (the paper reports FP32 errors that grow with M).
 
-use super::{PointLocator, LOCATE_TOL};
+use super::PointLocator;
 use crate::linalg::dot;
 use crate::solution::Solution;
 
@@ -27,6 +27,7 @@ pub struct Yann {
     /// layer 4: per region the law [A_k | b_k] (m x (n+1))
     laws: Vec<f64>,
     pub big_m: f64,
+    tol: f64,
 }
 
 impl Yann {
@@ -66,7 +67,7 @@ impl Yann {
             }
             big_m = big_m.max(s);
         }
-        Yann { dim: n, out_dim, l1, l2_offsets: offs, laws, big_m: 2.0 * big_m }
+        Yann { dim: n, out_dim, l1, l2_offsets: offs, laws, big_m: 2.0 * big_m, tol: sol.point_location_tolerance }
     }
 
     pub fn num_regions(&self) -> usize {
@@ -82,7 +83,7 @@ impl Yann {
         // layer 1: binary step on every inequality
         let mut y1 = Vec::with_capacity(q);
         for row in self.l1.chunks_exact(w) {
-            y1.push(if row[n] - dot(&row[..n], theta) >= -LOCATE_TOL { 1.0f64 } else { 0.0 });
+            y1.push(if row[n] - dot(&row[..n], theta) >= -self.tol { 1.0f64 } else { 0.0 });
         }
         // layer 2: ReLU(Σ y1 over region rows - q_s + 1)
         // layer 3: ReLU(d_i - Σ_{l<i} d_l), computed as a running prefix sum (same weights as the

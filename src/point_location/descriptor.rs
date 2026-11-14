@@ -15,7 +15,7 @@
 //! row test.
 
 use super::geometry::PartitionGeometry;
-use super::{PointLocator, LOCATE_TOL};
+use super::PointLocator;
 use crate::linalg::dot;
 use crate::solution::Solution;
 use rand::rngs::StdRng;
@@ -38,6 +38,8 @@ pub struct DescriptorFunction {
     rows: Vec<f64>,
     /// tolerance on f_i - f_j comparisons (relative to the piece scale)
     tol: Vec<f64>,
+    /// point location tolerance for the explicit row tests
+    loc_tol: f64,
     pub explicit_rows: usize,
     pub compared_facets: usize,
 }
@@ -68,7 +70,7 @@ impl DescriptorFunction {
             let (e, f) = geom.region_rows(i);
             let c = &geom.centers[i];
             let scale = pieces[i * w..(i + 1) * w].iter().fold(1e-12f64, |m, v| m.max(v.abs()));
-            tol[i] = 1e-9 * scale.max(1.0);
+            tol[i] = geom.tol * scale.max(1.0);
             for fc in &geom.facets[i] {
                 let a = &e[fc.row * n..(fc.row + 1) * n];
                 let b = f[fc.row];
@@ -102,7 +104,7 @@ impl DescriptorFunction {
             }
             test_offsets.push(tests.len());
         }
-        DescriptorFunction { dim: n, pieces, tests, test_offsets, rows, tol, explicit_rows, compared_facets: compared }
+        DescriptorFunction { dim: n, pieces, tests, test_offsets, rows, tol, loc_tol: geom.tol, explicit_rows, compared_facets: compared }
     }
 }
 
@@ -131,7 +133,7 @@ impl PointLocator for DescriptorFunction {
                     }
                     Test::Row(k) => {
                         let row = &self.rows[k as usize * w..(k as usize + 1) * w];
-                        if dot(&row[..n], theta) > row[n] + LOCATE_TOL {
+                        if dot(&row[..n], theta) > row[n] + self.loc_tol {
                             continue 'region;
                         }
                     }

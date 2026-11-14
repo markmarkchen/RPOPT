@@ -16,14 +16,14 @@
 //! paper); regions are numbered by the solver here, not by BFS level.
 //!
 //! Exactness: the region returned is the one whose rows all satisfy the shared f64 test
-//! (`LOCATE_TOL`). If the traversal cannot proceed (violated facet without neighbour, which is the
+//! (the point location tolerance). If the traversal cannot proceed (violated facet without neighbour, which is the
 //! case for queries outside the feasible set; Remark 3.3 cycles on non-convex unions; more than
 //! `max_steps` steps) it falls back to an exact locator (the hash table).
 
 use super::geometry::PartitionGeometry;
 use super::hash_table::HashTable;
 use super::walk::{RowGraph, WalkOutcome};
-use super::{PointLocator, LOCATE_TOL};
+use super::PointLocator;
 use crate::linalg::dot;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -76,7 +76,7 @@ impl GraphTraversal {
             if v <= 0.0 {
                 return Ok((cur, step));
             }
-            if v <= LOCATE_TOL {
+            if v <= self.g.tol {
                 // strict-first rule: theta lies in this region only within the tolerance and may
                 // lie strictly in a neighbour; the exact fallback decides
                 return Err(step);

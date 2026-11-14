@@ -1,7 +1,7 @@
 //! Binary save / load of a built [`HashTable`] (bit-identical round trip, validated on load).
 //!
 //! Payload after the common header (`RPOPTHTB`, see `crate::io`): dim u32, compact u8, name u8,
-//! lo[dim] f64, inv_h[dim] f64, cells_per_dim[dim] u32, six statistics u32, tab, offs, stream
+//! tol f64 (point location tolerance, version 2), lo[dim] f64, inv_h[dim] f64, cells_per_dim[dim] u32, six statistics u32, tab, offs, stream
 //! (each u32 count + u32 items), grows (u64 count + f64 bits). Strides and the sentinel are
 //! recomputed. The loader checks every table entry so that `locate` cannot index out of bounds
 //! or loop on a corrupted-but-checksum-valid file.
@@ -11,7 +11,7 @@ use crate::io::{Error, Reader, Writer};
 use std::path::Path;
 
 const HT_MAGIC: &[u8; 8] = b"RPOPTHTB";
-pub const HASH_TABLE_FORMAT_VERSION: u32 = 1;
+pub const HASH_TABLE_FORMAT_VERSION: u32 = 2;
 
 fn name_code(name: &str) -> u8 {
     if name == "hash table (adaptive)" { 1 } else { 0 }
@@ -41,6 +41,7 @@ impl HashTable {
         w.len(self.dim)?;
         w.u8(self.compact as u8);
         w.u8(name_code(self.name));
+        w.f64(self.tol);
         w.raw_f64s(&self.lo);
         w.raw_f64s(&self.inv_h);
         for &c in &self.cells_per_dim {
@@ -71,6 +72,10 @@ impl HashTable {
             t => return Err(Error::Corrupt(format!("bad compact flag {t}"))),
         };
         let name = name_of(rd.u8()?)?;
+        let tol = rd.f64()?;
+        if !(tol >= 0.0 && tol.is_finite()) {
+            return Err(Error::Corrupt(format!("bad point location tolerance {tol}")));
+        }
         let lo = rd.raw_f64s(dim)?;
         let inv_h = rd.raw_f64s(dim)?;
         let cells_per_dim: Vec<usize> = rd.raw_u32s(dim)?.into_iter().map(|c| c as usize).collect();
@@ -101,6 +106,7 @@ impl HashTable {
         }
         let ht = HashTable {
             dim,
+            tol,
             lo,
             inv_h,
             cells_per_dim,

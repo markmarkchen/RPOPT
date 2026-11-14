@@ -19,7 +19,7 @@
 //! point of the enlarged box by more than the tolerance. Neither can change the answer.
 
 use super::geometry::{has_interior, PartitionGeometry};
-use super::{PointLocator, LOCATE_TOL};
+use super::PointLocator;
 use crate::linalg::Mat;
 use rayon::prelude::*;
 use std::collections::BinaryHeap;
@@ -65,6 +65,7 @@ pub struct HashTable {
     total_rows: usize,
     max_cands: usize,
     max_depth: usize,
+    tol: f64,
 }
 
 /// candidate regions with the ids (into the global packed row table) of their rows that can cut the box
@@ -100,7 +101,7 @@ fn leaf_cost(c: &Cands) -> f64 {
 
 /// Keep, per candidate, the rows that can reject a point of the box [elo, ehi]; drop candidates
 /// that are rejected everywhere; stop after a candidate that covers the box.
-fn refine(parent: &Cands, grows: &[f64], n: usize, elo: &[f64], ehi: &[f64]) -> Cands {
+fn refine(parent: &Cands, grows: &[f64], n: usize, elo: &[f64], ehi: &[f64], tol: f64) -> Cands {
     let w = n + 1;
     let mut out: Cands = vec![];
     for (j, rows) in parent {
@@ -114,7 +115,7 @@ fn refine(parent: &Cands, grows: &[f64], n: usize, elo: &[f64], ehi: &[f64]) -> 
                 mx += p.max(q);
                 mn += p.min(q);
             }
-            if mn > row[n] + LOCATE_TOL + MARGIN {
+            if mn > row[n] + tol + MARGIN {
                 sep = true;
                 break;
             }
@@ -352,7 +353,7 @@ impl HashTable {
                     cost += 1.5;
                     let row = &self.grows[id * w..(id + 1) * w];
                     let d: f64 = (0..n).map(|k| row[k] * theta[k]).sum();
-                    if d > row[n] + LOCATE_TOL {
+                    if d > row[n] + self.tol {
                         ok = false;
                         break;
                     }
@@ -371,7 +372,7 @@ impl HashTable {
                 cost += 1.5;
                 let row = &self.grows[id as usize * w..(id as usize + 1) * w];
                 let d: f64 = (0..n).map(|k| row[k] * theta[k]).sum();
-                if d > row[n] + LOCATE_TOL {
+                if d > row[n] + self.tol {
                     ok = false;
                     break;
                 }
@@ -392,11 +393,13 @@ impl HashTable {
         let n = geom.dim;
         assert!(Self::supports_dim(n), "hash table supports 1 to {MAX_DIM} parameters, got {n} (use HashTable::try_with_storage_limit to get an error instead)");
         let w = n + 1;
-        let lo = geom.global_lo.clone();
-        let hi = geom.global_hi.clone();
+        // the grid is padded by the tolerance, so that a point outside the partition by at most the
+        // tolerance still falls in a cell, and so are the bounding boxes of the regions (`eps`)
+        let lo: Vec<f64> = geom.global_lo.iter().map(|v| v - geom.tol).collect();
+        let hi: Vec<f64> = geom.global_hi.iter().map(|v| v + geom.tol).collect();
         let h: Vec<f64> = (0..n).map(|k| ((hi[k] - lo[k]) / cells_per_dim[k] as f64).max(1e-12)).collect();
         let inv_h: Vec<f64> = h.iter().map(|v| 1.0 / v).collect();
-        let eps: Vec<f64> = h.iter().map(|v| 1e-8 * v).collect();
+        let eps: Vec<f64> = h.iter().map(|v| (1e-8 * v).max(geom.tol)).collect();
         let mut strides = vec![1usize; n];
         for k in 1..n {
             strides[k] = strides[k - 1] * cells_per_dim[k - 1];
@@ -447,7 +450,7 @@ impl HashTable {
                 let elo: Vec<f64> = (0..n).map(|k| blo[k] - eps[k]).collect();
                 let ehi: Vec<f64> = (0..n).map(|k| bhi[k] + eps[k]).collect();
                 let parent: Cands = lists[c].iter().map(|&j| (j, (geom.offsets[j as usize] as u32..geom.offsets[j as usize + 1] as u32).collect())).collect();
-                let cands = lp_filter(geom, refine(&parent, &grows, n, &elo, &ehi), &grows, n, &blo, &bhi);
+                let cands = lp_filter(geom, refine(&parent, &grows, n, &elo, &ehi, geom.tol), &grows, n, &blo, &bhi);
                 Node { cands, depth: 0, lo: blo, hi: bhi, children: vec![] }
             })
             .collect();
@@ -500,7 +503,7 @@ impl HashTable {
                             }
                             let elo: Vec<f64> = (0..n).map(|k| clo[k] - eps[k]).collect();
                             let ehi: Vec<f64> = (0..n).map(|k| chi[k] + eps[k]).collect();
-                            let cands = lp_filter(geom, refine(&arena[idx].cands, &grows, n, &elo, &ehi), &grows, n, &clo, &chi);
+                            let cands = lp_filter(geom, refine(&arena[idx].cands, &grows, n, &elo, &ehi, geom.tol), &grows, n, &clo, &chi);
                             Node { cands, depth: depth + 1, lo: clo, hi: chi, children: vec![] }
                         })
                         .collect()
@@ -538,6 +541,7 @@ impl HashTable {
         // serialize
         let mut ht = HashTable {
             dim: n,
+            tol: geom.tol,
             lo,
             inv_h,
             cells_per_dim: cells_per_dim.to_vec(),
@@ -565,7 +569,7 @@ impl HashTable {
     }
 
     fn empty_like(n: usize, cells_per_dim: &[usize]) -> Self {
-        HashTable { dim: n, lo: vec![], inv_h: vec![], cells_per_dim: cells_per_dim.to_vec(), strides: vec![], tab: vec![], sentinel: 0, grows: vec![], compact: false, offs: vec![], stream: vec![], name: "", mixed: 0, leaves: 0, total_cands: 0, total_rows: 0, max_cands: 0, max_depth: 0 }
+        HashTable { dim: n, tol: super::LOCATE_TOL, lo: vec![], inv_h: vec![], cells_per_dim: cells_per_dim.to_vec(), strides: vec![], tab: vec![], sentinel: 0, grows: vec![], compact: false, offs: vec![], stream: vec![], name: "", mixed: 0, leaves: 0, total_cands: 0, total_rows: 0, max_cands: 0, max_depth: 0 }
     }
 
     fn emit(&mut self, arena: &mut Vec<Node>, i: usize, geom: &PartitionGeometry, depth: usize) -> u32 {
@@ -608,7 +612,7 @@ impl HashTable {
                 .iter()
                 .map(|(j, _)| {
                     let (e, f) = geom.region_rows(*j as usize);
-                    pts.iter().filter(|p| (0..f.len()).all(|r| (0..n).map(|k| e[r * n + k] * p[k]).sum::<f64>() <= f[r] + LOCATE_TOL)).count()
+                    pts.iter().filter(|p| (0..f.len()).all(|r| (0..n).map(|k| e[r * n + k] * p[k]).sum::<f64>() <= f[r] + geom.tol)).count()
                 })
                 .collect();
             let mut idx: Vec<usize> = (0..cands.len()).collect();
@@ -638,6 +642,7 @@ impl HashTable {
 
     #[inline(always)]
     fn locate_g<const N: usize>(&self, theta: &[f64]) -> Option<usize> {
+        let tol = self.tol;
         let theta: &[f64; N] = theta[..N].try_into().unwrap();
         let mut cell = 0usize;
         let mut inside = true;
@@ -669,7 +674,7 @@ impl HashTable {
         let nc = self.stream[p] as usize;
         p += 1;
         // strict-first rule (see `pick_strict_first`): the first candidate whose tested rows hold
-        // with tolerance 0 answers at once; a candidate that holds only within `LOCATE_TOL` is
+        // with tolerance 0 answers at once; a candidate that holds only within the tolerance is
         // kept as the fallback. Rows left out of a record hold with margin on the whole box.
         let mut fallback: Option<usize> = None;
         if self.compact {
@@ -682,7 +687,7 @@ impl HashTable {
                         d += row[k] * theta[k];
                     }
                     let v = d - row[N];
-                    if v > LOCATE_TOL {
+                    if v > tol {
                         worst = f64::INFINITY;
                         break;
                     }
@@ -691,7 +696,7 @@ impl HashTable {
                 if worst <= 0.0 {
                     return Some(j as usize);
                 }
-                if worst <= LOCATE_TOL && fallback.is_none() {
+                if worst <= tol && fallback.is_none() {
                     fallback = Some(j as usize);
                 }
             }
@@ -708,7 +713,7 @@ impl HashTable {
                     d += row[k] * theta[k];
                 }
                 let v = d - row[N];
-                if v > LOCATE_TOL {
+                if v > tol {
                     worst = f64::INFINITY;
                     break;
                 }
@@ -717,7 +722,7 @@ impl HashTable {
             if worst <= 0.0 {
                 return Some(j as usize);
             }
-            if worst <= LOCATE_TOL && fallback.is_none() {
+            if worst <= tol && fallback.is_none() {
                 fallback = Some(j as usize);
             }
             p += 2 + nr;
@@ -792,6 +797,7 @@ impl PointLocator for HashTable {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::point_location::LOCATE_TOL;
 
     /// k x k unit-square cells as a synthetic 2D partition, each cell with 4 rows.
     fn square_partition(k: usize) -> PartitionGeometry {
@@ -812,6 +818,7 @@ mod tests {
             }
         }
         PartitionGeometry {
+            tol: crate::point_location::LOCATE_TOL,
             dim: 2,
             num_regions: k * k,
             e,
