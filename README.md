@@ -32,6 +32,11 @@ layout of `bench/mpc_problems.py`.
 - `Solution.is_overlapping`: PPOPT sets it for every mpQP (its `isinstance(MPLP_Program)` check also matches
   `MPQP_Program`). Here only mpLPs and non-convex mpQPs are flagged.
 - PPOPT's `get_independent_rows` never keeps the last equality row; the Rust version keeps it when independent.
+- Geometric (facet stepping) on degenerate problems: PPOPT's version, and the original port, can leave holes (a 3D
+  degenerate vertex left 16% of the parameter set uncovered) because zero-width facets are skipped, a degenerate step
+  point picks an arbitrary basis, and a facet with several neighbours is stepped across once. The Rust version uses a
+  canonical basis at degenerate points (as in lexicographic pivoting) and completes suspect facets (Spjøtvold et al.
+  2006); outputs and timings on the non-degenerate benchmark problems are unchanged.
 - Combinatorial graph: PPOPT takes the next candidate with `set.pop()` (Python hash order); the Rust version
   takes candidates first in, first out (breadth-first from the initial region). The explored set, and so the
   solution and the PPOPT-equivalent counts, do not depend on the order, but breadth-first builds the large
@@ -107,8 +112,10 @@ Implementation notes:
   hyperplanes are evaluated together before the sign bits pick the child.
 - **Descriptor function**: f_i(θ) = w'x_i*(θ) with random w; facets between neighbours are tested by comparing
   f values, domain facets (and the rare discontinuous ones) by their row.
-- **Hash table**: uniform grid over the bounding box; each box keeps the regions that meet it (LP test), sorted
-  by size. The grid size sets the time/storage trade-off.
+- **Hash table**: uniform grid over the bounding box; each box keeps the regions that meet it (LP test). Boxes
+  inside one region are answered by a single table load; rows that cannot cut a box are dropped.
+  `HashTable::with_storage_limit(geom, max_bytes)` builds the fastest table that fits the budget, chosen by a
+  deterministic predicted cost (2.05x to 2.5x faster than the plain 16x grid at about 16x its storage).
 - **YANN**: the five layers of the paper (step, ReLU indicator, first-active selector, big-M ReLU pairs,
   linear output), in f64; `locate` runs layers 1-3, `Yann::evaluate` all five.
 
@@ -120,6 +127,10 @@ Implementation notes:
 | mp-LCP pivoting | `mplcp` | Jones, Morari, CDC 2006, doi:10.1109/CDC.2006.377797 | lexicographic perturbation, no gaps or overlaps at degenerate vertices; about 1.4x faster than geometric on sys3x2 |
 | pLCP enumeration | `mplcp_enum` | Herceg, Jones, Kvasnica, Morari, Automatica 62, 2015, doi:10.1016/j.automatica.2015.09.019 | general M (mpQP and mpLP); exponential, slow on the larger problems |
 | randomized MPR | `algorithms::mpr::solve_mpqp_mpr` | Falsone, Bianchi, Prandini, Automatica 2026, doi:10.1016/j.automatica.2026.112873 | approximate with a probabilistic coverage guarantee; returns only exact regions |
+| lexicographic mpLP | `mplp_lex` | Jones, Kerrigan, Maciejowski, Automatica 43(10), 2007, doi:10.1016/j.automatica.2007.03.008 | unique, gap- and overlap-free partition for degenerate mpLPs; mpQPs go to geometric |
+| approximate mpQP | `algorithms::approx::solve_mpqp_approx` | Bemporad, Filippi, JOTA 2003, doi:10.1023/A:1023696221899 | value error within eps (Case C of the paper); fewer regions only at large eps |
+| constraint trimming | `trimming` | Hou, You, arXiv 2412.11098 | for sequences of related QPs (closed-loop MPC), not a single explicit solve |
+| low-rank storage | `lowrank::compress` | Nielsen, Axehill, CDC 2016, doi:10.1109/CDC.2016.7798819 | about 2x less memory on the larger problems, about 10x slower evaluation |
 
 ## Active-set dynamic programming for explicit MPC
 
