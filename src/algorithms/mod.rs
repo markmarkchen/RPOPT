@@ -1,5 +1,6 @@
 //! Port of `ppopt.mp_solvers` (mpLP/mpQP algorithms) with rayon-parallel variants.
 
+pub mod ahmadi;
 pub mod common;
 pub mod incremental;
 pub mod mpmiqp;
@@ -30,12 +31,14 @@ pub enum MpqpAlgorithm {
     CombinatorialGraphParallel,
     Geometric,
     GeometricParallel,
+    /// Ahmadi-Moshkenani, Johansen, Olaru (IEEE TAC 2018) downward-upward exploration
+    Ahmadi,
 }
 
 impl MpqpAlgorithm {
     pub fn all() -> &'static [MpqpAlgorithm] {
         use MpqpAlgorithm::*;
-        &[Combinatorial, CombinatorialParallel, Graph, GraphExp, GraphParallel, CombinatorialGraph, CombinatorialGraphParallel, Geometric, GeometricParallel]
+        &[Combinatorial, CombinatorialParallel, Graph, GraphExp, GraphParallel, CombinatorialGraph, CombinatorialGraphParallel, Geometric, GeometricParallel, Ahmadi]
     }
 
     pub fn name(&self) -> &'static str {
@@ -50,6 +53,7 @@ impl MpqpAlgorithm {
             CombinatorialGraphParallel => "combinatorial_graph_parallel",
             Geometric => "geometric",
             GeometricParallel => "geometric_parallel",
+            Ahmadi => "ahmadi",
         }
     }
 
@@ -89,6 +93,7 @@ pub fn solve_mpqp_with(program: &Arc<MpProgram>, algorithm: MpqpAlgorithm, opts:
         CombinatorialGraphParallel => combinatorial_graph(program, opts, true),
         Geometric => geometric(program, opts, false),
         GeometricParallel => geometric(program, opts, true),
+        Ahmadi => ahmadi::ahmadi(program),
     };
     let mut sol = Solution::new(program.clone(), regions);
     // PPOPT flags every solution as overlapping (its isinstance check also matches MPQP). We only
