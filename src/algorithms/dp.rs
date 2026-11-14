@@ -772,6 +772,11 @@ impl Horizon<'_> {
     }
 
     fn classify(&self, a: Set, stats: &mut DpStats) -> Outcome {
+        if self.reduced {
+            if let Some(o) = SCRATCH.with(|c| self.classify_fast(a, &mut c.borrow_mut(), stats)) {
+                return o;
+            }
+        }
         let qp = self.qp;
         let nx = qp.nx;
         let act = bits(a);
@@ -859,6 +864,517 @@ impl Horizon<'_> {
         } else {
             stats.outcomes[2] += 1;
             Outcome::Other
+        }
+    }
+}
+
+// ------------------------------------------------------------------------------ allocation-free tests
+
+/// Per-thread buffers of `Horizon::classify_fast`.
+#[derive(Default)]
+struct Scratch {
+    act_r: Vec<usize>,
+    act_z: Vec<usize>,
+    act_b: Vec<usize>,
+    dep_rows: Vec<usize>,
+    /// |D| x |B| coefficients C (row major)
+    dep_c: Vec<f64>,
+    // split_dependent
+    gl: Vec<f64>,
+    gz: Vec<f64>,
+    gcc: Vec<f64>,
+    gck: Vec<usize>,
+    // parameter equalities
+    eq: Vec<f64>,
+    eq_used: Vec<bool>,
+    eq_piv: Vec<usize>,
+    xc: Vec<f64>,
+    tm: Vec<f64>,
+    // multipliers
+    chol: Vec<f64>,
+    sol: Vec<f64>,
+    rx: Vec<f64>,
+    // LP data
+    mat: Mat,
+    mat2: Mat,
+    b: Vec<f64>,
+    // feasibility elimination
+    aug: Vec<f64>,
+    ug_used: Vec<bool>,
+    ug_piv: Vec<usize>,
+    ug_rest: Vec<usize>,
+    rowx: Vec<f64>,
+    rowu: Vec<f64>,
+}
+
+thread_local! {
+    static SCRATCH: std::cell::RefCell<Scratch> = std::cell::RefCell::new(Scratch::default());
+}
+
+fn prep(m: &mut Mat, rows: usize, cols: usize) {
+    m.rows = rows;
+    m.cols = cols;
+    m.data.clear();
+    m.data.resize(rows * cols, 0.0);
+}
+
+/// Gauss-Jordan with complete pivoting on the first `npiv` columns of the `rows x width` matrix.
+/// Rows `0..rank` end up with a unit pivot (in column `piv[k]`), the pivot column zero elsewhere.
+/// Stops at the first pivot below `tol`.
+fn gauss_jordan(aug: &mut [f64], rows: usize, width: usize, npiv: usize, used: &mut Vec<bool>, piv: &mut Vec<usize>, tol: f64) -> usize {
+    used.clear();
+    used.resize(npiv, false);
+    piv.clear();
+    for r in 0..rows {
+        let (mut br, mut bc, mut bv) = (r, usize::MAX, 0.0f64);
+        for rr in r..rows {
+            let row = &aug[rr * width..rr * width + npiv];
+            for c in 0..npiv {
+                if !used[c] && row[c].abs() > bv {
+                    bv = row[c].abs();
+                    br = rr;
+                    bc = c;
+                }
+            }
+        }
+        if bc == usize::MAX || bv <= tol {
+            return r;
+        }
+        if br != r {
+            for c in 0..width {
+                aug.swap(r * width + c, br * width + c);
+            }
+        }
+        let pv = aug[r * width + bc];
+        for c in 0..width {
+            aug[r * width + c] /= pv;
+        }
+        for rr in 0..rows {
+            if rr != r {
+                let f = aug[rr * width + bc];
+                if f != 0.0 {
+                    let (lo, hi) = if rr < r { let (a, b) = aug.split_at_mut(r * width); (&mut a[rr * width..(rr + 1) * width], &b[..width]) } else { let (a, b) = aug.split_at_mut(rr * width); (&mut b[..width], &a[r * width..(r + 1) * width]) };
+                    for c in 0..width {
+                        lo[c] -= f * hi[c];
+                    }
+                }
+            }
+        }
+        used[bc] = true;
+        piv.push(bc);
+    }
+    rows
+}
+
+/// Row `rx . x0 <= c0` in the variables y of `x0 = xc + T y` (`ident`: y = x0).
+#[inline]
+fn to_y(rx: &[f64], c0: f64, ident: bool, xc: &[f64], t: &[f64], nf: usize, out: &mut [f64], b: &mut f64) {
+    if ident {
+        out[..nf].copy_from_slice(rx);
+        *b = c0;
+        return;
+    }
+    let mut sh = 0.0;
+    for (c, &v) in rx.iter().enumerate() {
+        if v == 0.0 {
+            continue;
+        }
+        sh += v * xc[c];
+        let tr = &t[c * nf..(c + 1) * nf];
+        for f in 0..nf {
+            out[f] += v * tr[f];
+        }
+    }
+    *b = c0 - sh;
+}
+
+impl Horizon<'_> {
+    /// Same decisions as `classify` with the reduced LPs, on per-thread buffers. `None` when the
+    /// reduced route does not apply (the caller uses the full LPs).
+    fn classify_fast(&self, a: Set, sc: &mut Scratch, stats: &mut DpStats) -> Option<Outcome> {
+        let qp = self.qp;
+        let (nx, nm, q) = (qp.nx, qp.nm, qp.num_rows());
+        let na_all = a.count_ones() as usize;
+        sc.act_r.clear();
+        sc.act_z.clear();
+        {
+            let mut x = a;
+            while x != 0 {
+                let i = x.trailing_zeros() as usize;
+                x &= x - 1;
+                if self.zero_row[i] { sc.act_z.push(i) } else { sc.act_r.push(i) }
+            }
+        }
+        sc.dep_rows.clear();
+        sc.dep_c.clear();
+        if is_full_rank_rows(&qp.g, &sc.act_r) {
+            sc.act_b.clear();
+            sc.act_b.extend_from_slice(&sc.act_r);
+        } else {
+            self.split_dependent_fast(sc);
+        }
+        let nb = sc.act_b.len();
+        let nd = sc.dep_rows.len();
+        // equalities on x0: rows with G_i = 0 and the dependent rows
+        let neq = sc.act_z.len() + nd;
+        let ident = neq == 0;
+        let mut nf = nx;
+        if !ident {
+            let w = nx + 1;
+            sc.eq.clear();
+            sc.eq.resize(neq * w, 0.0);
+            for (r, &i) in sc.act_z.iter().enumerate() {
+                let row = &mut sc.eq[r * w..(r + 1) * w];
+                for c in 0..nx {
+                    row[c] = -qp.e[(i, c)];
+                }
+                row[nx] = qp.w[i];
+            }
+            for (d, &i) in sc.dep_rows.iter().enumerate() {
+                let r = sc.act_z.len() + d;
+                let row = &mut sc.eq[r * w..(r + 1) * w];
+                let mut rhs = qp.w[i];
+                for c in 0..nx {
+                    row[c] = -qp.e[(i, c)];
+                }
+                for (k, &j) in sc.act_b.iter().enumerate() {
+                    let ck = sc.dep_c[d * nb + k];
+                    if ck == 0.0 {
+                        continue;
+                    }
+                    for c in 0..nx {
+                        row[c] += ck * qp.e[(j, c)];
+                    }
+                    rhs -= ck * qp.w[j];
+                }
+                row[nx] = rhs;
+            }
+            let mut scale = 0.0f64;
+            for v in &sc.eq {
+                scale = scale.max(v.abs());
+            }
+            let scale = scale.max(1.0);
+            let rank = gauss_jordan(&mut sc.eq, neq, w, nx, &mut sc.eq_used, &mut sc.eq_piv, 1e-10 * scale);
+            for rr in rank..neq {
+                if sc.eq[rr * w + nx].abs() > 1e-9 * scale {
+                    stats.optimality_lps += 1;
+                    stats.feasibility_lps += 1;
+                    stats.outcomes[1] += 1;
+                    return Some(Outcome::Infeasible);
+                }
+            }
+            nf = nx - rank;
+            sc.xc.clear();
+            sc.xc.resize(nx, 0.0);
+            sc.tm.clear();
+            sc.tm.resize(nx * nf, 0.0);
+            let mut f = 0;
+            for c in 0..nx {
+                if !sc.eq_used[c] {
+                    sc.tm[c * nf + f] = 1.0;
+                    f += 1;
+                }
+            }
+            for k in 0..rank {
+                let pc = sc.eq_piv[k];
+                sc.xc[pc] = sc.eq[k * w + nx];
+                let mut f = 0;
+                for c in 0..nx {
+                    if !sc.eq_used[c] {
+                        sc.tm[pc * nf + f] = -sc.eq[k * w + c];
+                        f += 1;
+                    }
+                }
+            }
+        }
+        stats.optimality_lps += 1;
+        // ---- optimality (and the primal certificate)
+        // multipliers mu = -S^-1 (Cx_B x0 + w_B), S = W_BB
+        sc.chol.clear();
+        sc.chol.resize(nb * nb, 0.0);
+        for j in 0..nb {
+            let mut d = self.w_mat[(sc.act_b[j], sc.act_b[j])];
+            for k in 0..j {
+                d -= sc.chol[j * nb + k] * sc.chol[j * nb + k];
+            }
+            if d <= 0.0 || !d.is_finite() {
+                stats.optimality_lps -= 1;
+                return None;
+            }
+            let djj = d.sqrt();
+            sc.chol[j * nb + j] = djj;
+            for i in j + 1..nb {
+                let mut s = self.w_mat[(sc.act_b[i], sc.act_b[j])];
+                for k in 0..j {
+                    s -= sc.chol[i * nb + k] * sc.chol[j * nb + k];
+                }
+                sc.chol[i * nb + j] = s / djj;
+            }
+        }
+        let nc = nx + 1;
+        sc.sol.clear();
+        sc.sol.resize(nb * nc, 0.0);
+        for (r, &i) in sc.act_b.iter().enumerate() {
+            sc.sol[r * nc..r * nc + nx].copy_from_slice(self.cx.row(i));
+            sc.sol[r * nc + nx] = qp.w[i];
+        }
+        for i in 0..nb {
+            for k in 0..i {
+                let l = sc.chol[i * nb + k];
+                if l != 0.0 {
+                    let (top, bot) = sc.sol.split_at_mut(i * nc);
+                    for (d, s) in bot[..nc].iter_mut().zip(&top[k * nc..(k + 1) * nc]) {
+                        *d -= l * s;
+                    }
+                }
+            }
+            let inv = 1.0 / sc.chol[i * nb + i];
+            for v in &mut sc.sol[i * nc..(i + 1) * nc] {
+                *v *= inv;
+            }
+        }
+        for i in (0..nb).rev() {
+            for k in i + 1..nb {
+                let l = sc.chol[k * nb + i];
+                if l != 0.0 {
+                    let (top, bot) = sc.sol.split_at_mut(k * nc);
+                    for (d, s) in top[i * nc..(i + 1) * nc].iter_mut().zip(&bot[..nc]) {
+                        *d -= l * s;
+                    }
+                }
+            }
+            let inv = 1.0 / sc.chol[i * nb + i];
+            for v in &mut sc.sol[i * nc..(i + 1) * nc] {
+                *v *= inv;
+            }
+        }
+        for v in sc.sol.iter_mut() {
+            *v = -*v;
+        }
+        // rows in the variables (y, lambda_D)
+        let n_slack = q - na_all;
+        let n_in = n_slack + nb + nd;
+        let ncol = nf + nd;
+        prep(&mut sc.mat, n_in, ncol);
+        sc.b.clear();
+        sc.b.resize(n_in, 0.0);
+        sc.rx.clear();
+        sc.rx.resize(nx, 0.0);
+        let mut r = 0;
+        for i in 0..q {
+            if a >> i & 1 == 1 {
+                continue;
+            }
+            // Cx_i x0 + W_iB (Lx x0 + l0) + w_i >= 0
+            let mut c0 = qp.w[i];
+            for c in 0..nx {
+                sc.rx[c] = -self.cx[(i, c)];
+            }
+            for (k, &j) in sc.act_b.iter().enumerate() {
+                let wij = self.w_mat[(i, j)];
+                let sk = &sc.sol[k * nc..(k + 1) * nc];
+                for c in 0..nx {
+                    sc.rx[c] -= wij * sk[c];
+                }
+                c0 += wij * sk[nx];
+            }
+            let mut bb = 0.0;
+            to_y(&sc.rx, c0, ident, &sc.xc, &sc.tm, nf, &mut sc.mat.data[r * ncol..r * ncol + nf], &mut bb);
+            sc.b[r] = bb;
+            r += 1;
+        }
+        for k in 0..nb {
+            // lambda_k = mu_k - sum_d C_dk lambda_d >= 0
+            for c in 0..nx {
+                sc.rx[c] = -sc.sol[k * nc + c];
+            }
+            let mut bb = 0.0;
+            to_y(&sc.rx, sc.sol[k * nc + nx], ident, &sc.xc, &sc.tm, nf, &mut sc.mat.data[r * ncol..r * ncol + nf], &mut bb);
+            sc.b[r] = bb;
+            for d in 0..nd {
+                sc.mat.data[r * ncol + nf + d] = sc.dep_c[d * nb + k];
+            }
+            r += 1;
+        }
+        for d in 0..nd {
+            sc.mat.data[r * ncol + nf + d] = -1.0;
+            r += 1;
+        }
+        let feas = |m: &Mat, b: &[f64]| if m.cols == 0 { b.iter().all(|&v| v >= -1e-9) } else { lp_feasible(m, b, &[]) };
+        let t0 = Instant::now();
+        if feas(&sc.mat, &sc.b) {
+            for v in sc.b.iter_mut() {
+                *v -= T_TOL;
+            }
+            let t_pos = feas(&sc.mat, &sc.b);
+            stats.seconds_opt_lp += t0.elapsed().as_secs_f64();
+            stats.outcomes[0] += 1;
+            return Some(Outcome::Optimal(!t_pos));
+        }
+        // not optimal: the inactive rows alone (the KKT point U(x0) of the active rows is primal
+        // feasible there) certify feasibility
+        let ok = if nd == 0 {
+            sc.mat.rows = n_slack;
+            let ok = feas(&sc.mat, &sc.b[..n_slack]);
+            sc.mat.rows = n_in;
+            ok
+        } else {
+            prep(&mut sc.mat2, n_slack, nf);
+            for r in 0..n_slack {
+                let (src, dst) = (&sc.mat.data[r * ncol..r * ncol + nf], &mut sc.mat2.data[r * nf..(r + 1) * nf]);
+                dst.copy_from_slice(src);
+            }
+            feas(&sc.mat2, &sc.b[..n_slack])
+        };
+        stats.seconds_opt_lp += t0.elapsed().as_secs_f64();
+        if ok {
+            stats.outcomes[2] += 1;
+            return Some(Outcome::Other);
+        }
+        // ---- feasibility: eliminate U of the independent active rows
+        stats.feasibility_lps += 1;
+        let t0 = Instant::now();
+        let width = nm + nx + 1;
+        sc.aug.clear();
+        sc.aug.resize(nb * width, 0.0);
+        for (r, &i) in sc.act_b.iter().enumerate() {
+            let row = &mut sc.aug[r * width..(r + 1) * width];
+            row[..nm].copy_from_slice(qp.g.row(i));
+            for c in 0..nx {
+                row[nm + c] = -qp.e[(i, c)];
+            }
+            row[nm + nx] = qp.w[i];
+        }
+        let mut scale = 0.0f64;
+        for v in &sc.aug {
+            scale = scale.max(v.abs());
+        }
+        let scale = scale.max(1.0);
+        let rank = gauss_jordan(&mut sc.aug, nb, width, nm, &mut sc.ug_used, &mut sc.ug_piv, 1e-10 * scale);
+        if rank < nb {
+            // numerically dependent after all: the full LP decides
+            let feasible = self.lp(a, false).is_some();
+            stats.seconds_feas_lp += t0.elapsed().as_secs_f64();
+            return Some(if feasible {
+                stats.outcomes[2] += 1;
+                Outcome::Other
+            } else {
+                stats.outcomes[1] += 1;
+                Outcome::Infeasible
+            });
+        }
+        sc.ug_rest.clear();
+        for c in 0..nm {
+            if !sc.ug_used[c] {
+                sc.ug_rest.push(c);
+            }
+        }
+        let nr = sc.ug_rest.len();
+        let ncol2 = nf + nr;
+        prep(&mut sc.mat, n_slack, ncol2);
+        sc.b.clear();
+        sc.b.resize(n_slack, 0.0);
+        sc.rowx.clear();
+        sc.rowx.resize(nx, 0.0);
+        sc.rowu.clear();
+        sc.rowu.resize(nr, 0.0);
+        let mut r = 0;
+        for i in 0..q {
+            if a >> i & 1 == 1 {
+                continue;
+            }
+            let gi = qp.g.row(i);
+            let mut rhs = qp.w[i];
+            for c in 0..nx {
+                sc.rowx[c] = -qp.e[(i, c)];
+            }
+            for u in 0..nr {
+                sc.rowu[u] = gi[sc.ug_rest[u]];
+            }
+            for k in 0..nb {
+                let g = gi[sc.ug_piv[k]];
+                if g == 0.0 {
+                    continue;
+                }
+                let ak = &sc.aug[k * width..(k + 1) * width];
+                for c in 0..nx {
+                    sc.rowx[c] -= g * ak[nm + c];
+                }
+                rhs -= g * ak[nm + nx];
+                for u in 0..nr {
+                    sc.rowu[u] -= g * ak[sc.ug_rest[u]];
+                }
+            }
+            let out = &mut sc.mat.data[r * ncol2..(r + 1) * ncol2];
+            let mut bb = 0.0;
+            to_y(&sc.rowx, rhs, ident, &sc.xc, &sc.tm, nf, out, &mut bb);
+            sc.b[r] = bb;
+            out[nf..].copy_from_slice(&sc.rowu);
+            r += 1;
+        }
+        let feasible = feas(&sc.mat, &sc.b);
+        stats.seconds_feas_lp += t0.elapsed().as_secs_f64();
+        Some(if feasible {
+            stats.outcomes[2] += 1;
+            Outcome::Other
+        } else {
+            stats.outcomes[1] += 1;
+            Outcome::Infeasible
+        })
+    }
+
+    /// Flat version of `split_dependent` (fills `act_b`, `dep_rows`, `dep_c` of the scratch).
+    fn split_dependent_fast(&self, sc: &mut Scratch) {
+        let n = sc.act_r.len();
+        sc.act_b.clear();
+        sc.dep_rows.clear();
+        sc.gl.clear();
+        sc.gl.resize(n * n, 0.0);
+        sc.gz.clear();
+        sc.gz.resize(n, 0.0);
+        sc.gcc.clear();
+        sc.gck.clear();
+        for idx in 0..n {
+            let j = sc.act_r[idx];
+            let k = sc.act_b.len();
+            for r in 0..k {
+                let mut v = self.w_mat[(sc.act_b[r], j)];
+                for c in 0..r {
+                    v -= sc.gl[r * n + c] * sc.gz[c];
+                }
+                sc.gz[r] = v / sc.gl[r * n + r];
+            }
+            let wjj = self.w_mat[(j, j)];
+            let res = wjj - sc.gz[..k].iter().map(|v| v * v).sum::<f64>();
+            if res > 1e-9 * wjj.abs().max(1e-300) {
+                for c in 0..k {
+                    sc.gl[k * n + c] = sc.gz[c];
+                }
+                sc.gl[k * n + k] = res.sqrt();
+                sc.act_b.push(j);
+            } else {
+                let base = sc.gcc.len();
+                sc.gcc.extend_from_slice(&sc.gz[..k]);
+                for r in (0..k).rev() {
+                    let mut v = sc.gcc[base + r];
+                    for rr in r + 1..k {
+                        v -= sc.gl[rr * n + r] * sc.gcc[base + rr];
+                    }
+                    sc.gcc[base + r] = v / sc.gl[r * n + r];
+                }
+                sc.dep_rows.push(j);
+                sc.gck.push(k);
+            }
+        }
+        let nb = sc.act_b.len();
+        sc.dep_c.resize(sc.dep_rows.len() * nb, 0.0);
+        let mut base = 0;
+        for d in 0..sc.dep_rows.len() {
+            let k = sc.gck[d];
+            for c in 0..k {
+                sc.dep_c[d * nb + c] = sc.gcc[base + c];
+            }
+            base += k;
         }
     }
 }
