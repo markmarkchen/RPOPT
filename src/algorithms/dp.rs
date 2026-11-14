@@ -229,6 +229,7 @@ fn region_of(maps: &RowMap, program: &MpProgram, a: Set, check_full_dim: bool) -
         active.push(maps.to_processed(r)?);
     }
     active.sort_unstable();
+    active.dedup(); // two DP rows can map to one processed row when duplicate rows were merged
     gen_cr_from_active_set(program, &active, check_full_dim)
 }
 

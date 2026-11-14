@@ -352,6 +352,7 @@ impl MpProgram {
         }
         self.process_program_constraints(1e-6);
         self.scale_constraints();
+        self.remove_duplicate_rows();
         self.find_implicit_equalities();
         self.generate_reduced_equality_constraints();
     }
@@ -407,6 +408,43 @@ impl MpProgram {
             }
             self.b[i] /= nrm;
         }
+        self.invalidate();
+    }
+
+    /// Removes duplicate rows of [A | F | b], compared after `scale_constraints` (so rows that differ
+    /// only by a positive factor are caught). A duplicated inequality is weakly redundant, so the
+    /// strong-redundancy test of `process_constraints` keeps both copies; every active set holding
+    /// both is then rank deficient, and two index sets describe the same region. The active-set
+    /// enumerations report the region twice (overlaps) and `mplcp` can return no region at all
+    /// (POP test set, e.g. pop_031, pop_052, pop_071). The first copy is kept, except that an
+    /// equality always replaces an inequality it duplicates.
+    fn remove_duplicate_rows(&mut self) {
+        let m = self.num_constraints();
+        let kept: Vec<usize> = {
+            let close = |x: f64, y: f64| (x - y).abs() <= 1e-12 * (1.0 + x.abs().max(y.abs()));
+            let same = |i: usize, j: usize| {
+                close(self.b[i], self.b[j])
+                    && self.a.row(i).iter().zip(self.a.row(j)).all(|(&x, &y)| close(x, y))
+                    && self.f.row(i).iter().zip(self.f.row(j)).all(|(&x, &y)| close(x, y))
+            };
+            let is_eq = |i: usize| self.equality_indices.contains(&i);
+            let mut kept: Vec<usize> = Vec::with_capacity(m);
+            for i in 0..m {
+                match kept.iter().position(|&j| same(i, j)) {
+                    None => kept.push(i),
+                    Some(p) if is_eq(i) && !is_eq(kept[p]) => kept[p] = i,
+                    Some(_) => {}
+                }
+            }
+            kept.sort_unstable();
+            kept
+        };
+        if kept.len() == m {
+            return;
+        }
+        let new_eq: Vec<usize> = kept.iter().enumerate().filter(|(_, i)| self.equality_indices.contains(i)).map(|(k, _)| k).collect();
+        self.reorder_rows(&kept);
+        self.equality_indices = new_eq;
         self.invalidate();
     }
 
