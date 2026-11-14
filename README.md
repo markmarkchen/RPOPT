@@ -1,12 +1,12 @@
 # RPOPT
 
-RPOPT (crate `ppopt_rs`) is a Rust rewrite of [PPOPT](https://github.com/TAMUparametric/PPOPT) (Kenefake and Pistikopoulos, TAMU), the
+RPOPT (crate `rpopt`) is a Rust rewrite of [PPOPT](https://github.com/TAMUparametric/PPOPT) (Kenefake and Pistikopoulos, TAMU), the
 Python package for multiparametric programming, with seven point location methods for evaluating the
 explicit solution online.
 
 ## What is ported
 
-| PPOPT (Python) | ppopt_rs (Rust) | notes |
+| PPOPT (Python) | RPOPT (Rust) | notes |
 |---|---|---|
 | `MPLP_Program`, `MPQP_Program` | `program::MpProgram` | same constraint processing: equalities to the top, zero rows moved to `A_t`, row scaling, implicit equalities, rank-reduced equalities, redundant rows removed by LP |
 | `MPMILP_Program`, `MPMIQP_Program`, `MITree` | `algorithms::mpmiqp::MpmiProgram` | MILP-based processing, substituted sub-problems, depth-first feasible binary enumeration |
@@ -115,8 +115,8 @@ Implementation notes:
 ## Usage
 
 ```rust
-use ppopt_rs::{solve_mpqp, MpqpAlgorithm, MpProgram};
-use ppopt_rs::point_location::{PartitionGeometry, LinearMachine, PointLocator};
+use rpopt::{solve_mpqp, MpqpAlgorithm, MpProgram};
+use rpopt::point_location::{PartitionGeometry, LinearMachine, PointLocator};
 use std::sync::Arc;
 
 let prog = Arc::new(MpProgram::from_json_file("bench/problems/di_doc_N3.json".as_ref())?);

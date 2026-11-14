@@ -1,6 +1,6 @@
 //! Splits the graph algorithm's time into its initialisation (random QP sampling) and the rest.
-use ppopt_rs::algorithms::{solve_mpqp, MpqpAlgorithm};
-use ppopt_rs::program::MpProgram;
+use rpopt::algorithms::{solve_mpqp, MpqpAlgorithm};
+use rpopt::program::MpProgram;
 use rand::SeedableRng;
 use std::sync::Arc;
 use std::time::Instant;

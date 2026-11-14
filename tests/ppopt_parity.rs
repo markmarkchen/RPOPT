@@ -1,12 +1,12 @@
 //! Parity tests ported from PPOPT's own test suite (tests/test_fixtures.py, other_tests/test_solve_mpqp.py,
 //! mpmiqp_solver_tests/test_mpmiqp.py), plus cross-checks of the point location methods.
 
-use ppopt_rs::algorithms::mpmiqp::{solve_mpmiqp_enumeration, MpmiProgram};
-use ppopt_rs::algorithms::{region_signature, solve_mpqp, MpqpAlgorithm, SolveOptions};
-use ppopt_rs::linalg::{allclose, Mat};
-use ppopt_rs::point_location::*;
-use ppopt_rs::program::MpProgram;
-use ppopt_rs::problem_generator::generate_mpqp;
+use rpopt::algorithms::mpmiqp::{solve_mpmiqp_enumeration, MpmiProgram};
+use rpopt::algorithms::{region_signature, solve_mpqp, MpqpAlgorithm, SolveOptions};
+use rpopt::linalg::{allclose, Mat};
+use rpopt::point_location::*;
+use rpopt::program::MpProgram;
+use rpopt::problem_generator::generate_mpqp;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use std::sync::Arc;

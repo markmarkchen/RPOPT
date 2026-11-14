@@ -1,5 +1,5 @@
 """
-Builds the explicit-MPC benchmark problems used to compare PPOPT (Python) with ppopt_rs (Rust).
+Builds the explicit-MPC benchmark problems used to compare PPOPT (Python) with RPOPT (Rust).
 
 Every problem is written to JSON in PPOPT's mpQP format:
 

@@ -1,5 +1,5 @@
 [package]
-name = "ppopt_rs"
+name = "rpopt"
 version = "0.1.0"
 edition = "2024"
 description = "Rust rewrite of PPOPT (multiparametric LP/QP/MILP/MIQP) with explicit-MPC point location methods"

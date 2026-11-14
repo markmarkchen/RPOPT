@@ -2,8 +2,8 @@
 //! (E, f) systems of supersets A + i of every region's active set, then times lp_feasible on them.
 //!   cargo run --release --example lp_micro -- bench/problems/sys3x2_N5.json
 
-use ppopt_rs::algorithms::{solve_mpqp, MpqpAlgorithm};
-use ppopt_rs::program::MpProgram;
+use rpopt::algorithms::{solve_mpqp, MpqpAlgorithm};
+use rpopt::program::MpProgram;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -31,13 +31,13 @@ fn main() {
         }
     }
     small_stats(&systems);
-    let feasible = systems.iter().filter(|(e, f)| ppopt_rs::solver::lp::lp_feasible(e, f, &[])).count();
+    let feasible = systems.iter().filter(|(e, f)| rpopt::solver::lp::lp_feasible(e, f, &[])).count();
     let reps = 5;
     let t0 = Instant::now();
     let mut cnt = 0;
     for _ in 0..reps {
         for (e, f) in &systems {
-            cnt += ppopt_rs::solver::lp::lp_feasible(e, f, &[]) as usize;
+            cnt += rpopt::solver::lp::lp_feasible(e, f, &[]) as usize;
         }
     }
     let dt = t0.elapsed().as_secs_f64() / (reps * systems.len()) as f64;
@@ -45,8 +45,8 @@ fn main() {
         systems.iter().map(|s| s.0.rows).sum::<usize>() as f64 / systems.len() as f64, dt * 1e6);
 }
 
-fn small_stats(systems: &[(ppopt_rs::Mat, Vec<f64>)]) {
-    use ppopt_rs::solver::lp_small::{feasible, Small};
+fn small_stats(systems: &[(rpopt::Mat, Vec<f64>)]) {
+    use rpopt::solver::lp_small::{feasible, Small};
     let (mut f, mut i, mut u) = (0, 0, 0);
     for (e, b) in systems {
         match feasible(e, b) {

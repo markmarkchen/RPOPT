@@ -1,4 +1,4 @@
-# Benchmark: ppopt_rs vs PPOPT on explicit MPC
+# Benchmark: RPOPT vs PPOPT on explicit MPC
 
 ## Problems (`mpc_problems.py`)
 
@@ -118,19 +118,21 @@ run below 200x at 90% coverage (masses2_N4 combinatorial graph, 179x, a visit-or
 
 Times in ms. "regions ok": same region count as the serial algorithm and no sampled gaps, overlaps or wrong laws at every thread count.
 
-### Point location (ns per query)
+### Point location (ns per query unless noted)
 
-| problem | regions | sequential (PPOPT algorithm) | sequential, early exit | BST | multiway (order 7) | linear machine | descriptor | hash table (16R boxes) | YANN |
-|---|---|---|---|---|---|---|---|---|---|
-| di_N10 | 11 | 74 | 33 | 41 | 36 | 29 | 41 | 22 | 76 |
-| di_N4 | 9 | 65 | 30 | 35 | 31 | 28 | 38 | 22 | 65 |
-| di_N6 | 11 | 74 | 33 | 41 | 36 | 30 | 41 | 22 | 74 |
-| di_N8 | 11 | 74 | 33 | 40 | 36 | 29 | 41 | 21 | 76 |
-| di_doc_N3 | 7 | 51 | 28 | 33 | 28 | 25 | 35 | 21 | 48 |
-| masses2_N4 | 307 | 4773 | 1252 | 180 | 135 | none exists (118 non-f2f facets) | 1038 | 65 | 4670 |
-| masses2_N6 | 901 | 13795 | 5167 | 233 | 165 | none exists (286 non-f2f facets) | 4070 | 73 | 13664 |
-| sys3x2_N3 | 211 | 1956 | 784 | 120 | 96 | none exists (6 non-f2f facets) | 667 | 37 | 1931 |
-| sys3x2_N5 | 973 | 8999 | 4338 | 147 | 113 | none exists (22 non-f2f facets) | 3476 | 46 | 9007 |
+Rust over 100 000 random parameters, PPOPT's numba `PointLocation` over 20 000; every Rust method agrees with sequential search (0 mismatches). Bold: fastest; hash table: largest grid.
+
+| problem | regions | PPOPT numba (us) | sequential (PPOPT algorithm) | sequential, early exit | BST | multiway (order 7) | linear machine | descriptor | hash table | YANN | speedup, same algorithm | speedup, fastest |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| di_doc_N3 | 7 | 5.3 | 54 | 29 | 34 | 29 | 28 | 36 | **22** | 52 | 100x | 241x |
+| di_N4 | 9 | 5.8 | 67 | 32 | 35 | 32 | 30 | 39 | **23** | 65 | 86x | 257x |
+| di_N6 | 11 | 6.1 | 79 | 35 | 42 | 37 | 32 | 42 | **23** | 79 | 77x | 263x |
+| di_N8 | 11 | 5.6 | 76 | 36 | 43 | 37 | 32 | 42 | **22** | 77 | 74x | 257x |
+| di_N10 | 11 | 5.7 | 75 | 35 | 42 | 37 | 32 | 42 | **23** | 79 | 76x | 253x |
+| masses2_N4 | 307 | 23.2 | 4,893 | 1,297 | 189 | 136 | none | 1,076 | **67** | 4,925 | 5x | 348x |
+| masses2_N6 | 901 | 63.9 | 14,113 | 5,351 | 255 | 178 | none | 4,296 | **83** | 13,989 | 5x | 770x |
+| sys3x2_N3 | 211 | 17.9 | 1,988 | 808 | 126 | 99 | none | 679 | **39** | 1,985 | 9x | 457x |
+| sys3x2_N5 | 973 | 68.5 | 9,286 | 4,488 | 163 | 119 | none | 3,559 | **51** | 9,212 | 7x | 1,345x |
 
 No exact linear machine exists for a partition that is not facet-to-facet (an argmax of affine functions is
 always face-to-face), which is the case for the four 3-D/4-D problems.

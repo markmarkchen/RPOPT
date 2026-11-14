@@ -1,4 +1,4 @@
-//! # ppopt_rs
+//! # rpopt (RPOPT)
 //!
 //! A Rust rewrite of [PPOPT](https://github.com/TAMUparametric/PPOPT), the Python package for
 //! multiparametric programming (mpLP, mpQP, mpMILP, mpMIQP), plus a family of point location

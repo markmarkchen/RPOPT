@@ -4,10 +4,10 @@
 //!
 //! cargo run --release --example explicit_mpc
 
-use ppopt_rs::algorithms::{solve_mpqp, MpqpAlgorithm};
-use ppopt_rs::linalg::Mat;
-use ppopt_rs::point_location::*;
-use ppopt_rs::program::MpProgram;
+use rpopt::algorithms::{solve_mpqp, MpqpAlgorithm};
+use rpopt::linalg::Mat;
+use rpopt::point_location::*;
+use rpopt::program::MpProgram;
 use std::sync::Arc;
 
 fn main() {
@@ -48,7 +48,7 @@ fn main() {
 
     let sol = solve_mpqp(&prog, MpqpAlgorithm::Combinatorial);
     println!("{} critical regions", sol.len());
-    std::fs::write("explicit_mpc.svg", ppopt_rs::plot::parametric_plot_svg(&sol, 600.0, 600.0)).unwrap();
+    std::fs::write("explicit_mpc.svg", rpopt::plot::parametric_plot_svg(&sol, 600.0, 600.0)).unwrap();
     println!("partition written to explicit_mpc.svg");
 
     let geom = PartitionGeometry::new(&sol);

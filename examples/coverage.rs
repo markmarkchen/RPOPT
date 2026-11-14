@@ -10,8 +10,8 @@
 //! {"done": ..., "solve_s": ..., "final": [...]} line if the run finished), the same levels are
 //! computed for PPOPT against the same samples. Prints one JSON object.
 
-use ppopt_rs::algorithms::{solve_mpqp, MpqpAlgorithm};
-use ppopt_rs::program::MpProgram;
+use rpopt::algorithms::{solve_mpqp, MpqpAlgorithm};
+use rpopt::program::MpProgram;
 use rand::{Rng, SeedableRng};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -75,12 +75,12 @@ fn main() {
     let mut sol = None;
     let t_all = Instant::now();
     loop {
-        ppopt_rs::stats::record_regions(true);
+        rpopt::stats::record_regions(true);
         let t0 = Instant::now();
         let s = solve_mpqp(&prog, algo);
         let dt = t0.elapsed().as_secs_f64();
-        ppopt_rs::stats::record_regions(false);
-        let ev = ppopt_rs::stats::take_region_events().into_iter().map(|(a, t)| (a, t.duration_since(t0).as_secs_f64())).collect();
+        rpopt::stats::record_regions(false);
+        let ev = rpopt::stats::take_region_events().into_iter().map(|(a, t)| (a, t.duration_since(t0).as_secs_f64())).collect();
         runs.push((dt, ev));
         if sol.is_none() {
             sol = Some(s);
@@ -100,7 +100,7 @@ fn main() {
     let mut covered = 0usize;
     for _ in 0..n_samples {
         let th: Vec<f64> = lo.iter().zip(&hi).map(|(l, h)| rng.gen_range(*l..=*h)).collect();
-        if !(0..prog.a_t.rows).all(|i| ppopt_rs::linalg::dot(prog.a_t.row(i), &th) <= prog.b_t[i]) {
+        if !(0..prog.a_t.rows).all(|i| rpopt::linalg::dot(prog.a_t.row(i), &th) <= prog.b_t[i]) {
             continue;
         }
         in_theta += 1;

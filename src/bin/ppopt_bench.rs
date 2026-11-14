@@ -4,9 +4,9 @@
 //! Usage:
 //!   ppopt_bench <problems_dir> <out.json> [--only a,b] [--algos x,y] [--queries N] [--no-pl] [--threads T]
 
-use ppopt_rs::algorithms::{region_signature, solve_mpqp_with, MpqpAlgorithm, SolveOptions};
-use ppopt_rs::point_location::*;
-use ppopt_rs::program::MpProgram;
+use rpopt::algorithms::{region_signature, solve_mpqp_with, MpqpAlgorithm, SolveOptions};
+use rpopt::point_location::*;
+use rpopt::program::MpProgram;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use serde_json::{json, Value};
@@ -88,20 +88,20 @@ fn main() {
             let mut times = vec![];
             let mut sol;
             let start = Instant::now();
-            let lp0 = ppopt_rs::solver::lp::LP_CALLS.load();
+            let lp0 = rpopt::solver::lp::LP_CALLS.load();
             let mut lp_per_run = 0u64;
-            let (pl0, pq0) = ppopt_rs::stats::snapshot();
-            let pr0 = ppopt_rs::stats::ranks();
+            let (pl0, pq0) = rpopt::stats::snapshot();
+            let pr0 = rpopt::stats::ranks();
             let mut ppopt_ops = (0u64, 0u64);
             let mut ppopt_ranks = 0u64;
             loop {
                 let t0 = Instant::now();
                 let s = solve_mpqp_with(&prog, algo, &opts);
                 if times.is_empty() {
-                    lp_per_run = ppopt_rs::solver::lp::LP_CALLS.load() - lp0;
-                    let (pl1, pq1) = ppopt_rs::stats::snapshot();
+                    lp_per_run = rpopt::solver::lp::LP_CALLS.load() - lp0;
+                    let (pl1, pq1) = rpopt::stats::snapshot();
                     ppopt_ops = (pl1 - pl0, pq1 - pq0);
-                    ppopt_ranks = ppopt_rs::stats::ranks() - pr0;
+                    ppopt_ranks = rpopt::stats::ranks() - pr0;
                 }
                 times.push(t0.elapsed().as_secs_f64());
                 sol = Some(s);
@@ -255,7 +255,7 @@ fn main() {
 
 /// Sampled solution quality: (feasible points in no region, points strictly inside >= 2 regions,
 /// points whose region law disagrees with a direct QP solve).
-fn quality(prog: &MpProgram, sol: &ppopt_rs::Solution, n: usize) -> (usize, usize, usize) {
+fn quality(prog: &MpProgram, sol: &rpopt::Solution, n: usize) -> (usize, usize, usize) {
     let nt = prog.num_t();
     let (lo, hi) = theta_box(prog);
     let mut rng = StdRng::seed_from_u64(11);
@@ -270,7 +270,7 @@ fn quality(prog: &MpProgram, sol: &ppopt_rs::Solution, n: usize) -> (usize, usiz
         match (sol.get_region(&th), &direct) {
             (None, Some(_)) => gaps += 1,
             (Some(r), Some(d)) => {
-                if !ppopt_rs::linalg::allclose(&d.sol, &r.evaluate(&th), 1e-5, 1e-6) {
+                if !rpopt::linalg::allclose(&d.sol, &r.evaluate(&th), 1e-5, 1e-6) {
                     wrong += 1;
                 }
             }
@@ -289,11 +289,11 @@ fn theta_box(prog: &MpProgram) -> (Vec<f64>, Vec<f64>) {
     for k in 0..n {
         let mut c = vec![0.0; n];
         c[k] = 1.0;
-        if let Some(s) = ppopt_rs::solver::lp::solve_lp(Some(&c), &prog.a_t, &prog.b_t, &[]) {
+        if let Some(s) = rpopt::solver::lp::solve_lp(Some(&c), &prog.a_t, &prog.b_t, &[]) {
             lo[k] = s.obj;
         }
         c[k] = -1.0;
-        if let Some(s) = ppopt_rs::solver::lp::solve_lp(Some(&c), &prog.a_t, &prog.b_t, &[]) {
+        if let Some(s) = rpopt::solver::lp::solve_lp(Some(&c), &prog.a_t, &prog.b_t, &[]) {
             hi[k] = -s.obj;
         }
     }

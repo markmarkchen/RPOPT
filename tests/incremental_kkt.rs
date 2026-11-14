@@ -1,8 +1,8 @@
 //! The bordered update of `algorithms::incremental` must reproduce the KKT rows of `region_rows`.
 
-use ppopt_rs::algorithms::incremental::ParentInfo;
-use ppopt_rs::algorithms::{solve_mpqp, MpqpAlgorithm};
-use ppopt_rs::program::MpProgram;
+use rpopt::algorithms::incremental::ParentInfo;
+use rpopt::algorithms::{solve_mpqp, MpqpAlgorithm};
+use rpopt::program::MpProgram;
 use std::sync::Arc;
 
 #[test]
@@ -23,7 +23,7 @@ fn bordered_update_matches_direct_rows() {
                 }
                 let Some(child) = info.child(&prog, i) else { continue };
                 // λ-infeasible children carry no rows; compare the others
-                let ppopt_rs::algorithms::incremental::ChildKkt::Region(child) = child else { continue };
+                let rpopt::algorithms::incremental::ChildKkt::Region(child) = child else { continue };
                 let mut b = r.active_set.clone();
                 b.push(i);
                 b.sort_unstable();
