@@ -1,7 +1,7 @@
 //! Port of `ppopt.mp_solvers.solver_utils`.
 
 use crate::critical_region::CriticalRegion;
-use crate::linalg::{rank, Mat};
+use crate::linalg::{dot, is_full_rank_rows, rank, Cholesky, Mat};
 use crate::mpqp_utils::gen_cr_from_active_set;
 use crate::program::MpProgram;
 use crate::solution::Solution;
@@ -238,6 +238,21 @@ pub fn find_sub_active_set(program: &MpProgram, active_set: &[usize]) -> Vec<usi
 
 /// (Chebyshev center, normal, radius) of every facet of {x : A x <= b}.
 pub fn get_facet_centers(a: &Mat, b: &[f64]) -> Vec<(Vec<f64>, Vec<f64>, f64)> {
+    get_facet_centers_degen(a, b, None)
+}
+
+/// Is there another row of [A | b] on the same hyperplane as row `k` (a duplicated facet)?
+fn has_coincident_row(a: &Mat, b: &[f64], k: usize) -> bool {
+    let nk = crate::linalg::norm(a.row(k));
+    (0..a.rows).any(|j| {
+        let nj = crate::linalg::norm(a.row(j));
+        j != k && (0..a.cols).all(|c| (a[(k, c)] / nk - a[(j, c)] / nj).abs() < 1e-9) && (b[k] / nk - b[j] / nj).abs() < 1e-9
+    })
+}
+
+/// `get_facet_centers` that flags in `degen` a facet skipped because another row of the region
+/// lies on the same hyperplane (two constraints becoming active together: degenerate).
+pub fn get_facet_centers_degen(a: &Mat, b: &[f64], degen: Option<&std::sync::atomic::AtomicBool>) -> Vec<(Vec<f64>, Vec<f64>, f64)> {
     let mut out = vec![];
     for k in 0..a.rows {
         let (theta, radius) = if a.cols == 1 {
@@ -250,6 +265,11 @@ pub fn get_facet_centers(a: &Mat, b: &[f64]) -> Vec<(Vec<f64>, Vec<f64>, f64)> {
             }
         };
         if radius.abs() <= 1e-12 {
+            if let Some(d) = degen {
+                if has_coincident_row(a, b, k) {
+                    d.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+            }
             continue;
         }
         out.push((theta, a.row(k).to_vec(), radius));
@@ -283,6 +303,110 @@ pub fn fathem_facet_claim(
     current_active_set: &[usize],
     cand_sol: Option<&Solution>,
 ) -> Option<CriticalRegion> {
+    fathem_facet_degen(center, normal, radius, program, indexed, claimed, current_active_set, cand_sol, None)
+}
+
+/// Deterministic pseudo-random weight of constraint `j` (splitmix64), in (0, 1). Generic weights
+/// select a regular triangulation of the multiplier cone at a degenerate vertex.
+fn weight(j: usize) -> f64 {
+    let mut z = (j as u64).wrapping_add(0x9E37_79B9_7F4A_7C15).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z ^= z >> 30;
+    z = z.wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^= z >> 27;
+    ((z >> 11) as f64 + 0.5) / (1u64 << 53) as f64
+}
+
+fn combos_into(items: &[usize], k: usize, start: usize, cur: &mut Vec<usize>, out: &mut Vec<Vec<usize>>, cap: usize) {
+    if out.len() >= cap {
+        return;
+    }
+    if cur.len() == k {
+        out.push(cur.clone());
+        return;
+    }
+    for i in start..items.len() {
+        if items.len() - i < k - cur.len() {
+            break;
+        }
+        cur.push(items[i]);
+        combos_into(items, k, i + 1, cur, out, cap);
+        cur.pop();
+    }
+}
+
+/// Canonical basis of a degenerate (dependent or over-determined) active set at `theta`.
+///
+/// The optimal multipliers at a degenerate point are the polyhedron {l >= 0 : A_S' l = g} and the
+/// critical region of a basis B is the set of theta with an optimal multiplier supported on B, so
+/// different bases give overlapping regions (the facet-to-facet property fails; Spjotvold, Tondel,
+/// Johansen 2006). The basis is therefore the optimal basis of min w'l over that polyhedron for a
+/// fixed generic weight w (Bemporad 2015 / Jones-Morari 2006 use the same idea in lexicographic
+/// form): it is primal feasible at theta (l_B >= 0) and dual feasible (reduced costs
+/// w_j - w_B' A_B^{-T} a_j >= 0, independent of theta). Dual feasible bases are the cells of a
+/// regular triangulation of the cone, so every theta has exactly one and the regions are disjoint.
+pub fn canonical_basis(program: &MpProgram, active: &[usize], theta: &[f64]) -> Option<Vec<usize>> {
+    let eq = &program.equality_indices;
+    let ineq: Vec<usize> = active.iter().cloned().filter(|i| !eq.contains(i)).collect();
+    let mut all: Vec<usize> = eq.clone();
+    all.extend(ineq.iter().cloned());
+    let r = rank(&program.a.select_rows(&all));
+    if r < eq.len() {
+        return None;
+    }
+    let k = r - eq.len();
+    let mut cands = vec![];
+    combos_into(&ineq, k, 0, &mut vec![], &mut cands, 20_000);
+    let neq = eq.len();
+    for c in cands {
+        let mut b: Vec<usize> = eq.clone();
+        b.extend(c);
+        if !is_full_rank_rows(&program.a, &b) {
+            continue;
+        }
+        // reduced costs of the dependent active constraints (independent of theta)
+        let ab = program.a.select_rows(&b);
+        let g = ab.matmul(&ab.transpose());
+        let Some(ch) = Cholesky::new(&g) else { continue };
+        let wb: Vec<f64> = b.iter().map(|&i| weight(i)).collect();
+        let mut ok = true;
+        for &j in &ineq {
+            if b.contains(&j) {
+                continue;
+            }
+            let aj = program.a.row(j);
+            let y = ch.solve(&ab.matvec(aj));
+            let rc = weight(j) - dot(&wb, &y);
+            if rc < -1e-10 {
+                ok = false;
+                break;
+            }
+        }
+        if !ok {
+            continue;
+        }
+        let Some(law) = program.optimal_control_law(&b) else { continue };
+        let lam_ok = (neq..law.a_l.rows).all(|i| dot(law.a_l.row(i), theta) + law.b_l[i] >= -1e-9);
+        if lam_ok {
+            return Some(b);
+        }
+    }
+    None
+}
+
+/// `fathem_facet_claim` that records in `degen` that a degenerate (over-determined or
+/// rank-deficient) active set was met, and resolves such sets with `canonical_basis`.
+#[allow(clippy::too_many_arguments)]
+pub fn fathem_facet_degen(
+    center: &[f64],
+    normal: &[f64],
+    radius: f64,
+    program: &MpProgram,
+    indexed: &HashSet<Vec<usize>>,
+    claimed: Option<&std::sync::Mutex<HashSet<Vec<usize>>>>,
+    current_active_set: &[usize],
+    cand_sol: Option<&Solution>,
+    degen: Option<&std::sync::atomic::AtomicBool>,
+) -> Option<CriticalRegion> {
     let mut dist = radius * 1e-6;
     while dist < radius {
         dist *= 2.0;
@@ -298,9 +422,16 @@ pub fn fathem_facet_claim(
             }
             return None;
         };
-        let mut projected = active;
-        if projected.len() > program.num_x() {
+        let degenerate = active.len() > program.num_x();
+        let mut projected = active.clone();
+        if degenerate {
             projected = find_sub_active_set(program, &projected);
+            if let Some(d) = degen {
+                d.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+            if let Some(b) = canonical_basis(program, &active, &test) {
+                projected = b;
+            }
         }
         if projected == current_active_set {
             continue;
@@ -310,7 +441,22 @@ pub fn fathem_facet_claim(
         }
         crate::stats::rank();
         if !program.check_active_set_rank(&projected) {
-            continue;
+            if degenerate {
+                continue;
+            }
+            // rank-deficient (LICQ violating) active set with at most n_x constraints
+            if let Some(d) = degen {
+                d.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+            match canonical_basis(program, &active, &test) {
+                Some(b) if b != current_active_set => {
+                    if indexed.contains(&b) {
+                        return None;
+                    }
+                    projected = b;
+                }
+                _ => continue,
+            }
         }
         if let Some(s) = cand_sol {
             if s.critical_regions.iter().any(|r| r.is_inside(&test, 0.0)) {
