@@ -45,6 +45,7 @@ pub static LP_CALLS: crate::stats::Sharded = crate::stats::Sharded::new();
 /// `c = None` is a pure feasibility problem.
 pub fn solve_lp(c: Option<&[f64]>, a: &Mat, b: &[f64], eq: &[usize]) -> Option<LpSolution> {
     LP_CALLS.add(1);
+    capture::hook(capture::Call::SolveLp, c, a, b, eq, None);
     let core = solve(c, a, b, eq, Want::Full)?;
     let m = a.rows;
     let x = core.x;
@@ -58,6 +59,7 @@ pub fn solve_lp(c: Option<&[f64]>, a: &Mat, b: &[f64], eq: &[usize]) -> Option<L
 /// Feasibility of {A x <= b, A[eq] x = b[eq]} without building the solution.
 pub fn lp_feasible(a: &Mat, b: &[f64], eq: &[usize]) -> bool {
     LP_CALLS.add(1);
+    capture::hook(capture::Call::Feasible, None, a, b, eq, None);
     match small_feasible(a, b, eq) {
         super::lp_small::Small::Feasible(_) => return true,
         super::lp_small::Small::Infeasible => return false,
@@ -77,12 +79,14 @@ fn small_feasible(a: &Mat, b: &[f64], eq: &[usize]) -> super::lp_small::Small {
 /// `lp_feasible` starting the simplex from `x0` (see `lp_core::solve_from`).
 pub fn lp_feasible_from(a: &Mat, b: &[f64], eq: &[usize], x0: &[f64]) -> bool {
     LP_CALLS.add(1);
+    capture::hook(capture::Call::FeasibleFrom, None, a, b, eq, Some(x0));
     super::lp_core::solve_from(None, a, b, eq, Some(x0), Want::Feasible).is_some()
 }
 
 /// A feasible point (or None), starting the simplex from `x0` when given.
 pub fn lp_feasible_point(a: &Mat, b: &[f64], eq: &[usize], x0: Option<&[f64]>) -> Option<Vec<f64>> {
     LP_CALLS.add(1);
+    capture::hook(capture::Call::FeasiblePoint, None, a, b, eq, x0);
     if eq.is_empty() && a.cols <= 4 {
         let shifted;
         let bb: &[f64] = match x0 {
@@ -112,6 +116,7 @@ pub fn lp_feasible_point(a: &Mat, b: &[f64], eq: &[usize], x0: Option<&[f64]>) -
 /// `bs[i] = b[i] - a.row(i)·x0` (computed once by callers that start several LPs at `x0`).
 pub fn lp_feasible_point_shifted(a: &Mat, bs: &[f64], eq: &[usize], x0: &[f64]) -> Option<Vec<f64>> {
     LP_CALLS.add(1);
+    capture::hook(capture::Call::FeasiblePointShifted, None, a, bs, eq, Some(x0));
     if eq.is_empty() && a.cols <= 4 {
         return match super::lp_small::feasible(a, bs) {
             super::lp_small::Small::Feasible(mut z) => {
@@ -130,13 +135,140 @@ pub fn lp_feasible_point_shifted(a: &Mat, bs: &[f64], eq: &[usize], x0: &[f64]) 
 /// `lp_point` starting the simplex from `x0`.
 pub fn lp_point_from(c: Option<&[f64]>, a: &Mat, b: &[f64], eq: &[usize], x0: &[f64]) -> Option<Vec<f64>> {
     LP_CALLS.add(1);
+    capture::hook(capture::Call::PointFrom, c, a, b, eq, Some(x0));
     super::lp_core::solve_from(c, a, b, eq, Some(x0), Want::Point).map(|c| c.x)
 }
 
 /// Optimal point only (no duals, slacks or active set).
 pub fn lp_point(c: Option<&[f64]>, a: &Mat, b: &[f64], eq: &[usize]) -> Option<Vec<f64>> {
     LP_CALLS.add(1);
+    capture::hook(capture::Call::Point, c, a, b, eq, None);
     solve(c, a, b, eq, Want::Point).map(|c| c.x)
+}
+
+/// Capture of the LP instances the entry points receive (benchmarking only, see
+/// `examples/lp_replay.rs`). Off by default; when off each entry point pays one relaxed load.
+#[doc(hidden)]
+pub mod capture {
+    use crate::linalg::Mat;
+    use std::collections::HashMap;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Mutex;
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    #[repr(u8)]
+    pub enum Call {
+        SolveLp = 0,
+        Feasible = 1,
+        FeasibleFrom = 2,
+        FeasiblePoint = 3,
+        FeasiblePointShifted = 4,
+        PointFrom = 5,
+        Point = 6,
+    }
+
+    impl Call {
+        pub fn from_u8(v: u8) -> Call {
+            use Call::*;
+            [SolveLp, Feasible, FeasibleFrom, FeasiblePoint, FeasiblePointShifted, PointFrom, Point][v as usize]
+        }
+    }
+
+    /// One captured call; matrices and vectors are interned in `Log` (ids index `mats` / `vecs`).
+    #[derive(Clone, Debug)]
+    pub struct Rec {
+        pub call: Call,
+        pub a: u32,
+        pub b: u32,
+        pub c: Option<u32>,
+        pub x0: Option<u32>,
+        pub eq: Vec<u32>,
+    }
+
+    #[derive(Default)]
+    pub struct Log {
+        pub mats: Vec<Mat>,
+        pub vecs: Vec<Vec<f64>>,
+        pub recs: Vec<Rec>,
+        mat_ix: HashMap<u64, Vec<u32>>,
+        vec_ix: HashMap<u64, Vec<u32>>,
+    }
+
+    fn hash_f64(seed: u64, v: &[f64]) -> u64 {
+        let mut h = seed ^ (v.len() as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        for x in v {
+            h = (h.rotate_left(5) ^ x.to_bits()).wrapping_mul(0x517c_c1b7_2722_0a95);
+        }
+        h
+    }
+
+    fn same(x: &[f64], y: &[f64]) -> bool {
+        x.len() == y.len() && x.iter().zip(y).all(|(u, v)| u.to_bits() == v.to_bits())
+    }
+
+    impl Log {
+        fn mat(&mut self, a: &Mat) -> u32 {
+            let h = hash_f64(a.rows as u64 * 1_000_003 + a.cols as u64, &a.data);
+            let ids = self.mat_ix.entry(h).or_default();
+            for &id in ids.iter() {
+                let m = &self.mats[id as usize];
+                if m.rows == a.rows && m.cols == a.cols && same(&m.data, &a.data) {
+                    return id;
+                }
+            }
+            let id = self.mats.len() as u32;
+            ids.push(id);
+            self.mats.push(a.clone());
+            id
+        }
+
+        fn vec(&mut self, v: &[f64]) -> u32 {
+            let h = hash_f64(7, v);
+            let ids = self.vec_ix.entry(h).or_default();
+            for &id in ids.iter() {
+                if same(&self.vecs[id as usize], v) {
+                    return id;
+                }
+            }
+            let id = self.vecs.len() as u32;
+            ids.push(id);
+            self.vecs.push(v.to_vec());
+            id
+        }
+    }
+
+    pub static ON: AtomicBool = AtomicBool::new(false);
+    pub static LOG: Mutex<Option<Log>> = Mutex::new(None);
+
+    pub fn start() {
+        *LOG.lock().unwrap() = Some(Log::default());
+        ON.store(true, Ordering::SeqCst);
+    }
+
+    pub fn stop() -> Log {
+        ON.store(false, Ordering::SeqCst);
+        LOG.lock().unwrap().take().unwrap_or_default()
+    }
+
+    #[inline(always)]
+    pub(super) fn hook(call: Call, c: Option<&[f64]>, a: &Mat, b: &[f64], eq: &[usize], x0: Option<&[f64]>) {
+        if ON.load(Ordering::Relaxed) {
+            record(call, c, a, b, eq, x0);
+        }
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn record(call: Call, c: Option<&[f64]>, a: &Mat, b: &[f64], eq: &[usize], x0: Option<&[f64]>) {
+        let mut g = LOG.lock().unwrap();
+        let Some(log) = g.as_mut() else { return };
+        let a = log.mat(a);
+        let b = log.vec(b);
+        let c = c.map(|c| log.vec(c));
+        let x0 = x0.map(|x| log.vec(x));
+        let eq = eq.iter().map(|&e| e as u32).collect();
+        log.recs.push(Rec { call, a, b, c, x0, eq });
+    }
 }
 
 #[cfg(test)]
