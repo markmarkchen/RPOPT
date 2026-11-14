@@ -5,6 +5,7 @@
 \usepackage{textcomp}
 \usepackage[margin=2.0cm]{geometry}
 \usepackage{microtype}
+\DisableLigatures[-]{encoding = *, family = tt*}
 \usepackage{booktabs}
 \usepackage{longtable}
 \usepackage{etoolbox}
@@ -12,19 +13,30 @@
 \usepackage{tabularx}
 \usepackage{array}
 \usepackage{enumitem}
+\usepackage{float}
+\usepackage{needspace}
+\setcounter{topnumber}{3}\setcounter{totalnumber}{4}\renewcommand{\topfraction}{.85}\renewcommand{\textfraction}{.1}\renewcommand{\floatpagefraction}{.75}
+\usepackage{etoolbox}
+\pretocmd{\section}{\Needspace{7\baselineskip}}{}{}
+\pretocmd{\subsection}{\Needspace{6\baselineskip}}{}{}
+\makeatletter\setlength\@fptop{0pt}\setlength\@fpsep{18pt}\setlength\@fpbot{0pt plus 1fil}\makeatother
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\providecommand{\FloatBarrier}{\clearpage}
 \usepackage{graphicx}
 \usepackage{amsmath,amssymb}
 \usepackage[font=small,labelfont=bf,labelsep=period]{caption}
 \usepackage[hidelinks]{hyperref}
 \setlist{itemsep=1pt,topsep=3pt,parsep=0pt}
 \setlength{\parskip}{4pt}
+\widowpenalty=10000 \clubpenalty=10000
 \setlength{\parindent}{0pt}
 \setlength{\emergencystretch}{2em}
 \renewcommand{\arraystretch}{1.08}
 \newcommand{\busy}{$^\dagger$}
 \newcommand{\rpopt}{RPOPT}
 \newcommand{\ppopt}{PPOPT}
-\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\code}[1]{{\let\_\bu\texttt{\spaceskip=\fontdimen2\font plus .3em #1}}}
+\newcommand{\bu}{\textunderscore\hspace{0pt}}
 \newcolumntype{Y}{>{\raggedright\arraybackslash}X}
 \graphicspath{{figures/}}
 \setcounter{tocdepth}{2}
@@ -63,11 +75,11 @@ binary format, and exposes \ppopt{}-compatible Python bindings (\code{rpopt.inst
 \ppopt{} GitHub \code{main} with Gurobi 12 and quadprog, on one Apple M4 Max with no other load, unless marked
 \busy{} (see \S\ref{sec:load}).
 
-\begin{table}[htbp]
+\begin{table}[!htbp]
 \centering\small
 \caption{Headline results. \ppopt{}: GitHub \code{main}, Gurobi 12 (LPs), quadprog (QPs). \rpopt{} times are the faster median of two full runs. Sources: \code{bench/results/speedup.md}, \code{mplp\_speedup.md}, \code{mplp\_same\_algorithm.md}, the two scoreboard files.}
 \label{tab:headline}
-\begin{tabularx}{\textwidth}{@{}Y p{4.6cm}@{}}
+\begin{tabularx}{\textwidth}{@{}Y L{4.8cm}@{}}
 \toprule
 comparison & result \\
 \midrule
@@ -81,6 +93,24 @@ mpLP, same algorithm, 23 pairs & median 261x (16x to 17,227x) \\
 point location, per query (hash table against PPOPT's numba \code{PointLocation}) & 5 to 68~\textmu s against 9 to 32 ns: about 590x to 3,600x \\
 release-to-release (frozen commit \code{778cdb9}), mpLP, 54 pairs & median \textbf{3.48x}, none below 0.95x \\
 release-to-release, mpQP, 60 pairs & median \textbf{1.10x}, none below 0.95x \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Table~\ref{tab:solvers} breaks the same-algorithm speedup down by each of \ppopt{}'s four original solvers, for mpQP and for mpLP.
+
+\begin{table}[!htbp]
+\centering\small
+\caption{Speedup of \rpopt{} (one thread) over each \ppopt{} solver, same algorithm: median (range) and number of runs \ppopt{} finished. Sources: \code{bench/results/speedup.md} and \code{mplp\_same\_algorithm.md}.}
+\label{tab:solvers}
+\begin{tabularx}{\textwidth}{@{}L{3.3cm} Y Y@{}}
+\toprule
+\ppopt{} solver & mpQP & mpLP \\
+\midrule
+\code{combinatorial} & 1,001x (705x to 1,665x), 5 runs; plus 4 runs \ppopt{} did not finish: $>$1,049x to $>$2,398x & 922x (780x to 1,475x), 3 runs \\
+\code{graph} & 1,065x (575x to 2,577x), 9 runs & 2,882x (1,175x to 17,227x), 5 runs \\
+\code{geometric} & 1,014x (559x to 2,257x), 9 runs & 231x (185x to 968x), 5 runs where \ppopt{}'s answer is gap-free; 16x to 351x on the 7 where \ppopt{}'s \code{geometric} leaves 0.3\% to 77\% uncovered \\
+\code{combinatorial\_graph} & 1,020x (389x to 2,703x), 9 runs & 234x (213x to 261x), 3 runs \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -151,11 +181,13 @@ Every exact method returns the same critical regions as \ppopt{} on non-degenera
 
 \subsection{Exact mpQP and mpLP}
 
-\begin{table}[htbp]
+Table~\ref{tab:exact} lists every exact solver with its literature source, whether it comes from \ppopt{}, and its main properties.
+
+\begin{table}[!htbp]
 \centering\small
 \caption{Exact mpQP and mpLP solvers. ``PPOPT'' in the origin column means the algorithm exists in \ppopt{} and is ported; ``paper'' means it is new in \rpopt{}.}
 \label{tab:exact}
-\begin{tabularx}{\textwidth}{@{}p{3.9cm} p{4.5cm} l Y@{}}
+\begin{tabularx}{\textwidth}{@{}L{3.9cm} L{4.5cm} l Y@{}}
 \toprule
 name & method & origin & notes \\
 \midrule
@@ -168,7 +200,7 @@ name & method & origin & notes \\
 \code{mplcp}, \code{mplcp\_parallel} & mp-LCP pivoting, Jones and Morari~\cite{jones2006mplcp} & paper & fastest serial mpQP solver on the benchmark; lexicographic perturbation gives no gaps or overlaps at degenerate vertices; mpLPs are routed to \code{mplp\_lex} \\
 \code{mplcp\_enum} & Herceg, Jones, Kvasnica, Morari~\cite{herceg2015enumeration} & paper & basis enumeration for general $M$ (mpQP and mpLP); exponential \\
 \code{mplp\_lex} & Jones, Kerrigan, Maciejowski~\cite{jones2007lexicographic} & paper & lexicographic mpLP: unique, gap-free and overlap-free partition on degenerate mpLPs; fastest mpLP solver on the benchmark \\
-\code{algorithms::dp::solve\_mpc\_dp} & active-set dynamic programming, Mitze and M{\"o}nnigmann~\cite{mitze2020dp,mitze2022improved,mitze2023symmetries} & paper & works over the MPC horizon and takes the MPC model (\code{mpc::MpcProblem}) \\
+\code{algorithms::\allowbreak{}dp::\allowbreak{}solve\_mpc\_dp} & active-set dynamic programming, Mitze and M{\"o}nnigmann~\cite{mitze2020dp,mitze2022improved,mitze2023symmetries} & paper & works over the MPC horizon and takes the MPC model (\code{mpc::\allowbreak{}MpcProblem}) \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -189,38 +221,42 @@ The families differ in how they find candidate active sets (Table~\ref{tab:exact
 
 \subsection{Approximate and supporting methods}
 
-\begin{table}[htbp]
+Table~\ref{tab:approx} lists the approximate methods and the region post-processing functions, with the paper each one follows. The module path of each function is part of its name.
+
+\begin{table}[!htbp]
 \centering\small
 \caption{Approximate methods and region post-processing.}
 \label{tab:approx}
-\begin{tabularx}{\textwidth}{@{}p{4.6cm} p{4.2cm} Y@{}}
+\begin{tabularx}{\textwidth}{@{}L{4.6cm} L{4.2cm} Y@{}}
 \toprule
 function & method & notes \\
 \midrule
-\code{algorithms::mpr::solve\_mpqp\_mpr} & randomized MPR, Falsone, Bianchi, Prandini~\cite{falsone2026mpr} & probabilistic coverage guarantee; returns only exact regions \\
-\code{algorithms::approx::solve\_mpqp\_approx} & Bemporad and Filippi~\cite{bemporad2003approximate} & value error within $\varepsilon$; fewer regions only at large $\varepsilon$ \\
+\code{algorithms::\allowbreak{}mpr::\allowbreak{}solve\_mpqp\_mpr} & randomized MPR, Falsone, Bianchi, Prandini~\cite{falsone2026mpr} & probabilistic coverage guarantee; returns only exact regions \\
+\code{algorithms::\allowbreak{}approx::\allowbreak{}solve\_mpqp\_approx} & Bemporad and Filippi~\cite{bemporad2003approximate} & value error within $\varepsilon$; fewer regions only at large $\varepsilon$ \\
 \code{trimming} & Hou and You~\cite{hou2024trim} & constraint trimming for sequences of related QPs (closed-loop MPC) \\
-\code{lowrank::compress} & Nielsen and Axehill~\cite{nielsen2016reduced} & about 2x less memory for the stored laws and facets, about 10x slower evaluation \\
-\code{reduction::merge\_regions} & optimal region merging, Geyer, Torrisi, Morari~\cite{geyer2008optimal} & merges regions with the same law of the target outputs; \code{ReduceTarget::FirstInputs(k)} merges by the first control move only (7 to 11 regions become 3 on the double integrators); greedy fallback above 20,000 arrangement cells \\
-\code{reduction::clip\_reduce} & clipping, Kvasnica and Fikar~\cite{kvasnica2012clipping} & removes saturated regions and clips the law; 33\% to 60\% fewer regions on the larger problems, 1 region on the double integrators \\
+\code{lowrank::\allowbreak{}compress} & Nielsen and Axehill~\cite{nielsen2016reduced} & about 2x less memory for the stored laws and facets, about 10x slower evaluation \\
+\code{reduction::\allowbreak{}merge\_regions} & optimal region merging, Geyer, Torrisi, Morari~\cite{geyer2008optimal} & merges regions with the same law of the target outputs; \code{ReduceTarget::\allowbreak{}FirstInputs(k)} merges by the first control move only (7 to 11 regions become 3 on the double integrators); greedy fallback above 20,000 arrangement cells \\
+\code{reduction::\allowbreak{}clip\_reduce} & clipping, Kvasnica and Fikar~\cite{kvasnica2012clipping} & removes saturated regions and clips the law; 33\% to 60\% fewer regions on the larger problems, 1 region on the double integrators \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
 \subsection{Mixed integer}
 
-\begin{table}[htbp]
+Table~\ref{tab:mi} lists the mixed-integer methods, from \ppopt{}'s enumeration to the exact mpMIQP partition. They cover mpMILP and mpMIQP, with overlapping and non-overlapping partitions.
+
+\begin{table}[!htbp]
 \centering\small
 \caption{Mixed-integer methods.}
 \label{tab:mi}
-\begin{tabularx}{\textwidth}{@{}p{5.6cm} p{4.3cm} Y@{}}
+\begin{tabularx}{\textwidth}{@{}L{5.6cm} L{4.3cm} Y@{}}
 \toprule
 function & method & notes \\
 \midrule
-\code{mpmiqp::solve\_mpmiqp\_enumeration} & \ppopt{}'s enumeration (MITree) & mpMILP and mpMIQP, overlapping partition \\
-\code{mpmilp\_bb::solve\_mpmilp\_enumeration\_compared} & Dua and Pistikopoulos~\cite{dua2000mpmilp} comparison & non-overlapping mpMILP partition (dominance LP plus split on the equal-objective hyperplane) \\
-\code{mpmilp\_bb::solve\_mpmilp\_bb}, \code{solve\_mpmilp\_bb\_general} & Oberdieck, Wittmann-Hohlbein, Pistikopoulos~\cite{oberdieck2014branch} & branch and bound with bound-based pruning; native branching on general integers \\
-\code{mpmiqp\_exact::solve\_mpmiqp\_exact} & Oberdieck and Pistikopoulos~\cite{oberdieck2015exact}, exact comparison & non-overlapping mpMIQP partition: overlaps are split on the quadric $\Delta z(\theta)=0$, stored exactly on the piece; emptiness of quadric pieces by spatial branch and bound \\
+\code{mpmiqp::\allowbreak{}solve\_mpmiqp\_enumeration} & \ppopt{}'s enumeration (MITree) & mpMILP and mpMIQP, overlapping partition \\
+\code{mpmilp\_bb::\allowbreak{}solve\_mpmilp\_enumeration\_compared} & Dua and Pistikopoulos~\cite{dua2000mpmilp} comparison & non-overlapping mpMILP partition (dominance LP plus split on the equal-objective hyperplane) \\
+\code{mpmilp\_bb::\allowbreak{}solve\_mpmilp\_bb}, \code{solve\_mpmilp\_bb\_general} & Oberdieck, Wittmann-Hohlbein, Pistikopoulos~\cite{oberdieck2014branch} & branch and bound with bound-based pruning; native branching on general integers \\
+\code{mpmiqp\_exact::\allowbreak{}solve\_mpmiqp\_exact} & Oberdieck and Pistikopoulos~\cite{oberdieck2015exact}, exact comparison & non-overlapping mpMIQP partition: overlaps are split on the quadric $\Delta z(\theta)=0$, stored exactly on the piece; emptiness of quadric pieces by spatial branch and bound \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -228,17 +264,17 @@ function & method & notes \\
 \subsection{Point location}
 \label{sec:plmethods}
 
-All locators implement \code{point\_location::PointLocator}, whose method \code{locate(theta)} returns the region index
+All locators implement \code{point\_location::\allowbreak{}PointLocator}, whose method \code{locate(theta)} returns the region index
 or none. Every method is exact: the candidate region is always verified with the same halfspace test. All methods share one tie
 rule: a region that contains $\theta$ strictly wins over one that contains it only within the tolerance, so they return the
-same region as \code{Solution::get\_region} even on facets. Region classification for the trees and the hash table is
-conservative: interiors are certified, and thin regions are kept as candidates rather than dropped.
+same region as \code{Solution::\allowbreak{}get\_region} even on facets. Region classification for the trees and the hash table is
+conservative: interiors are certified, and thin regions are kept as candidates rather than dropped. Table~\ref{tab:pl} lists the methods.
 
-\begin{table}[htbp]
+\begin{table}[!htbp]
 \centering\small
 \caption{Point location methods (twelve locators in total, counting variants).}
 \label{tab:pl}
-\begin{tabularx}{\textwidth}{@{}p{5.3cm} l Y@{}}
+\begin{tabularx}{\textwidth}{@{}L{5.3cm} l Y@{}}
 \toprule
 method & module & reference \\
 \midrule
@@ -256,18 +292,18 @@ graph traversal & \code{graph\_traversal} & Herceg, Mari{\'e}thoz, Morari~\cite{
 \end{tabularx}
 \end{table}
 
-The recommended locator is \code{HashTable::with\_storage\_limit(\&geom, max\_bytes)}. It builds the fastest exact table that fits
+The recommended locator is \code{HashTable::\allowbreak{}with\_storage\_limit(\&geom, max\_bytes)}. It builds the fastest exact table that fits
 a storage budget; the choice is made by a deterministic predicted cost, so the same input always gives the same table. The hash
 table supports up to 16 parameters.
 
 \subsection{Persistence, bindings and tooling}
 
 \begin{itemize}
-  \item \textbf{Binary format.} \code{Solution::save(path, Format::Binary | Format::Json)} and \code{Solution::load(path)}. The
+  \item \textbf{Binary format.} \code{Solution::\allowbreak{}save(path, Format::\allowbreak{}Binary | Format::\allowbreak{}Json)} and \code{Solution::\allowbreak{}load(path)}. The
     binary format is little-endian with a versioned header and a checksum. Floats are stored bit-exact, so the same solution always
     gives the same bytes. The processed program is stored with the regions, so a loaded solution can evaluate, verify and rebuild
     locators without the original problem. Wrong headers, truncation, bit flips and dimension mismatches return errors, not panics.
-  \item \textbf{Saved hash tables.} \code{HashTable::save/load} stores the built index, so a controller starts in milliseconds
+  \item \textbf{Saved hash tables.} \code{HashTable::\allowbreak{}save/load} stores the built index, so a controller starts in milliseconds
     instead of rebuilding it. On the three larger benchmark problems (211 to 973 regions) binary loading takes 0.17 to 0.72 ms and
     hash table loading 0.5 to 2.0 ms, against 0.3 to 4.3 s to rebuild the table\busy{} (README table; the
     I/O benchmark is \code{examples/io\_bench.rs}).
@@ -374,7 +410,7 @@ The release profile uses fat LTO and one codegen unit; \code{.cargo/config.toml}
 Table~\ref{tab:optlog} lists the measured steps. They were taken with \code{examples/profile\_solve.rs} (profiling profile) and macOS
 \code{sample}, on one thread, on \code{masses2\_N6} unless noted. Values are microseconds per \ppopt{}-equivalent call.
 
-\begin{longtable}{@{}p{10.4cm} p{5.4cm}@{}}
+\begin{longtable}{@{}L{10.6cm} L{5.8cm}@{}}
 \caption{Optimization log for the graph-family and geometric algorithms (source: \code{bench/README.md}).}\label{tab:optlog}\\
 \toprule
 change & effect \\
@@ -409,7 +445,7 @@ mimalloc global allocator in the binaries & \code{sys3x2\_N5} combinatorial grap
 \bottomrule
 \end{longtable}
 
-\begin{longtable}{@{}p{7.2cm} r r r@{}}
+\begin{longtable}{@{}L{7.2cm} r r r@{}}
 \caption{Optimization log for the combinatorial algorithm: wall time per solve, one thread, while two \ppopt{} runs shared the machine\busy{} (absolute values a few percent noisy).}\label{tab:combolog}\\
 \toprule
 change & \code{di\_N8} & \code{di\_N10} & \code{sys3x2\_N5} \\
@@ -438,7 +474,7 @@ graph on \code{sys3x2\_N5} 131 to 105 ms, with \code{masses2} unchanged within n
 
 Every idea below was implemented and measured. Rejections are part of the result: they show where the remaining time is not.
 
-\begin{longtable}{@{}p{5.3cm} p{10.5cm}@{}}
+\begin{longtable}{@{}L{6.1cm} L{10.3cm}@{}}
 \caption{Ideas that were measured and not kept. Rows 1 to 8 are measurements reported during the project; only the Farkas and duplicate-build rows are backed by a committed file (\code{lp\_census.md}). Rows 9 to 15 are from the \code{bench/README.md} rejected list.}\label{tab:rejected}\\
 \toprule
 idea & measured outcome \\
@@ -475,7 +511,7 @@ LU fallback before the rank test for failed Cholesky factorizations & wasted wor
 \textbf{mpQP suite} (\code{bench/problems}, generated by \code{bench/mpc\_problems.py}): 12 explicit MPC problems with 7 to 973
 regions and 2 to 4 parameters; $\theta=x_0$ in every case. Both implementations read the same JSON matrices.
 
-\begin{table}[htbp]
+\begin{table}[!htbp]
 \centering\small
 \caption{mpQP benchmark problems. $\theta=x_0$. The three \code{dinv\_N$k$} problems (horizons 4, 6, 8) are the double integrator with an invariant terminal set instead of the LQR terminal cost; they enter the release-to-release scoreboard and the point location tests but have no PPOPT run.}
 \label{tab:mpqp}
@@ -574,7 +610,7 @@ in the earlier migration report, \ppopt{} runs repeated on a busy machine were u
 \rpopt{}, so more than 1,342x and 1,049x), and combinatorial on \code{di\_N10} and \code{sys3x2\_N5} ran for 4 h without finishing (against 6.01 s and 6.53 s, so more than
 2,398x and 2,206x). All finished runs return the same number of regions as \rpopt{}.
 
-\begin{figure}[htbp]
+\begin{figure}[!htbp]
 \centering
 \includegraphics[width=0.86\textwidth]{fig_mpqp_same.pdf}
 \caption{Speedup over \ppopt{} for the same algorithm on one thread, per problem. Filled markers: 32 measured pairs. Hollow markers with arrows:
@@ -582,17 +618,18 @@ four runs where \ppopt{} did not finish, so the value is a lower bound.}
 \label{fig:mpqp}
 \end{figure}
 
-\begingroup\small\setlength{\tabcolsep}{4pt}
-\input{tables/tab_same.tex}
-\captionof{table}{mpQP, same algorithm, single thread (\code{bench/results/speedup.md}). \ppopt{} time limit 300 s, except two 4 h runs (\code{di\_N10}, \code{sys3x2\_N5} combinatorial). The last column is the region count of \ppopt{} and \rpopt{}.}
+\begin{table}[!htbp]
+\centering\small\setlength{\tabcolsep}{4pt}
+\caption{mpQP, same algorithm, single thread (\code{bench/results/speedup.md}). \ppopt{} time limit 300 s, except two 4 h runs (\code{di\_N10}, \code{sys3x2\_N5} combinatorial). The last column is the region count: equal for \ppopt{} and \rpopt{} on every finished run, and \rpopt{}'s count where \ppopt{} did not finish (marked $>$).}
 \label{tab:same}
-\endgroup
+\input{tables/tab_same.tex}
+\end{table}
 
 \textbf{Fastest against fastest.} The fastest \ppopt{} algorithm on every problem is \code{geometric}, except \code{masses2\_N4}, where it is \code{graph}. The
 fastest \rpopt{} algorithm is \code{mplcp} on 8 of the 9 problems (\code{graph\_exp} on \code{masses2\_N4}). The speedup of fastest over fastest is
 755x to 4,167x (Table~\ref{tab:fast}).
 
-\begin{table}[htbp]
+\begin{table}[!htbp]
 \centering\small
 \caption{Fastest serial algorithm per problem, one thread (\code{speedup.md}).}
 \label{tab:fast}
@@ -602,9 +639,9 @@ fastest \rpopt{} algorithm is \code{mplcp} on 8 of the 9 problems (\code{graph\_
 \textbf{Parallel against parallel.} \ppopt{}'s \code{combinatorial\_parallel} uses a process pool; \rpopt{} uses 16 threads. On the seven runs that \ppopt{} finished the speedup is 1,286x to
 5,755x, median 2,110x; two runs reached the 300 s limit (Table~\ref{tab:par}).
 
-\begin{table}[htbp]
+\begin{table}[!htbp]
 \centering\small
-\caption{Parallel against parallel (\code{speedup.md}).}
+\caption{Parallel against parallel (\code{speedup.md}). Regions: equal for \ppopt{} and \rpopt{} on every finished run, \rpopt{}'s count where \ppopt{} did not finish (marked $>$).}
 \label{tab:par}
 \input{tables/tab_par.tex}
 \end{table}
@@ -615,7 +652,7 @@ sooner than \ppopt{} on every run that \ppopt{} reached (Table~\ref{tab:cov}); t
 combinatorial graph (179x), a visit-order effect. Two \ppopt{} runs were stopped at 600 s (\code{di\_N10} combinatorial with 9 of 11 regions built, \code{sys3x2\_N5}
 combinatorial with 286 of 973).
 
-\begin{table}[htbp]
+\begin{table}[!htbp]
 \centering\small
 \caption{Time-to-coverage speedup\busy{}, \ppopt{} time over \rpopt{} time, by coverage level (\code{coverage.md}).}
 \label{tab:cov}
@@ -629,7 +666,7 @@ speed comparison with a solver that returns a wrong answer is not meaningful, so
 algorithm that leaves no sampled gap (Table~\ref{tab:mplp}, Figure~\ref{fig:mplp}). The speedup is 836x to 18,028x on the six problems where \ppopt{}
 has a gap-free answer. On the seven where it has none within 120 s, the speedup is more than 6,400x (up to more than 305,000x).
 
-\begin{figure}[htbp]
+\begin{figure}[!htbp]
 \centering
 \includegraphics[width=0.86\textwidth]{fig_mplp.pdf}
 \caption{mpLP: \rpopt{} \code{mplp\_lex} (one thread) against \ppopt{}'s fastest gap-free solver. Where \ppopt{} produced no gap-free
@@ -637,15 +674,15 @@ solution within 120 s, the bar is a lower bound computed with 120 s.}
 \label{fig:mplp}
 \end{figure}
 
-\begin{table}[htbp]
-\centering\scriptsize\setlength{\tabcolsep}{3pt}
+\begin{table}[!htbp]
+\centering\small\setlength{\tabcolsep}{4pt}
 \caption{mpLP, \rpopt{} \code{mplp\_lex} against \ppopt{} (\code{mplp\_speedup.md}; regions from \code{mplp\_full.txt}). The percentage in the \ppopt{} geometric
 column is the share of sampled feasible parameters not covered by its partition.}
 \label{tab:mplp}
 \input{tables/tab_mplp.tex}
 \end{table}
 
-\begin{table}[htbp]
+\begin{table}[!htbp]
 \centering\small
 \caption{Coverage of \ppopt{}'s mpLP solutions, sampled at 1,000 random $\theta$ in the parameter box per problem (\code{ppopt\_lp\_coverage.txt}).
 ``Uncovered samples'' counts feasible samples that fall in no region; ``wrong objective'' counts samples where the stored law's objective differs from the direct LP optimum by more than a relative $10^{-6}$.}
@@ -657,7 +694,7 @@ column is the share of sampled feasible parameters not covered by its partition.
 range 16x to 17,227x. \rpopt{}'s \code{geometric} is 185x to 968x on the 5 problems where \ppopt{}'s geometric covers the feasible set, and 16x to 351x on
 the 7 where \ppopt{}'s leaves gaps (and returns fewer regions).
 
-\begin{table}[htbp]
+\begin{table}[!htbp]
 \centering\small
 \caption{mpLP, same algorithm, \rpopt{} one thread against \ppopt{} (\code{mplp\_same\_algorithm.md}).}
 \label{tab:mplpsame}
@@ -675,7 +712,7 @@ the 7 where \ppopt{}'s leaves gaps (and returns fewer regions).
 search (the same algorithm) takes 61 ns to 14.3~\textmu s, and the hash table takes 9 to 32 ns on those nine problems (8 ns on the \code{dinv} problems), 590x to 3,600x faster than \ppopt{} (Figure~\ref{fig:pl}). The
 dinv problems have no \ppopt{} run.
 
-\begin{figure}[htbp]
+\begin{figure}[!htbp]
 \centering
 \includegraphics[width=0.88\textwidth]{fig_pl.pdf}
 \caption{Point location time per query on the 12 mpQP problems: \ppopt{}'s numba \code{PointLocation}, \rpopt{}'s port of the same sequential algorithm, and
@@ -689,9 +726,10 @@ of Figure~\ref{fig:pl} on the larger problems). The hash table is fastest on eve
 partitions; for \code{masses2\_N4}, \code{masses2\_N6}, \code{sys3x2\_N3} and \code{sys3x2\_N5} the partitions contain 118, 286, 6 and 22 non-facet-to-facet
 facets, so none exists (an argmax of affine functions is always face-to-face).
 
-\begin{table}[htbp]
-\centering\scriptsize\setlength{\tabcolsep}{3.4pt}
-\caption{Point location, ns per query, 100,000 uniform queries. All methods agree with sequential search on every query.}
+\input{tables/note_linmach.tex}
+\begin{table}[!htbp]
+\centering\small\setlength{\tabcolsep}{4pt}
+\caption{Point location, ns per query, 100,000 uniform queries. All methods agree with sequential search on every query. Omitted column: \linmachnote.}
 \label{tab:plmethods}
 \input{tables/tab_pl_methods.tex}
 \end{table}
@@ -704,9 +742,9 @@ a few grid cells. The raw file also records nonzero mismatch counts (7 to 68 in 
 bug fixed afterwards (\S\ref{sec:correctness}); the 8 MB hash table of the table has 0 mismatches. At 8 parameters the BST (truncated build) is no
 faster than a sequential scan (26,754 against 24,559 ns on a 1,204-region problem).
 
-\begin{table}[htbp]
-\centering\scriptsize\setlength{\tabcolsep}{3.2pt}
-\caption{Point location by parameter count\busy{}, ns per volume-uniform query (selected instances). An asterisk marks a tree whose build was truncated at 45 s. Instance names: \code{qp:$n_x$:$n_\theta$:$m$:seed} are random mpQPs, \code{mass:k:n} spring chains.}
+\begin{table}[!htbp]
+\centering\small\setlength{\tabcolsep}{4pt}
+\caption{Point location by parameter count\busy{}, ns per volume-uniform query (selected instances). An asterisk marks a tree whose build was truncated at 45 s. Instance names: \code{qp:$n_x$:$n_\theta$:$m$:seed} are random mpQPs, \code{mass:k:n} spring chains. The mismatch column for the 8 MB hash table is omitted: it is 0 on every listed instance.}
 \label{tab:plsweep}
 \input{tables/tab_pl_sweep.tex}
 \end{table}
@@ -725,15 +763,15 @@ and the 3-state, 2-input system (to $N=7$, 2,095 regions). All values are from a
 about 5 to 6 per added horizon step on the double integrator (243 ms at $N=8$, 6.3 s at $N=10$, 221 s at $N=12$), and is skipped beyond $N=12$ and for \code{sys3x2} at $N=7$. The \code{dp} column (active-set dynamic programming) failed at $N=25$ because it supports at most 128 constraints, and was skipped at $N=30$.
 Every other solver grows slowly. \code{mplcp} is the fastest at every point listed in Table~\ref{tab:scaling}; in the full file, \code{graph} is faster on \code{masses2} at $N=4$ and $5$ (10.4 and 23.0 ms against 14.5 and 35.4 ms). Every timed row in the file reports the same region count as the reference solver (column \code{same}).
 
-\begin{figure}[htbp]
+\begin{figure}[!htbp]
 \centering
 \includegraphics[width=\textwidth]{fig_scaling.pdf}
 \caption{Solve time of every exact solver against the horizon\busy{}. Missing points: combinatorial is skipped at large horizons, and \code{dp} fails or is skipped beyond $N=20$ on the double integrator.}
 \label{fig:scaling}
 \end{figure}
 
-\begin{table}[htbp]
-\centering\footnotesize\setlength{\tabcolsep}{3.6pt}
+\begin{table}[!htbp]
+\centering\small\setlength{\tabcolsep}{4pt}
 \caption{Solve time in ms at selected horizons\busy{} (\code{scaling.txt}); ``--'' skipped, ``fail'' did not complete. \code{pdaqp} is \code{parametric\_daqp}.}
 \label{tab:scaling}
 \input{tables/tab_scaling.tex}
@@ -745,7 +783,7 @@ The large suite (131 problems, 1 to 10 parameters, busy machine) tests scale and
 solvers. \code{mplcp} is the fastest, at a geometric mean of 0.76 of \code{graph}'s time; it solves 124 problems and times out on 7. The timeout is a per-solve cap, so timed-out problems are not in the means.
 \code{combinatorial} was run only on 79 problems (the others appear as ``-'' in \code{large.md}) and never timed out.
 
-\begin{table}[htbp]
+\begin{table}[!htbp]
 \centering\small
 \caption{Large suite summary\busy{}: problems solved, timed out and geometric-mean time relative to \code{graph} on the problems both solved (\code{large.md}).}
 \label{tab:large}
@@ -763,16 +801,16 @@ problems, the 2,000-sample check reports gaps, overlaps or wrong laws for at lea
 Against frozen binaries of commit \code{778cdb9} (one thread, alternating runs), the median is 3.48x on mpLP (54 pairs, range 0.97x to 1,269x, none below 0.95x) and 1.10x on mpQP
 (60 pairs, range 0.98x to 1.79x, none below 0.95x). Figure~\ref{fig:score} shows every pair and Table~\ref{tab:score} the per-algorithm summary.
 
-\begin{figure}[htbp]
+\begin{figure}[!htbp]
 \centering
 \includegraphics[width=\textwidth]{fig_scoreboard.pdf}
 \caption{Release-to-release speedup of \rpopt{} over commit \code{778cdb9}, one point per (problem, algorithm) pair; vertical bars mark the median of each algorithm. Dashed line: 1x.}
 \label{fig:score}
 \end{figure}
 
-\begin{table}[htbp]
+\begin{table}[!htbp]
 \centering\small
-\caption{Release-to-release summary by algorithm (\code{scoreboard\_vs\_778cdb9\_*.md}). Pairs where the baseline did not finish are excluded from the medians.}
+\caption{Release-to-release summary by algorithm (\code{scoreboard\_vs\_778cdb9\_*.md}). Pairs where the baseline did not finish are excluded from the medians. A dash means the algorithm has no pairs in that problem class.}
 \label{tab:score}
 \input{tables/tab_score.tex}
 \end{table}
@@ -790,8 +828,8 @@ control-law and row assembly, and candidate enumeration rather than in LPs (\S\r
 (\code{778cdb9}) and asks whether a shared improvement of region construction could reach 1.5x. Counts are exact; times were taken at load 50 to 100 and are noisy\busy{}.
 Table~\ref{tab:census} shows the overview for the two largest mpQP problems and one mpLP problem.
 
-\begin{table}[htbp]
-\centering\scriptsize\setlength{\tabcolsep}{3.2pt}
+\begin{table}[!htbp]
+\centering\small\setlength{\tabcolsep}{4pt}
 \caption{LP census (\code{lp\_census.md}). LPs are counted per solve; LP time share is of total solve time\busy{}.}
 \label{tab:census}
 \input{tables/tab_census.tex}
@@ -821,8 +859,8 @@ at 16 threads against 1 on the three longest solves (\code{di\_N8}, \code{masses
 on the four other problems, and the smallest problem (\code{di\_N8}) does not benefit: the whole solve takes under 1 ms, and \code{graph\_parallel} and \code{geometric\_parallel} are slower than one thread (0.6x and 0.5x). \code{mplcp\_parallel}
 falls back to serial code on small problems and, per the README, is reported in the README to scale to 4.7x on 8 threads on the larger problems.
 
-\begin{table}[htbp]
-\centering\scriptsize\setlength{\tabcolsep}{3.4pt}
+\begin{table}[!htbp]
+\centering\small\setlength{\tabcolsep}{4pt}
 \caption{Thread scaling\busy{}: solve time in ms (\code{thread\_scaling.md}). ``serial'' is the serial algorithm on one thread; the next columns are the parallel code at the given thread count.}
 \label{tab:threads}
 \input{tables/tab_threads.tex}
@@ -864,7 +902,7 @@ falls back to serial code on small problems and, per the README, is reported in 
     past its boundary, is infeasible and looks better than the optimum. \rpopt{} prefers a region that contains the parameter strictly; all locators share the rule (\code{pick\_strict\_first}).
   \item \textbf{Certified interior checks.} The dimension sweep showed 7 to 68 mismatches on instances with 6 to 8 parameters. The cause was the Chebyshev LP that decides whether a region meets a hash cell or a tree cut with positive volume: it
     returned radius 0 for thin or badly scaled polytopes that do have an interior (radii up to 28 times too small on data of magnitude 38). Now a region is dropped only when a known-point hint, the plain LP and a recentred LP all say no (and, in the second fix, a verified multiplier certificate), and regions whose vertex lists may be incomplete are marked thin: trees never classify them
-    from vertices and the hash table bounds them by coordinate LPs. After the fix the mass chain \code{mass:3:3}, which had mismatches in every tree variant, has 0 for all trees and tables, and \code{tests/pl\_agreement.rs} checks that all 12 locators agree with \code{Solution::get\_region} on
+    from vertices and the hash table bounds them by coordinate LPs. After the fix the mass chain \code{mass:3:3}, which had mismatches in every tree variant, has 0 for all trees and tables, and \code{tests/pl\_agreement.rs} checks that all 12 locators agree with \code{Solution::\allowbreak{}get\_region} on
     24,000 uniform and near-facet queries at 6 and 8 parameters.
   \item \textbf{Hash table up to 16 parameters.} The hash table now supports 1 to 16 parameters; \code{try\_with\_storage\_limit} returns an error beyond that.
 \end{itemize}
@@ -884,7 +922,7 @@ direct QP solves confirm them, its default \code{lowdim\_tol} discards them, and
   \item \textbf{The mpQP 1.5x target was not met.} The measured median is 1.10x, and the LP census shows that no LP-only change can reach it for the graph and combinatorial algorithms (\S\ref{sec:census}).
     The one lever that could, for \code{geometric}, is neighbour search by inspection (an upper bound of 1.53x to 1.80x), but it was not built. An optional change to \code{mplcp}, reading the law from the tableau, is worth about 12\% but is not bit-identical to the
     current output, so it has not been adopted.
-  \item \textbf{Tolerance mismatch.} \code{Solution::point\_location\_tolerance} is 1e-5, while the point locators use 1e-9. The two thresholds differ by four orders of magnitude, so a query within that band of a facet could in principle be classified differently by \code{Solution::get\_region} and by a locator. The agreement tests pass on the queries they sample
+  \item \textbf{Tolerance mismatch.} \code{Solution::\allowbreak{}point\_location\_tolerance} is 1e-5, while the point locators use 1e-9. The two thresholds differ by four orders of magnitude, so a query within that band of a facet could in principle be classified differently by \code{Solution::\allowbreak{}get\_region} and by a locator. The agreement tests pass on the queries they sample
     (including near-facet ones), but the two numbers should be unified.
   \item \textbf{Near-duplicate rows in \code{process\_region\_constraints}.} A known issue in the graph and geometric algorithms: \code{process\_region\_constraints} can leave near-duplicate constraint rows. It is not resolved in this report.
   \item \textbf{Region-count disagreement on large problems.} On problems with 3,000 or more regions in the large suite, algorithms disagree by a few regions (34 of 44 problems; \S\ref{sec:results}). The cause is not identified. A plausible candidate is thin regions
@@ -896,7 +934,7 @@ direct QP solves confirm them, its default \code{lowdim\_tol} discards them, and
 \appendix
 \section{Reproducing the results}
 
-The figures and tables of this report are generated from the committed result files by \code{docs/technical-report/make\_figures.py} and \code{make\_tables.py}, and the reference list by \code{make\_bib.py}. A build is
+The figures and tables of this report are generated from the committed result files by \code{docs/\allowbreak technical-report/\allowbreak make\_figures.py} and \code{make\_tables.py}, and the reference list by \code{make\_bib.py}. A build is
 \code{python make\_figures.py \&\& python make\_tables.py \&\& pdflatex technical\_report \&\& python make\_bib.py \&\& pdflatex technical\_report} (run twice for cross-references). The benchmarks themselves are run as in \code{bench/README.md}:
 \begin{itemize}
   \item mpQP: \code{ppopt\_bench problems results/rust.json --queries 100000}, \code{bench\_ppopt.py problems results/ppopt.json 300}, then \code{compare.py}.

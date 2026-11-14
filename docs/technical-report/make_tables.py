@@ -29,7 +29,7 @@ def esc(s):
 
 
 def tt(s):
-    return r"\texttt{" + esc(s) + "}"
+    return r"\code{" + esc(s) + "}"
 
 
 def val(s):
@@ -39,6 +39,13 @@ def val(s):
     s = re.sub(r"(\d) us$", r"\1 \\textmu s", s)
     s = s.replace("%", r"\%").replace("_", r"\_")
     return s
+
+
+def regcount(x):
+    """Region count column: 'a / b' with a = PPOPT (or '-' when unfinished) and b = RPOPT; a equals b when both exist."""
+    a, b = [v.strip() for v in x.split("/")]
+    assert a in ("-", b), x
+    return b
 
 
 def write(name, text):
@@ -60,22 +67,22 @@ def rows_of(section_text, ncols):
 # ------------------------------------------------------------------ mpQP vs PPOPT
 sp = read("speedup.md")
 same = rows_of(sp.split("### Same algorithm, single thread")[1].split("###")[0], 6)
-t = [r"\begin{longtable}{@{}llrrrr@{}}", r"\toprule",
-     r"problem & algorithm & PPOPT & RPOPT (1 thread) & speedup & regions \\", r"\midrule", r"\endhead"]
+t = [r"\begin{tabular}{@{}llrrrr@{}}", r"\toprule",
+     r"problem & algorithm & PPOPT & RPOPT (1 thread) & speedup & regions \\", r"\midrule"]
 prev = None
 for p in same:
     if prev and p[0] != prev:
         t.append(r"\addlinespace[2pt]")
     prev = p[0]
-    t.append(" & ".join([tt(p[0]) if p[0] != "" else "", tt(p[1]), val(p[2]), val(p[3]), val(p[4]), val(p[5].replace(" / ", "/"))]) + r" \\")
-t += [r"\bottomrule", r"\end{longtable}"]
+    t.append(" & ".join([tt(p[0]) if p[0] != "" else "", tt(p[1]), val(p[2]), val(p[3]), val(p[4]), regcount(p[5])]) + r" \\")
+t += [r"\bottomrule", r"\end{tabular}"]
 write("tab_same.tex", "\n".join(t))
 
 par = rows_of(sp.split("### Parallel algorithms")[1].split("###")[0], 6)
 t = [r"\begin{tabular}{@{}lrrrr@{}}", r"\toprule",
      r"problem & PPOPT (processes) & RPOPT (16 threads) & speedup & regions \\", r"\midrule"]
 for p in par:
-    t.append(" & ".join([tt(p[0]), val(p[2]), val(p[3]), val(p[4]), val(p[5].replace(" / ", "/"))]) + r" \\")
+    t.append(" & ".join([tt(p[0]), val(p[2]), val(p[3]), val(p[4]), regcount(p[5])]) + r" \\")
 t += [r"\bottomrule", r"\end{tabular}"]
 write("tab_par.tex", "\n".join(t))
 
@@ -99,19 +106,19 @@ for line in full.splitlines():
         regs.setdefault(m.group(1), int(m.group(2)))
 ms = read("mplp_speedup.md")
 rows = rows_of(ms, 5)
-t = [r"\begin{tabular}{@{}lrllrr@{}}", r"\toprule",
-     r"problem & regions & PPOPT, fastest gap-free & PPOPT \texttt{geometric} (sampled gaps) & RPOPT \texttt{mplp\_lex} & speedup \\", r"\midrule"]
+t = [r"\begin{tabular}{@{}l r L{3.9cm} L{3.1cm} r r@{}}", r"\toprule",
+     r"problem & regions & PPOPT, fastest gap-free & PPOPT \code{geometric} (sampled gaps) & RPOPT \code{mplp\_lex} & speedup \\", r"\midrule"]
 for p in rows:
     a = p[1]
     if a.startswith("none"):
         a = "none in 120 s"
     else:
         m = re.match(r"(\S+) (.*)", a)
-        a = tt(m.group(1)) + " " + val(m.group(2))
+        a = tt(m.group(1)) + "~" + val(m.group(2)).replace(" ", "~")
     g = p[2].replace("(", "(").replace(" gaps", "")
     g = val(g).replace("crashed", "crashes")
     r_ = p[3].replace("mplp_lex ", "")
-    t.append(" & ".join([tt(p[0]), f"{regs[p[0]]:,}", a, g, val(r_), val(p[4])]) + r" \\")
+    t.append(" & ".join([tt(p[0]), f"{regs[p[0]]:,}", a, g, val(r_), val(p[4]).replace("$>$ ", "$>$")]) + r" \\")
 t += [r"\bottomrule", r"\end{tabular}"]
 write("tab_mplp.tex", "\n".join(t))
 
@@ -168,8 +175,11 @@ algs = ["combinatorial", "combinatorial_graph", "geometric", "graph", "mplcp", "
 for a in algs:
     q = qs.get(a)
     l = ls.get(a)
-    qq = f"{q[1]}x & {q[0]}x & {q[2]}x" if q else "-- & -- & --"
-    ll = f"{l[1]}x & {l[0]}x & {l[2]}x" if l else "-- & -- & --"
+    def cm(v):
+        x = float(v)
+        return f"{x:,.2f}"
+    qq = f"{cm(q[1])}x & {cm(q[0])}x & {cm(q[2])}x" if q else "-- & -- & --"
+    ll = f"{cm(l[1])}x & {cm(l[0])}x & {cm(l[2])}x" if l else "-- & -- & --"
     t.append(f"{tt(a)} & {qq} & & {ll} \\\\")
 t += [r"\bottomrule", r"\end{tabular}"]
 write("tab_score.tex", "\n".join(t))
@@ -184,18 +194,26 @@ for p in rows:
     if prev and p[0] != prev:
         t.append(r"\addlinespace[2pt]")
     prev = p[0]
-    t.append(" & ".join([tt(p[0]), tt(p[1].replace("_parallel", "")), p[2].replace(" ms", ""), p[3], p[4], p[5], p[6], p[8], p[9].replace("x", r"$\times$")]) + r" \\")
+    tf = lambda x: f"{float(x.replace(' ms', '').replace(',', '')):,.1f}"
+    t.append(" & ".join([tt(p[0]), tt(p[1].replace("_parallel", "")), tf(p[2]), tf(p[3]), tf(p[4]), tf(p[5]), tf(p[6]), tf(p[8]), p[9].replace("x", r"$\times$")]) + r" \\")
 t += [r"\bottomrule", r"\end{tabular}"]
 write("tab_threads.tex", "\n".join(t))
 
 # ------------------------------------------------------------------ point location (all methods)
 pl = read("point_location.md")
 rows = rows_of(pl, 10)
-t = [r"\begin{tabular}{@{}lrrrrrrrrr@{}}", r"\toprule",
-     r"problem & regions & seq. & seq. early & BST & multiway & lin. mach. & descr. & hash & YANN \\", r"\midrule"]
+t = [r"\begin{tabular}{@{}lrrrrrrrr@{}}", r"\toprule",
+     r"problem & regions & seq. & seq. early & BST & multiway & descr. & hash & YANN \\", r"\midrule"]
+have, none_ = [], []
 for p in rows:
-    lm = "none" if p[6].startswith("none") else p[6]
-    t.append(" & ".join([tt(p[0]), p[1], p[2], p[3], p[4], p[5], lm, p[7], p[8], p[9]]) + r" \\")
+    if p[6].startswith("none"):
+        none_.append(p[0])
+    else:
+        have.append((p[0], p[6]))
+    c = lambda x: f"{int(x.replace(',', '')):,}"
+    t.append(" & ".join([tt(p[0]), c(p[1]), c(p[2]), c(p[3]), c(p[4]), c(p[5]), c(p[7]), c(p[8]), c(p[9])]) + r" \\")
+write("note_linmach.tex", "\\newcommand{\\linmachnote}{linear machine, ns per query: " + ", ".join(f"{tt(a)} {b}" for a, b in have)
+      + "; none exists on " + ", ".join(tt(a) for a in none_) + "}")
 t += [r"\bottomrule", r"\end{tabular}"]
 write("tab_pl_methods.tex", "\n".join(t))
 
@@ -210,8 +228,9 @@ for l in read("pl_dim_sweep_busy_machine.txt").splitlines():
             order.append(k)
         data.setdefault(k, {})[p[3]] = p
 pick = ["file:di_N10", "qp:8:3:100:2", "file:masses2_N6", "qp:8:4:60:1", "qp:6:5:40:1", "mass:3:3", "qp:4:6:14:1", "qp:4:8:14:1"]
-t = [r"\begin{tabular}{@{}llrrrrrr@{}}", r"\toprule",
-     r"instance & $n_\theta$ & regions & sequential & BST & optimized tree & hash table, 8 MB & mismatches (hash) \\", r"\midrule"]
+t = [r"\begin{tabular}{@{}lrrrrrr@{}}", r"\toprule",
+     r"instance & $n_\theta$ & regions & sequential & BST & optimized tree & hash table, 8 MB \\", r"\midrule"]
+mism = set()
 
 
 def g(v, *names):
@@ -231,8 +250,10 @@ for k in sorted(order, key=lambda k: (int(k[1]), int(k[2]))):
         def f(x, star=""):
             return (f"{float(x[6]):,.0f}" + star) if x else "--"
         name = k[0].replace("file:", "")
-        t.append(" & ".join([tt(name), k[1], f"{int(k[2]):,}", f(s), f(b, bs), f(o, os_), f(h), h[12] if h else "--"]) + r" \\")
+        t.append(" & ".join([tt(name), k[1], f"{int(k[2]):,}", f(s), f(b, bs), f(o, os_), f(h)]) + r" \\")
+        mism.add(h[12] if h else "--")
 t += [r"\bottomrule", r"\end{tabular}"]
+assert mism == {"0"}, mism
 write("tab_pl_sweep.tex", "\n".join(t))
 
 # ------------------------------------------------------------------ horizon scaling selected points
@@ -293,7 +314,7 @@ for p in rows:
     if prev and p[0] != prev:
         t.append(r"\addlinespace[2pt]")
     prev = p[0]
-    t.append(" & ".join([tt(p[0]), tt(p[1]), p[2].replace(",", ""), f"{int(p[4]):,}", p[5], f"{int(p[6]):,}", p[7].replace("%", r"\%")]) + r" \\")
+    t.append(" & ".join([tt(p[0]), tt(p[1]), p[2].replace(",", ""), f"{int(p[4]):,}", f"{float(p[5]):,.1f}", f"{int(p[6]):,}", p[7].replace("%", r"\%")]) + r" \\")
 t += [r"\bottomrule", r"\end{tabular}"]
 write("tab_census.tex", "\n".join(t))
 
