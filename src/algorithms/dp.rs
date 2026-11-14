@@ -99,7 +99,7 @@ pub struct DpStats {
     pub horizon_reached: usize,
     pub seconds_enumeration: f64,
     pub seconds_regions: f64,
-    /// time inside the optimality / feasibility LPs and outcome counts (optimal, infeasible, other)
+    /// time inside the optimality / feasibility LPs (only measured on the full-LP fallback path) and outcome counts (optimal, infeasible, other)
     pub seconds_opt_lp: f64,
     pub seconds_feas_lp: f64,
     pub outcomes: [usize; 3],
@@ -1077,12 +1077,7 @@ impl Horizon<'_> {
         }
         sc.dep_rows.clear();
         sc.dep_c.clear();
-        if is_full_rank_rows(&qp.g, &sc.act_r) {
-            sc.act_b.clear();
-            sc.act_b.extend_from_slice(&sc.act_r);
-        } else {
-            self.split_dependent_fast(sc);
-        }
+        self.split_dependent_fast(sc);
         let nb = sc.act_b.len();
         let nd = sc.dep_rows.len();
         // equalities on x0: rows with G_i = 0 and the dependent rows
@@ -1160,27 +1155,9 @@ impl Horizon<'_> {
         stats.optimality_lps += 1;
         // ---- optimality (and the primal certificate)
         // multipliers mu = -S^-1 (Cx_B x0 + w_B), S = W_BB
-        sc.chol.clear();
-        sc.chol.resize(nb * nb, 0.0);
-        for j in 0..nb {
-            let mut d = self.w_mat[(sc.act_b[j], sc.act_b[j])];
-            for k in 0..j {
-                d -= sc.chol[j * nb + k] * sc.chol[j * nb + k];
-            }
-            if d <= 0.0 || !d.is_finite() {
-                stats.optimality_lps -= 1;
-                return None;
-            }
-            let djj = d.sqrt();
-            sc.chol[j * nb + j] = djj;
-            for i in j + 1..nb {
-                let mut s = self.w_mat[(sc.act_b[i], sc.act_b[j])];
-                for k in 0..j {
-                    s -= sc.chol[i * nb + k] * sc.chol[j * nb + k];
-                }
-                sc.chol[i * nb + j] = s / djj;
-            }
-        }
+        // the Cholesky factor of W_BB came with the split into independent and dependent rows
+        let cs = sc.act_r.len();
+        std::mem::swap(&mut sc.chol, &mut sc.gl);
         let nc = nx + 1;
         sc.sol.clear();
         sc.sol.resize(nb * nc, 0.0);
@@ -1190,7 +1167,7 @@ impl Horizon<'_> {
         }
         for i in 0..nb {
             for k in 0..i {
-                let l = sc.chol[i * nb + k];
+                let l = sc.chol[i * cs + k];
                 if l != 0.0 {
                     let (top, bot) = sc.sol.split_at_mut(i * nc);
                     for (d, s) in bot[..nc].iter_mut().zip(&top[k * nc..(k + 1) * nc]) {
@@ -1198,14 +1175,14 @@ impl Horizon<'_> {
                     }
                 }
             }
-            let inv = 1.0 / sc.chol[i * nb + i];
+            let inv = 1.0 / sc.chol[i * cs + i];
             for v in &mut sc.sol[i * nc..(i + 1) * nc] {
                 *v *= inv;
             }
         }
         for i in (0..nb).rev() {
             for k in i + 1..nb {
-                let l = sc.chol[k * nb + i];
+                let l = sc.chol[k * cs + i];
                 if l != 0.0 {
                     let (top, bot) = sc.sol.split_at_mut(k * nc);
                     for (d, s) in top[i * nc..(i + 1) * nc].iter_mut().zip(&bot[..nc]) {
@@ -1213,7 +1190,7 @@ impl Horizon<'_> {
                     }
                 }
             }
-            let inv = 1.0 / sc.chol[i * nb + i];
+            let inv = 1.0 / sc.chol[i * cs + i];
             for v in &mut sc.sol[i * nc..(i + 1) * nc] {
                 *v *= inv;
             }
@@ -1260,13 +1237,11 @@ impl Horizon<'_> {
             r += 1;
         }
         let feas = |m: &Mat, b: &[f64]| if m.cols == 0 { b.iter().all(|&v| v >= -1e-9) } else { lp_feasible(m, b, &[]) };
-        let t0 = Instant::now();
         if feas(&sc.mat, &sc.b) {
             for v in sc.b.iter_mut() {
                 *v -= T_TOL;
             }
             let t_pos = feas(&sc.mat, &sc.b);
-            stats.seconds_opt_lp += t0.elapsed().as_secs_f64();
             stats.outcomes[0] += 1;
             return Some(Outcome::Optimal(!t_pos));
         }
@@ -1285,14 +1260,12 @@ impl Horizon<'_> {
             }
             feas(&sc.mat2, &sc.b[..n_slack])
         };
-        stats.seconds_opt_lp += t0.elapsed().as_secs_f64();
         if ok {
             stats.outcomes[2] += 1;
             return Some(Outcome::Other);
         }
         // ---- feasibility
         stats.feasibility_lps += 1;
-        let t0 = Instant::now();
         if let Some(pf) = self.pfeas.and_then(|m| m.get(&(a >> qp.q0))) {
             // rows of the stage-0 active set are equalities of the parent's system
             sc.eqi.clear();
@@ -1306,7 +1279,6 @@ impl Horizon<'_> {
                 sc.eqi.push(nrows - pf.n_dep + k);
             }
             let feasible = lp_feasible(&pf.mat, &pf.b, &sc.eqi);
-            stats.seconds_feas_lp += t0.elapsed().as_secs_f64();
             return Some(if feasible {
                 stats.outcomes[2] += 1;
                 Outcome::Other
@@ -1335,7 +1307,6 @@ impl Horizon<'_> {
         if rank < nb {
             // numerically dependent after all: the full LP decides
             let feasible = self.lp(a, false).is_some();
-            stats.seconds_feas_lp += t0.elapsed().as_secs_f64();
             return Some(if feasible {
                 stats.outcomes[2] += 1;
                 Outcome::Other
@@ -1394,7 +1365,6 @@ impl Horizon<'_> {
             r += 1;
         }
         let feasible = feas(&sc.mat, &sc.b);
-        stats.seconds_feas_lp += t0.elapsed().as_secs_f64();
         Some(if feasible {
             stats.outcomes[2] += 1;
             Outcome::Other
