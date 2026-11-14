@@ -690,9 +690,14 @@ fn combinatorial_graph_bits(program: &MpProgram, opts: &SolveOptions, parallel: 
         if kkt.is_none() {
             // the Schur factorization of the law certifies full rank for most candidates; the
             // matrix_rank-style test runs only when it does not
+            // mpLP laws are never certified, so the rank test always runs: run it before the
+            // (pseudo-inverse) law instead of after it
+            if is_lp && hint.is_none() && !program.check_active_set_rank(&a) {
+                return (None, true, false, None);
+            }
             let mut law = program.optimal_control_law_dual_rank(&a, false);
             let certified = matches!(&law, Some((_, true)));
-            if hint.is_none() && !certified && !program.check_active_set_rank(&a) {
+            if hint.is_none() && !certified && !is_lp && !program.check_active_set_rank(&a) {
                 return (None, true, false, None);
             }
             if law.is_none() {

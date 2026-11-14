@@ -41,7 +41,9 @@ impl Hasher for FxHasher {
 
     #[inline]
     fn finish(&self) -> u64 {
-        self.hash
+        // the multiply leaves the best bits at the top; hashbrown indexes buckets with the low
+        // bits, so rotate them down (as rustc-hash 2 does)
+        self.hash.rotate_left(26)
     }
 }
 

@@ -786,7 +786,7 @@ impl MpProgram {
                         None => pinv(&a_hat),
                     }
                 } else {
-                    pinv(&a_hat)
+                    pinv_full_row_rank(&a_hat).unwrap_or_else(|| pinv(&a_hat))
                 };
                 let f_as = self.f.select_rows(active_set);
                 let b_as: Vec<f64> = active_set.iter().map(|&i| self.b[i]).collect();
@@ -1201,4 +1201,29 @@ pub fn standard_normal<R: Rng>(rng: &mut R) -> f64 {
     let u1: f64 = rng.r#gen::<f64>().max(1e-300);
     let u2: f64 = rng.r#gen::<f64>();
     (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos()
+}
+
+/// Pseudo-inverse A' (A A')^-1 of a well-conditioned full-row-rank matrix (k < n) through a
+/// Cholesky factorization of the Gram matrix, much cheaper than the SVD. `None` (use the SVD
+/// pseudo-inverse) when A A' is not safely positive definite (dependent or nearly dependent rows).
+fn pinv_full_row_rank(a: &Mat) -> Option<Mat> {
+    let k = a.rows;
+    if k == 0 || k > a.cols {
+        return None;
+    }
+    let mut g = Mat::zeros(k, k);
+    for i in 0..k {
+        for j in 0..=i {
+            let v = dot(a.row(i), a.row(j));
+            g[(i, j)] = v;
+            g[(j, i)] = v;
+        }
+    }
+    let smax = (0..k).map(|i| g[(i, i)]).fold(0.0f64, f64::max);
+    let ch = Cholesky::new(&g)?;
+    if !(0..k).all(|i| ch.l[i * k + i] * ch.l[i * k + i] > 1e-8 * smax) {
+        return None;
+    }
+    // X = G^-1 A, so that A' G^-1 = X'
+    Some(ch.solve_mat_inplace(a.clone()).transpose())
 }
