@@ -358,6 +358,15 @@ impl Subst {
     }
 }
 
+/// Result of the reduced optimality test.
+enum Red {
+    Optimal(f64),
+    /// not optimal, but primal feasible (certificate found)
+    Feasible,
+    /// not optimal; feasibility undecided
+    Unknown,
+}
+
 /// Rows of the active set that are linear combinations of earlier ones (G_d = sum_k C_dk G_k over the
 /// independent rows k): their multipliers are free (only `mu = lambda_B + C' lambda_D` is determined)
 /// and each gives an equality in x0.
@@ -528,7 +537,7 @@ impl Horizon<'_> {
     /// with `S = G_A H^-1 G_A'` the multipliers are `lambda = -S^-1 (Cx_A x0 + w_A)`, the primal
     /// solution `U = -H^-1 (fm x0 + G_A' lambda)`, and the slack of an inactive row i is
     /// `-(Cx_i x0 + W_iA lambda + w_i)`. `None` when S is not positive definite.
-    fn lp_full_reduced(&self, a: Set, act: &[usize], dep: &Dep, sub: Option<&Subst>) -> Option<Option<f64>> {
+    fn lp_full_reduced(&self, a: Set, act: &[usize], dep: &Dep, sub: Option<&Subst>) -> Option<Red> {
         let qp = self.qp;
         let (nx, q, na) = (qp.nx, qp.num_rows(), act.len());
         let mut s = Mat::zeros(na, na);
@@ -595,12 +604,21 @@ impl Horizon<'_> {
         // in x0 only, which has a fast path for up to four parameters)
         let feas = |b: &[f64]| if m.cols == 0 { b.iter().all(|&v| v >= -1e-9) } else { lp_feasible(&m, b, &[]) };
         if !feas(&b) {
-            return Some(None);
+            // not optimal; the inactive rows alone (the KKT solution U(x0) of the active rows is
+            // primal feasible) are a certificate of feasibility
+            let n_slack = q - a.count_ones() as usize;
+            let nf = m.cols - nd;
+            let mut m2 = Mat::zeros(n_slack, nf);
+            for r in 0..n_slack {
+                m2.row_mut(r).copy_from_slice(&m.row(r)[..nf]);
+            }
+            let ok = if nf == 0 { b[..n_slack].iter().all(|&v| v >= -1e-9) } else { lp_feasible(&m2, &b[..n_slack], &[]) };
+            return Some(if ok { Red::Feasible } else { Red::Unknown });
         }
         for v in b.iter_mut() {
             *v -= T_TOL;
         }
-        Some(Some(if feas(&b) { 1.0 } else { 0.0 }))
+        Some(Red::Optimal(if feas(&b) { 1.0 } else { 0.0 }))
     }
 
     /// Feasibility LP (5 without 5b, 5c), equalities eliminated by Gauss-Jordan on `[G_A | -E_A | w_A]`
@@ -810,15 +828,22 @@ impl Horizon<'_> {
         };
         stats.optimality_lps += 1;
         let t0 = Instant::now();
-        let full = if reduced { self.lp_full_reduced(a, &act_b, &dep, sub.as_ref()) } else { None };
-        let full = match full {
+        let red = if reduced { self.lp_full_reduced(a, &act_b, &dep, sub.as_ref()) } else { None };
+        let red = match red {
             Some(r) => r,
-            None => self.lp(a, true),
+            None => match self.lp(a, true) {
+                Some(t) => Red::Optimal(t),
+                None => Red::Unknown,
+            },
         };
         stats.seconds_opt_lp += t0.elapsed().as_secs_f64();
-        if let Some(t) = full {
+        if let Red::Optimal(t) = red {
             stats.outcomes[0] += 1;
             return Outcome::Optimal(t <= T_TOL);
+        }
+        if let Red::Feasible = red {
+            stats.outcomes[2] += 1;
+            return Outcome::Other;
         }
         stats.feasibility_lps += 1;
         let t0 = Instant::now();
