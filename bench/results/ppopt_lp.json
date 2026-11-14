@@ -1,0 +1,280 @@
+{
+ "diinf_N2/geometric": {
+  "build_s": 0.0760561249917373,
+  "solve_s": 0.14437387499492615,
+  "regions": 18,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 5381.514600594528,
+  "pl_hit_fraction": 0.71395
+ },
+ "diinf_N2/graph": {
+  "build_s": 0.0705866249918472,
+  "solve_s": 1.2534660829987843,
+  "regions": 29,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "diinf_N2/combinatorial": {
+  "build_s": 0.07026570901507512,
+  "solve_s": 1.690956707985606,
+  "regions": 30,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 7105.981248605532,
+  "pl_hit_fraction": 0.71395
+ },
+ "diinf_N2/combinatorial_graph": {
+  "build_s": 0.0756507909973152,
+  "solve_s": 2.7953712090093177,
+  "regions": 30,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "diinf_N3/geometric": {
+  "build_s": 0.07603641599416733,
+  "solve_s": 0.20048370902077295,
+  "regions": 22,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 4258.816699439194,
+  "pl_hit_fraction": 0.3391
+ },
+ "diinf_N3/graph": {
+  "build_s": 0.07176620801328681,
+  "solve_s": 23.567632291989867,
+  "regions": 50,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "diinf_N3/combinatorial": {
+  "timeout_s": 120.0
+ },
+ "diinf_N3/combinatorial_graph": {
+  "timeout_s": 120.0
+ },
+ "diinf_N4/geometric": {
+  "build_s": 0.0844864169775974,
+  "solve_s": 0.2665827500168234,
+  "regions": 25,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 4143.8916508923285,
+  "pl_hit_fraction": 0.3393
+ },
+ "diinf_N4/graph": {
+  "timeout_s": 120.0
+ },
+ "diinf_N4/combinatorial": {
+  "timeout_s": 120.0
+ },
+ "diinf_N4/combinatorial_graph": {
+  "timeout_s": 120.0
+ },
+ "diinf_N5/geometric": {
+  "build_s": 0.10057658300502226,
+  "solve_s": 0.39874516701092944,
+  "regions": 35,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 4995.554150082171,
+  "pl_hit_fraction": 0.3393
+ },
+ "diinf_N5/graph": {
+  "timeout_s": 120.0
+ },
+ "diinf_N5/combinatorial": {
+  "timeout_s": 120.0
+ },
+ "diinf_N5/combinatorial_graph": {
+  "timeout_s": 120.0
+ },
+ "dione_N2/geometric": {
+  "build_s": 0.06596587499370798,
+  "solve_s": 0.14200399999390356,
+  "regions": 22,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 6274.856250092853,
+  "pl_hit_fraction": 0.70975
+ },
+ "dione_N2/graph": {
+  "build_s": 0.06621708301827312,
+  "solve_s": 2.844926666992251,
+  "regions": 22,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "dione_N2/combinatorial": {
+  "build_s": 0.0775720419769641,
+  "solve_s": 3.0142633329960518,
+  "regions": 22,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 6174.820849264506,
+  "pl_hit_fraction": 0.71395
+ },
+ "dione_N2/combinatorial_graph": {
+  "build_s": 0.07628999999724329,
+  "solve_s": 7.2714936660195235,
+  "regions": 22,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "dione_N3/geometric": {
+  "build_s": 0.09094591601751745,
+  "solve_s": 0.12763841700507328,
+  "regions": 15,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 3591.5625005145557,
+  "pl_hit_fraction": 0.3275
+ },
+ "dione_N3/graph": {
+  "build_s": 0.08027662499807775,
+  "solve_s": 77.30656575001194,
+  "regions": 19,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "dione_N3/combinatorial": {
+  "timeout_s": 120.0
+ },
+ "dione_N3/combinatorial_graph": {
+  "timeout_s": 120.0
+ },
+ "dione_N4/geometric": {
+  "build_s": 0.10427191699272953,
+  "solve_s": 0.11227912499452941,
+  "regions": 11,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 2197.429200168699,
+  "pl_hit_fraction": 0.1558
+ },
+ "dione_N4/graph": {
+  "timeout_s": 120.0
+ },
+ "dione_N4/combinatorial": {
+  "timeout_s": 120.0
+ },
+ "dione_N4/combinatorial_graph": {
+  "timeout_s": 120.0
+ },
+ "masses2inf_N2/geometric": {
+  "build_s": 0.09313154200208373,
+  "solve_s": 8.121070458000759,
+  "regions": 334,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 48042.70835011266,
+  "pl_hit_fraction": 0.50785
+ },
+ "masses2inf_N2/graph": {
+  "build_s": 0.10078833298757672,
+  "solve_s": 24.688894749997417,
+  "regions": 210,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "masses2inf_N2/combinatorial": {
+  "build_s": 0.09076208298210986,
+  "solve_s": 39.52787512500072,
+  "regions": 214,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 19203.837499662768,
+  "pl_hit_fraction": 0.50805
+ },
+ "masses2inf_N2/combinatorial_graph": {
+  "build_s": 0.11188162499456666,
+  "solve_s": 28.300255708018085,
+  "regions": 214,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "masses2inf_N3/geometric": {
+  "build_s": 0.1357272499881219,
+  "solve_s": 83.86818983400008,
+  "regions": 2202,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 183696.68334926246,
+  "pl_hit_fraction": 0.4568
+ },
+ "masses2inf_N3/graph": {
+  "timeout_s": 120.0
+ },
+ "masses2inf_N3/combinatorial": {
+  "timeout_s": 120.0
+ },
+ "masses2inf_N3/combinatorial_graph": {
+  "timeout_s": 120.0
+ },
+ "masses2one_N2/geometric": {
+  "build_s": 0.0847326249931939,
+  "solve_s": 44.64246187498793,
+  "regions": 1593,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 173955.68960055243,
+  "pl_hit_fraction": 0.508
+ },
+ "masses2one_N2/graph": {
+  "timeout_s": 120.0
+ },
+ "masses2one_N2/combinatorial": {
+  "timeout_s": 120.0
+ },
+ "masses2one_N2/combinatorial_graph": {
+  "timeout_s": 120.0
+ },
+ "sys3x2inf_N2/geometric": {
+  "build_s": 0.10272283299127594,
+  "solve_s": 2.5463173750031274,
+  "regions": 189,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 23424.879150115885,
+  "pl_hit_fraction": 0.7906
+ },
+ "sys3x2inf_N2/graph": {
+  "timeout_s": 120.0
+ },
+ "sys3x2inf_N2/combinatorial": {
+  "timeout_s": 120.0
+ },
+ "sys3x2inf_N2/combinatorial_graph": {
+  "timeout_s": 120.0
+ },
+ "sys3x2inf_N3/geometric": {
+  "error": "olve_mpqp\n    solution = mpqp_geometric.solve(problem)\n  File \"/Users/markchen/.claude/jobs/187003ec/tmp/ppopt_src/PPOPT-main/src/ppopt/mp_solvers/mpqp_geometric.py\", line 23, in solve\n    initial_region = gen_cr_from_active_set(program, active_set, check_full_dim=False)\n  File \"/Users/markchen/.claude/jobs/187003ec/tmp/ppopt_src/PPOPT-main/src/ppopt/utils/mpqp_utils.py\", line 105, in gen_cr_from_active_set\n    active = active_set[num_equality:]\nTypeError: 'NoneType' object is not subscriptable\n"
+ },
+ "sys3x2inf_N3/graph": {
+  "timeout_s": 120.0
+ },
+ "sys3x2inf_N3/combinatorial": {
+  "timeout_s": 120.0
+ },
+ "sys3x2inf_N3/combinatorial_graph": {
+  "timeout_s": 120.0
+ },
+ "sys3x2one_N2/geometric": {
+  "build_s": 0.08590870798798278,
+  "solve_s": 4.51676095899893,
+  "regions": 399,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 39366.96250020759,
+  "pl_hit_fraction": 0.7918
+ },
+ "sys3x2one_N2/graph": {
+  "timeout_s": 120.0
+ },
+ "sys3x2one_N2/combinatorial": {
+  "timeout_s": 120.0
+ },
+ "sys3x2one_N2/combinatorial_graph": {
+  "timeout_s": 120.0
+ }
+}

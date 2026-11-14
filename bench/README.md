@@ -239,3 +239,28 @@ point-location mismatch counts run as before. Point location is timed in two que
 closed-loop trajectories (MPC: x+ = A x + B u from uniform random feasible initial states; POP and random: a random walk with
 steps of 2% of the box width, redrawn when leaving the partition); both report ns per query. A method too slow to run 100k queries
 in a few seconds is timed on a prefix of the query list (`queries_timed` in the JSON).
+
+## mpLP suite (`problems_lp/`, `mplp_problems.py`)
+
+Infinity-norm and 1-norm MPC (Bemporad, Borrelli, Morari 2002) of the double integrator (`diinf`, `dione`), the
+3-state, 2-input plant (`sys3x2inf`, `sys3x2one`) and the two-mass chain (`masses2inf`, `masses2one`), condensed
+with epigraph variables. These problems are heavily primal and dual degenerate, so solutions are not unique and
+algorithms can return different (all valid) partitions; correctness is therefore checked by sampling, not by
+comparing active sets.
+
+- `../examples/mplp_bench.rs <timeout_s> <problem.json | rand:x,t,m,seed> ...` runs every mpLP-capable algorithm
+  in a child process with a hard timeout and checks 2,000 random parameters against direct LP solves (gaps,
+  infeasible laws, wrong objectives). `MPLP_ALGOS=a,b` selects algorithms.
+- `bench_ppopt.py problems_lp results/ppopt_lp.json 120 <names> <algos> --force` times PPOPT (it reads mpLPs
+  as `MPLP_Program`); `ppopt_gapcheck.py <problem.json> <algorithm> 1000` samples the coverage of PPOPT's
+  solution the same way (`results/ppopt_lp_coverage.txt`).
+- `lp_vs_ppopt.py` joins them into `results/mplp_speedup.md`: RPOPT's fastest gap-free solver against PPOPT's
+  fastest gap-free solver. `results/mplp_same_algorithm.md` has the same-algorithm pairs and
+  `results/mplp_full.txt` every RPOPT run on all 30 files plus random mpLPs.
+
+## Release-to-release scoreboard
+
+`score.py` (mpQP, `ppopt_bench` JSON) and `score_lp.py` (mpLP, `mplp_bench` text) compare frozen binaries of
+commit 778cdb9 with the current code, alternating runs on an idle machine (5 rounds mpQP, 3 rounds mpLP, one
+thread): `results/scoreboard_vs_778cdb9_mpqp.md` (median 1.10x, 0 of 60 pairs below 0.95x) and
+`results/scoreboard_vs_778cdb9_mplp.md` (median 3.48x, 0 of 54 below 0.95x).

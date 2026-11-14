@@ -1,0 +1,24 @@
+| diinf_N2 | combinatorial | 1691.0 ms (30) | 1.834 ms (30, gaps 0) | 922x |
+| diinf_N2 | combinatorial_graph | 2795.4 ms (30) | 10.706 ms (30, gaps 0) | 261x |
+| diinf_N2 | geometric | 144.4 ms (18) | 0.348 ms (16, gaps 0) | 415x |
+| diinf_N2 | graph | 1253.5 ms (29) | 1.049 ms (30, gaps 0) | 1195x |
+| diinf_N3 | geometric | 200.5 ms (22) | 1.046 ms (30, gaps 0) | 192x |
+| diinf_N3 | graph | 23567.6 ms (50) | 4.448 ms (54, gaps 0) | 5298x |
+| diinf_N4 | geometric | 266.6 ms (25) | 2.088 ms (39, gaps 0) | 128x |
+| diinf_N5 | geometric | 398.7 ms (35) | 3.649 ms (47, gaps 0) | 109x |
+| dione_N2 | combinatorial | 3014.3 ms (22) | 3.864 ms (22, gaps 0) | 780x |
+| dione_N2 | combinatorial_graph | 7271.5 ms (22) | 34.072 ms (22, gaps 0) | 213x |
+| dione_N2 | geometric | 142.0 ms (22) | 0.405 ms (20, gaps 0) | 351x |
+| dione_N2 | graph | 2844.9 ms (22) | 0.987 ms (22, gaps 0) | 2882x |
+| dione_N3 | geometric | 127.6 ms (15) | 3.671 ms (30, gaps 0) | 35x |
+| dione_N3 | graph | 77306.6 ms (19) | 4.487 ms (41, gaps 0) | 17227x |
+| dione_N4 | geometric | 112.3 ms (11) | 7.171 ms (42, gaps 0) | 16x |
+| masses2inf_N2 | combinatorial | 39527.9 ms (214) | 26.792 ms (214, gaps 0) | 1475x |
+| masses2inf_N2 | combinatorial_graph | 28300.3 ms (214) | 121.158 ms (214, gaps 0) | 234x |
+| masses2inf_N2 | geometric | 8121.1 ms (334) | 42.563 ms (202, gaps 0) | 191x |
+| masses2inf_N2 | graph | 24688.9 ms (210) | 21.008 ms (214, gaps 0) | 1175x |
+| masses2inf_N3 | geometric | 83868.2 ms (2202) | 452.352 ms (1098, gaps 0) | 185x |
+| masses2one_N2 | geometric | 44642.5 ms (1593) | 46.133 ms (828, gaps 0) | 968x |
+| sys3x2inf_N2 | geometric | 2546.3 ms (189) | 71.900 ms (149, gaps 0) | 35x |
+| sys3x2one_N2 | geometric | 4516.8 ms (399) | 19.557 ms (256, gaps 0) | 231x |
+same-algorithm mpLP: 23 pairs, min 16x median 261x max 17227x, >=200x: 15

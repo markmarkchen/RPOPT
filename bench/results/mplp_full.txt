@@ -1,0 +1,331 @@
+problem             nt   nx    m  algorithm               regions    time [ms]  gaps  errs
+diinf_N2             2    6   24  mplp_lex                     20       0.1703     0     0
+diinf_N2             2    6   24  geometric                    16       0.3454     0     0
+diinf_N2             2    6   24  graph                        30       1.0478     0     0
+diinf_N2             2    6   24  graph_exp                    30       0.9589     0     0
+diinf_N2             2    6   24  combinatorial_graph          30      10.6162     0     0
+diinf_N2             2    6   24  mplcp_enum                   30     555.5595     0     0
+diinf_N2             2    6   24  combinatorial                30       1.8227     0     0
+diinf_N2             2    6   24  geometric_parallel           16       0.5505     0     0
+diinf_N2             2    6   24  graph_parallel               30       0.9247     0     0
+diinf_N2             2    6   24  combinatorial_parallel       30       1.7520     0     0
+diinf_N3             2    9   32  mplp_lex                     31       0.3921     0     0
+diinf_N3             2    9   32  geometric                    30       1.0216     0     0
+diinf_N3             2    9   32  graph                        54       4.3133     0     0
+diinf_N3             2    9   32  graph_exp                    54       4.0069     0     0
+diinf_N3             2    9   32  combinatorial_graph          54     790.8186     0     0
+diinf_N3             2    9   32  mplcp_enum                    -        >60 s
+diinf_N3             2    9   32  combinatorial                54      96.3317     0     0
+diinf_N3             2    9   32  geometric_parallel           30       0.9991     0     0
+diinf_N3             2    9   32  graph_parallel               54       2.1197     0     0
+diinf_N3             2    9   32  combinatorial_parallel       54      18.4034     0     0
+diinf_N4             2   12   42  mplp_lex                     39       0.9185     0     0
+diinf_N4             2   12   42  geometric                    39       2.1032     0     0
+diinf_N4             2   12   42  graph                        72      15.6866     0     0
+diinf_N4             2   12   42  graph_exp                    72      13.4127     0     0
+diinf_N4             2   12   42  combinatorial_graph           -        >60 s
+diinf_N4             2   12   42  mplcp_enum                    -      skipped
+diinf_N4             2   12   42  combinatorial                72   21419.8317     0     0
+diinf_N4             2   12   42  geometric_parallel           39       1.5661     0     0
+diinf_N4             2   12   42  graph_parallel               72       5.5320     0     0
+diinf_N4             2   12   42  combinatorial_parallel       72    2071.9975     0     0
+diinf_N5             2   15   52  mplp_lex                     47       1.8477     0     0
+diinf_N5             2   15   52  geometric                    47       3.7527     0     0
+diinf_N5             2   15   52  graph                        72      21.1857     0     0
+diinf_N5             2   15   52  graph_exp                    72      17.9714     0     0
+diinf_N5             2   15   52  combinatorial_graph           -      skipped
+diinf_N5             2   15   52  mplcp_enum                    -      skipped
+diinf_N5             2   15   52  combinatorial                 -        >60 s
+diinf_N5             2   15   52  geometric_parallel           48       2.1210     0     0
+diinf_N5             2   15   52  graph_parallel               72       7.0065     0     0
+diinf_N5             2   15   52  combinatorial_parallel        -        >60 s
+diinf_N6             2   18   62  mplp_lex                     58       3.6977     0     0
+diinf_N6             2   18   62  geometric                    58       5.2342     0     0
+diinf_N6             2   18   62  graph                        91      38.7863     0     0
+diinf_N6             2   18   62  graph_exp                    91      33.3307     0     0
+diinf_N6             2   18   62  combinatorial_graph           -      skipped
+diinf_N6             2   18   62  mplcp_enum                    -      skipped
+diinf_N6             2   18   62  combinatorial                 -      skipped
+diinf_N6             2   18   62  geometric_parallel           59       2.2775     0     0
+diinf_N6             2   18   62  graph_parallel               91      10.5055     0     0
+diinf_N6             2   18   62  combinatorial_parallel        -      skipped
+diinf_N8             2   24   82  mplp_lex                     62      11.4501     0     0
+diinf_N8             2   24   82  geometric                    62      46.4623     0     0
+diinf_N8             2   24   82  graph                       132     255.0593     0     0
+diinf_N8             2   24   82  graph_exp                   132     198.9516     0     0
+diinf_N8             2   24   82  combinatorial_graph           -      skipped
+diinf_N8             2   24   82  mplcp_enum                    -      skipped
+diinf_N8             2   24   82  combinatorial                 -      skipped
+diinf_N8             2   24   82  geometric_parallel           62      16.0118     0     0
+diinf_N8             2   24   82  graph_parallel              132      41.1540     0     0
+diinf_N8             2   24   82  combinatorial_parallel        -      skipped
+diinf_N10            2   30  102  mplp_lex                     62      28.6523     0     0
+diinf_N10            2   30  102  geometric                    62     433.4391     0     0
+diinf_N10            2   30  102  graph                        93     329.8005     0     0
+diinf_N10            2   30  102  graph_exp                    93     292.9497     0     0
+diinf_N10            2   30  102  combinatorial_graph           -      skipped
+diinf_N10            2   30  102  mplcp_enum                    -      skipped
+diinf_N10            2   30  102  combinatorial                 -      skipped
+diinf_N10            2   30  102  geometric_parallel           62     230.2370     0     0
+diinf_N10            2   30  102  graph_parallel               93      75.2637     0     0
+diinf_N10            2   30  102  combinatorial_parallel        -      skipped
+dione_N2             2    8   24  mplp_lex                     20       0.1622     0     0
+dione_N2             2    8   24  geometric                    20       0.3991     0     0
+dione_N2             2    8   24  graph                        22       0.9719     0     0
+dione_N2             2    8   24  graph_exp                    22       0.9209     0     0
+dione_N2             2    8   24  combinatorial_graph          22      33.8285     0     0
+dione_N2             2    8   24  mplcp_enum                   22    3144.8593     0     0
+dione_N2             2    8   24  combinatorial                22       3.8309     0     0
+dione_N2             2    8   24  geometric_parallel           20       0.5687     0     0
+dione_N2             2    8   24  graph_parallel               22       0.8951     0     0
+dione_N2             2    8   24  combinatorial_parallel       22       2.7229     0     0
+dione_N3             2   12   32  mplp_lex                     30       0.3870     0     0
+dione_N3             2   12   32  geometric                    30       3.6285     0     0
+dione_N3             2   12   32  graph                        41       4.3945     0     0
+dione_N3             2   12   32  graph_exp                    41       4.0172     0     0
+dione_N3             2   12   32  combinatorial_graph          44    4522.0693     0     0
+dione_N3             2   12   32  mplcp_enum                    -        >60 s
+dione_N3             2   12   32  combinatorial                44     318.8047     0     0
+dione_N3             2   12   32  geometric_parallel           30       1.7950     0     0
+dione_N3             2   12   32  graph_parallel               41       2.4453     0     0
+dione_N3             2   12   32  combinatorial_parallel       44      46.9284     0     0
+dione_N4             2   16   42  mplp_lex                     43       0.8830     0     0
+dione_N4             2   16   42  geometric                    42       7.0979     0     0
+dione_N4             2   16   42  graph                        60      10.9856     0     0
+dione_N4             2   16   42  graph_exp                    74      13.6412     0     0
+dione_N4             2   16   42  combinatorial_graph           -        >60 s
+dione_N4             2   16   42  mplcp_enum                    -      skipped
+dione_N4             2   16   42  combinatorial                 -        >60 s
+dione_N4             2   16   42  geometric_parallel           42       3.3180     0     0
+dione_N4             2   16   42  graph_parallel               74       5.1288     0     0
+dione_N4             2   16   42  combinatorial_parallel      176    9575.4701     0     0
+dione_N5             2   20   52  mplp_lex                     59       1.7631     0     0
+dione_N5             2   20   52  geometric                    59      18.6240     0     0
+dione_N5             2   20   52  graph                        91      36.1570     0     0
+dione_N5             2   20   52  graph_exp                   291     179.1150     0     0
+dione_N5             2   20   52  combinatorial_graph           -      skipped
+dione_N5             2   20   52  mplcp_enum                    -      skipped
+dione_N5             2   20   52  combinatorial                 -      skipped
+dione_N5             2   20   52  geometric_parallel           59       5.6321     0     0
+dione_N5             2   20   52  graph_parallel              291      53.6620     0     0
+dione_N5             2   20   52  combinatorial_parallel        -        >60 s
+dione_N6             2   24   62  mplp_lex                     73       3.0141     0     0
+dione_N6             2   24   62  geometric                    72      56.1950     0     0
+dione_N6             2   24   62  graph                         0       2.3748  1337     0
+dione_N6             2   24   62  graph_exp                  1363    4216.5830     0     0
+dione_N6             2   24   62  combinatorial_graph           -      skipped
+dione_N6             2   24   62  mplcp_enum                    -      skipped
+dione_N6             2   24   62  combinatorial                 -      skipped
+dione_N6             2   24   62  geometric_parallel           72      16.8125     0     0
+dione_N6             2   24   62  graph_parallel             1363    3213.4489     0     0
+dione_N6             2   24   62  combinatorial_parallel        -      skipped
+dione_N8             2   32   82  mplp_lex                     93       7.5504     0     0
+dione_N8             2   32   82  geometric                    92     253.9120     0     0
+dione_N8             2   32   82  graph                         0      16.6493  1337     0
+dione_N8             2   32   82  graph_exp                     -        >60 s
+dione_N8             2   32   82  combinatorial_graph           -      skipped
+dione_N8             2   32   82  mplcp_enum                    -      skipped
+dione_N8             2   32   82  combinatorial                 -      skipped
+dione_N8             2   32   82  geometric_parallel           92      40.3367     0     0
+dione_N8             2   32   82  graph_parallel                -        >60 s
+dione_N8             2   32   82  combinatorial_parallel        -      skipped
+dione_N10            2   40  102  mplp_lex                     98      15.9076     0     0
+dione_N10            2   40  102  geometric                    98     619.5728     0     0
+dione_N10            2   40  102  graph                         0      23.4117  1337     0
+dione_N10            2   40  102  graph_exp                     -      skipped
+dione_N10            2   40  102  combinatorial_graph           -      skipped
+dione_N10            2   40  102  mplcp_enum                    -      skipped
+dione_N10            2   40  102  combinatorial                 -      skipped
+dione_N10            2   40  102  geometric_parallel           98     104.2548     0     0
+dione_N10            2   40  102  graph_parallel                -      skipped
+dione_N10            2   40  102  combinatorial_parallel        -      skipped
+sys3x2inf_N2         3    8   40  mplp_lex                    152       3.5027     0     0
+sys3x2inf_N2         3    8   40  geometric                   149      71.4828     0     0
+sys3x2inf_N2         3    8   40  graph                      1184     191.7000     0     0
+sys3x2inf_N2         3    8   40  graph_exp                  1184     119.2115     0     0
+sys3x2inf_N2         3    8   40  combinatorial_graph        1184    2694.5934     0     0
+sys3x2inf_N2         3    8   40  mplcp_enum                    -        >60 s
+sys3x2inf_N2         3    8   40  combinatorial              1184    1934.8395     0     0
+sys3x2inf_N2         3    8   40  geometric_parallel          159       8.8013     0     0
+sys3x2inf_N2         3    8   40  graph_parallel             1184      47.3370     0     0
+sys3x2inf_N2         3    8   40  combinatorial_parallel     1184     190.6014     0     0
+sys3x2inf_N3         3   12   60  mplp_lex                    504      18.6632     0     0
+sys3x2inf_N3         3   12   60  geometric                   490     580.5045     0     0
+sys3x2inf_N3         3   12   60  graph                      5739    8056.5749     0     0
+sys3x2inf_N3         3   12   60  graph_exp                  5779    1369.7700     0     0
+sys3x2inf_N3         3   12   60  combinatorial_graph           -        >60 s
+sys3x2inf_N3         3   12   60  mplcp_enum                    -      skipped
+sys3x2inf_N3         3   12   60  combinatorial                 -        >60 s
+sys3x2inf_N3         3   12   60  geometric_parallel          534      65.3741     0     0
+sys3x2inf_N3         3   12   60  graph_parallel             5779    1003.0963     0     0
+sys3x2inf_N3         3   12   60  combinatorial_parallel        -        >60 s
+sys3x2inf_N4         3   16   80  mplp_lex                   1299      69.9946     0     0
+sys3x2inf_N4         3   16   80  geometric                  1264    4051.8349     0     0
+sys3x2inf_N4         3   16   80  graph                         -        >60 s
+sys3x2inf_N4         3   16   80  graph_exp                 23040   11245.9648     0     0
+sys3x2inf_N4         3   16   80  combinatorial_graph           -      skipped
+sys3x2inf_N4         3   16   80  mplcp_enum                    -      skipped
+sys3x2inf_N4         3   16   80  combinatorial                 -      skipped
+sys3x2inf_N4         3   16   80  geometric_parallel         1389     408.3768     0     0
+sys3x2inf_N4         3   16   80  graph_parallel            23040   24324.9151     0     0
+sys3x2inf_N4         3   16   80  combinatorial_parallel        -      skipped
+sys3x2inf_N5         3   20  100  mplp_lex                   2757     206.3742     0     0
+sys3x2inf_N5         3   20  100  geometric                  2585   10671.2945     0     0
+sys3x2inf_N5         3   20  100  graph                         -      skipped
+sys3x2inf_N5         3   20  100  graph_exp                     -        >60 s
+sys3x2inf_N5         3   20  100  combinatorial_graph           -      skipped
+sys3x2inf_N5         3   20  100  mplcp_enum                    -      skipped
+sys3x2inf_N5         3   20  100  combinatorial                 -      skipped
+sys3x2inf_N5         3   20  100  geometric_parallel         2883    1077.5818     0     0
+sys3x2inf_N5         3   20  100  graph_parallel                -        >60 s
+sys3x2inf_N5         3   20  100  combinatorial_parallel        -      skipped
+sys3x2one_N2         3   14   40  mplp_lex                    249       5.0592     0     0
+sys3x2one_N2         3   14   40  geometric                   256      19.2731     0     0
+sys3x2one_N2         3   14   40  graph                       308      48.8477     0     0
+sys3x2one_N2         3   14   40  graph_exp                   308      34.2133     0     0
+sys3x2one_N2         3   14   40  combinatorial_graph         308   57660.7453     0     0
+sys3x2one_N2         3   14   40  mplcp_enum                    -        >60 s
+sys3x2one_N2         3   14   40  combinatorial               308   13232.6324     0     0
+sys3x2one_N2         3   14   40  geometric_parallel          270       4.2218     0     0
+sys3x2one_N2         3   14   40  graph_parallel              308      11.9836     0     0
+sys3x2one_N2         3   14   40  combinatorial_parallel      308    1186.2252     0     0
+sys3x2one_N3         3   21   60  mplp_lex                    856      29.3420     0     0
+sys3x2one_N3         3   21   60  geometric                   866     189.6452     0     0
+sys3x2one_N3         3   21   60  graph                      1054     867.9608     0     0
+sys3x2one_N3         3   21   60  graph_exp                  1054     395.1922     0     0
+sys3x2one_N3         3   21   60  combinatorial_graph           -        >60 s
+sys3x2one_N3         3   21   60  mplcp_enum                    -      skipped
+sys3x2one_N3         3   21   60  combinatorial                 -        >60 s
+sys3x2one_N3         3   21   60  geometric_parallel          874      22.9638     0     0
+sys3x2one_N3         3   21   60  graph_parallel             1054     105.0246     0     0
+sys3x2one_N3         3   21   60  combinatorial_parallel        -        >60 s
+sys3x2one_N4         3   28   80  mplp_lex                   2316     126.2392     0     0
+sys3x2one_N4         3   28   80  geometric                  2362    1507.3576     0     0
+sys3x2one_N4         3   28   80  graph                      2924   10138.4382     0     0
+sys3x2one_N4         3   28   80  graph_exp                  2924    2784.9913     0     0
+sys3x2one_N4         3   28   80  combinatorial_graph           -      skipped
+sys3x2one_N4         3   28   80  mplcp_enum                    -      skipped
+sys3x2one_N4         3   28   80  combinatorial                 -      skipped
+sys3x2one_N4         3   28   80  geometric_parallel         2389     150.2146     0     0
+sys3x2one_N4         3   28   80  graph_parallel             2924     953.7650     0     0
+sys3x2one_N4         3   28   80  combinatorial_parallel        -      skipped
+sys3x2one_N5         3   35  100  mplp_lex                   5096     378.6378     0     0
+sys3x2one_N5         3   35  100  geometric                  5140    7790.0322     0     0
+sys3x2one_N5         3   35  100  graph                         -        >60 s
+sys3x2one_N5         3   35  100  graph_exp                  6914   14862.4012     0     0
+sys3x2one_N5         3   35  100  combinatorial_graph           -      skipped
+sys3x2one_N5         3   35  100  mplcp_enum                    -      skipped
+sys3x2one_N5         3   35  100  combinatorial                 -      skipped
+sys3x2one_N5         3   35  100  geometric_parallel         5169     664.8441     0     0
+sys3x2one_N5         3   35  100  graph_parallel             6914    8278.4191     0     0
+sys3x2one_N5         3   35  100  combinatorial_parallel        -      skipped
+masses2inf_N2        4    6   40  mplp_lex                    202       6.9820     0     0
+masses2inf_N2        4    6   40  geometric                   202      42.4453     0     0
+masses2inf_N2        4    6   40  graph                       214      20.9020     0     0
+masses2inf_N2        4    6   40  graph_exp                   214      19.8454     0     0
+masses2inf_N2        4    6   40  combinatorial_graph         214     121.0407     0     0
+masses2inf_N2        4    6   40  mplcp_enum                  214   11339.9804     0     0
+masses2inf_N2        4    6   40  combinatorial               214      26.7445     0     0
+masses2inf_N2        4    6   40  geometric_parallel          202       5.4853     0     0
+masses2inf_N2        4    6   40  graph_parallel              214       8.5351     0     0
+masses2inf_N2        4    6   40  combinatorial_parallel      214       7.4457     0     0
+masses2inf_N3        4    9   60  mplp_lex                   1098      48.8788     0     0
+masses2inf_N3        4    9   60  geometric                  1098     453.5280     0     0
+masses2inf_N3        4    9   60  graph                      1198     236.3633     0     0
+masses2inf_N3        4    9   60  graph_exp                  1198     156.1188     0     0
+masses2inf_N3        4    9   60  combinatorial_graph        1198   14232.9396     0     0
+masses2inf_N3        4    9   60  mplcp_enum                    -        >60 s
+masses2inf_N3        4    9   60  combinatorial              1198   22221.0220     0     0
+masses2inf_N3        4    9   60  geometric_parallel         1098      43.6599     0     0
+masses2inf_N3        4    9   60  graph_parallel             1198      56.4378     0     0
+masses2inf_N3        4    9   60  combinatorial_parallel     1198    1953.6260     0     0
+masses2inf_N4        4   12   80  mplp_lex                   3314     196.6694     0     0
+masses2inf_N4        4   12   80  geometric                  3314    3325.1123     0     0
+masses2inf_N4        4   12   80  graph                      3642    3228.5649     0     0
+masses2inf_N4        4   12   80  graph_exp                  3642     943.0417     0     0
+masses2inf_N4        4   12   80  combinatorial_graph           -        >60 s
+masses2inf_N4        4   12   80  mplcp_enum                    -      skipped
+masses2inf_N4        4   12   80  combinatorial                 -        >60 s
+masses2inf_N4        4   12   80  geometric_parallel         3314     281.2013     0     0
+masses2inf_N4        4   12   80  graph_parallel             3642     395.2193     0     0
+masses2inf_N4        4   12   80  combinatorial_parallel        -        >60 s
+masses2inf_N5        4   15  100  mplp_lex                   7602     580.9817     0     0
+masses2inf_N5        4   15  100  geometric                  7602   20964.4330     0     0
+masses2inf_N5        4   15  100  graph                      8548   31760.5717     0     0
+masses2inf_N5        4   15  100  graph_exp                  8548    4083.1665     0     0
+masses2inf_N5        4   15  100  combinatorial_graph           -      skipped
+masses2inf_N5        4   15  100  mplcp_enum                    -      skipped
+masses2inf_N5        4   15  100  combinatorial                 -      skipped
+masses2inf_N5        4   15  100  geometric_parallel         7602    1787.0815     0     0
+masses2inf_N5        4   15  100  graph_parallel             8548    2964.4485     0     0
+masses2inf_N5        4   15  100  combinatorial_parallel        -      skipped
+masses2one_N2        4   12   40  mplp_lex                    828      24.0983     0     0
+masses2one_N2        4   12   40  geometric                   828      46.6679     0     0
+masses2one_N2        4   12   40  graph                       828     161.0299     0     0
+masses2one_N2        4   12   40  graph_exp                   828      77.4367     0     0
+masses2one_N2        4   12   40  combinatorial_graph         828   15109.6657     0     0
+masses2one_N2        4   12   40  mplcp_enum                    -        >60 s
+masses2one_N2        4   12   40  combinatorial               828     926.9358     0     0
+masses2one_N2        4   12   40  geometric_parallel          828       8.2016     0     0
+masses2one_N2        4   12   40  graph_parallel              828      35.4706     0     0
+masses2one_N2        4   12   40  combinatorial_parallel      828     105.1376     0     0
+masses2one_N3        4   18   60  mplp_lex                   3646     156.7880     0     0
+masses2one_N3        4   18   60  geometric                  3646     362.7867     0     0
+masses2one_N3        4   18   60  graph                      3646    8931.1098     0     0
+masses2one_N3        4   18   60  graph_exp                  3646    1142.5758     0     0
+masses2one_N3        4   18   60  combinatorial_graph           -        >60 s
+masses2one_N3        4   18   60  mplcp_enum                    -      skipped
+masses2one_N3        4   18   60  combinatorial                 -        >60 s
+masses2one_N3        4   18   60  geometric_parallel         3646      54.8500     0     0
+masses2one_N3        4   18   60  graph_parallel             3646     864.4468     0     0
+masses2one_N3        4   18   60  combinatorial_parallel        -        >60 s
+masses2one_N4        4   24   80  mplp_lex                  10974     694.6490     0     0
+masses2one_N4        4   24   80  geometric                 10974    2807.6043     0     0
+masses2one_N4        4   24   80  graph                         -        >60 s
+masses2one_N4        4   24   80  graph_exp                 10974    9500.7750     0     0
+masses2one_N4        4   24   80  combinatorial_graph           -      skipped
+masses2one_N4        4   24   80  mplcp_enum                    -      skipped
+masses2one_N4        4   24   80  combinatorial                 -      skipped
+masses2one_N4        4   24   80  geometric_parallel        10974     378.4311     0     0
+masses2one_N4        4   24   80  graph_parallel            10974   16300.5203     0     0
+masses2one_N4        4   24   80  combinatorial_parallel        -      skipped
+masses2one_N5        4   30  100  mplp_lex                  28336    2385.0271     0     0
+masses2one_N5        4   30  100  geometric                 28336   27550.2031     0     0
+masses2one_N5        4   30  100  graph                         -      skipped
+masses2one_N5        4   30  100  graph_exp                 28336   54769.0907     0     0
+masses2one_N5        4   30  100  combinatorial_graph           -      skipped
+masses2one_N5        4   30  100  mplcp_enum                    -      skipped
+masses2one_N5        4   30  100  combinatorial                 -      skipped
+masses2one_N5        4   30  100  geometric_parallel        28336    3753.6639     0     0
+masses2one_N5        4   30  100  graph_parallel                -        >60 s
+masses2one_N5        4   30  100  combinatorial_parallel        -      skipped
+rand_x6t2m20         2    6   27  mplp_lex                      1       0.0210     0     0
+rand_x6t2m20         2    6   27  geometric                     1       0.0080     0     0
+rand_x6t2m20         2    6   27  graph                         1       0.0795     0     0
+rand_x6t2m20         2    6   27  graph_exp                     1       0.0797     0     0
+rand_x6t2m20         2    6   27  combinatorial_graph           1       0.3675     0     0
+rand_x6t2m20         2    6   27  mplcp_enum                    1    6279.3545     0     0
+rand_x6t2m20         2    6   27  combinatorial                 1      17.8085     0     0
+rand_x6t2m20         2    6   27  geometric_parallel            1       0.0206     0     0
+rand_x6t2m20         2    6   27  graph_parallel                1       0.0764     0     0
+rand_x6t2m20         2    6   27  combinatorial_parallel        1       4.7175     0     0
+rand_x10t4m40        4   10   40  mplp_lex                   4768     193.5882     0     0
+rand_x10t4m40        4   10   40  geometric                  4768    2551.3630     0     0
+rand_x10t4m40        4   10   40  graph                      4768     747.6683     0     0
+rand_x10t4m40        4   10   40  graph_exp                  4768     555.7328     0     0
+rand_x10t4m40        4   10   40  combinatorial_graph        4768    3798.3738     0     0
+rand_x10t4m40        4   10   40  mplcp_enum                    -        >60 s
+rand_x10t4m40        4   10   40  combinatorial                 -        >60 s
+rand_x10t4m40        4   10   40  geometric_parallel         4768     225.2519     0     0
+rand_x10t4m40        4   10   40  graph_parallel             4768     116.2143     0     0
+rand_x10t4m40        4   10   40  combinatorial_parallel        -        >60 s
+rand_x16t6m60        6   16   92  mplp_lex                      1       0.2511     0     0
+rand_x16t6m60        6   16   92  geometric                     1       0.0707     0     0
+rand_x16t6m60        6   16   92  graph                         1       1.0543     0     0
+rand_x16t6m60        6   16   92  graph_exp                     1       1.0628     0     0
+rand_x16t6m60        6   16   92  combinatorial_graph           1    1420.5692     0     0
+rand_x16t6m60        6   16   92  mplcp_enum                    -      skipped
+rand_x16t6m60        6   16   92  combinatorial                 -      skipped
+rand_x16t6m60        6   16   92  geometric_parallel            1       0.1657     0     0
+rand_x16t6m60        6   16   92  graph_parallel                1       1.0580     0     0
+rand_x16t6m60        6   16   92  combinatorial_parallel        -      skipped

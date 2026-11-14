@@ -107,7 +107,7 @@ def main():
         r = rs.get(f'{prob}/point_location')
         if r is None:
             continue
-        seq = [m for m in r['methods'] if m['method'].startswith('sequential (PPOPT')]
+        seq = [m for m in r['methods'] if m['method'] == 'sequential' or m['method'].startswith('sequential (PPOPT')]
         fastest = min(r['methods'], key=lambda m: m['ns_per_query'])
         pl = next((py[f'{prob}/{a}']['pl_ns_per_query'] for a in ('combinatorial', 'geometric')
                    if 'pl_ns_per_query' in py.get(f'{prob}/{a}', {})), None)

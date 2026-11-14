@@ -1,0 +1,23 @@
+diinf_N2.json geometric: regions 18, feasible samples 726, gaps 0 (0.0%), wrong objective 0
+diinf_N3.json geometric: regions 21, feasible samples 697, gaps 347 (49.8%), wrong objective 0
+diinf_N4.json geometric: regions 25, feasible samples 689, gaps 347 (50.4%), wrong objective 3
+diinf_N5.json geometric: regions 34, feasible samples 689, gaps 347 (50.4%), wrong objective 3
+dione_N2.json geometric: regions 22, feasible samples 726, gaps 2 (0.3%), wrong objective 0
+dione_N3.json geometric: regions 15, feasible samples 697, gaps 367 (52.7%), wrong objective 0
+dione_N4.json geometric: regions 11, feasible samples 689, gaps 529 (76.8%), wrong objective 0
+sys3x2inf_N2.json geometric: regions 168, feasible samples 797, gaps 3 (0.4%), wrong objective 10
+TypeError: 'NoneType' object is not subscriptable
+masses2inf_N2.json geometric: regions 333, feasible samples 535, gaps 0 (0.0%), wrong objective 0
+masses2inf_N3.json geometric: regions 2161, feasible samples 472, gaps 0 (0.0%), wrong objective 3
+sys3x2one_N2.json geometric: regions 399, feasible samples 797, gaps 0 (0.0%), wrong objective 8
+masses2one_N2.json geometric: regions 1593, feasible samples 535, gaps 0 (0.0%), wrong objective 3
+diinf_N2.json graph: regions 30, feasible samples 726, gaps 0 (0.0%), wrong objective 0
+diinf_N3.json graph: regions 50, feasible samples 697, gaps 70 (10.0%), wrong objective 0
+dione_N2.json graph: regions 18, feasible samples 726, gaps 126 (17.4%), wrong objective 0
+dione_N3.json graph: regions 33, feasible samples 697, gaps 168 (24.1%), wrong objective 0
+masses2inf_N2.json graph: regions 208, feasible samples 535, gaps 2 (0.4%), wrong objective 0
+masses2inf_N2.json combinatorial: regions 214, feasible samples 535, gaps 0 (0.0%), wrong objective 0
+masses2inf_N2.json combinatorial_graph: regions 214, feasible samples 535, gaps 0 (0.0%), wrong objective 0
+diinf_N2.json combinatorial: regions 30, feasible samples 726, gaps 0 (0.0%), wrong objective 0
+dione_N2.json combinatorial: regions 22, feasible samples 726, gaps 0 (0.0%), wrong objective 0
+done
