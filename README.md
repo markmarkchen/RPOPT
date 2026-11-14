@@ -10,7 +10,7 @@ mpLP, mpQP, mpMILP and mpMIQP solvers, plus fast exact point location.
 ![license](https://img.shields.io/badge/license-MIT-blue)
 ![rust](https://img.shields.io/badge/rust-2024%20edition-orange)
 ![python](https://img.shields.io/badge/python-PPOPT--compatible%20bindings-3776AB)
-![tests](https://img.shields.io/badge/tests-117%20Rust%20%2B%2072%20Python-brightgreen)
+![tests](https://img.shields.io/badge/tests-118%20Rust%20%2B%2072%20Python-brightgreen)
 
 </div>
 
@@ -152,7 +152,7 @@ function. Every exact method returns the same set of critical regions as PPOPT o
 | `combinatorial_graph`, `combinatorial_graph_parallel` | Arnström, Axehill 2024, as simplified in PPOPT | PPOPT | breadth-first visit order |
 | `parametric_daqp` | Arnström, Axehill 2024, as published | paper | least-distance transformation and DAQP subproblems; 1.5x to 2.9x faster than the authors' `pdaqp` |
 | `ahmadi` | Ahmadi-Moshkenani, Johansen, Olaru 2018 | paper | handles LICQ and strict-complementarity violations (PPOPT ships an empty stub) |
-| `mplcp`, `mplcp_parallel` | Jones, Morari 2006, mp-LCP pivoting | paper | the fastest serial mpQP solver on the benchmark; lexicographic perturbation: no gaps or overlaps at degenerate vertices; mpLPs are routed to `mplp_lex` |
+| `mplcp`, `mplcp_parallel` | Jones, Morari 2006, mp-LCP pivoting | paper | the fastest serial mpQP solver on the benchmark; lexicographic perturbation: no gaps or overlaps at degenerate vertices; mpLPs are routed to `mplp_lex`; `mplcp::set_tableau_law(true)` reads each law from the pivot tableau (about 2% faster, same regions, coefficients not bit-identical) |
 | `mplcp_enum` | Herceg, Jones, Kvasnica, Morari 2015 | paper | basis enumeration for general M (mpQP and mpLP); exponential |
 | `mplp_lex` | Jones, Kerrigan, Maciejowski 2007 | paper | lexicographic mpLP: unique, gap- and overlap-free partition for degenerate mpLPs; the fastest mpLP solver on the benchmark |
 | `algorithms::dp::solve_mpc_dp` | Mitze, Mönnigmann 2020, 2022; Mitze, Kvasnica, Mönnigmann 2023 | paper | active-set dynamic programming over the MPC horizon; takes the MPC model (`mpc::MpcProblem`) |
@@ -369,7 +369,7 @@ time of `graph`. Those runs come from a shared, busy machine.
 - **`examples/mplp_bench.rs`** checks every mpLP solution at 2,000 random parameters against direct LP solves (no
   gaps, feasible laws, optimal objective). Every exact RPOPT solver has 0 gaps and 0 errors on all
   `bench/problems_lp` problems it finishes.
-- **`cargo test --release`** (117 tests) covers:
+- **`cargo test --release`** (118 tests) covers:
   - parity with PPOPT's results and examples;
   - each new algorithm against `geometric` and `combinatorial`, on the benchmark and on random problems;
   - degenerate problems (gaps and overlaps on 20,000 samples), including gap-free graph solvers on degenerate
