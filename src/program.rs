@@ -159,6 +159,32 @@ impl MpProgram {
         p
     }
 
+    /// Assembles an already processed program from its stored fields without any preprocessing
+    /// (used by binary loading). Derived caches are rebuilt lazily.
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_raw_parts(a: Mat, b: Vec<f64>, c: Vec<f64>, h: Mat, q: Option<Mat>, a_t: Mat, b_t: Vec<f64>, f: Mat, c_c: f64, c_t: Vec<f64>, q_t: Mat, equality_indices: Vec<usize>) -> Self {
+        MpProgram {
+            a,
+            b,
+            c,
+            h,
+            q,
+            a_t,
+            b_t,
+            f,
+            c_c,
+            c_t,
+            q_t,
+            equality_indices,
+            solver: Solver::default(),
+            warnings: vec![],
+            kkt: OnceLock::new(),
+            xtheta: OnceLock::new(),
+            qp_factor: OnceLock::new(),
+            theta_bbox: OnceLock::new(),
+        }
+    }
+
     /// Loads the JSON format written by `bench/mpc_problems.py`; mpQP if "Q" is present.
     pub fn from_problem_data(d: &ProblemData) -> Self {
         let a = Mat::from_rows(&d.a);

@@ -23,6 +23,9 @@ use crate::utils::chebyshev_ball;
 use rayon::prelude::*;
 use std::collections::BinaryHeap;
 
+mod persist;
+pub use persist::HASH_TABLE_FORMAT_VERSION;
+
 const TAG_SHIFT: u32 = 30;
 const PAYLOAD: u32 = (1 << TAG_SHIFT) - 1;
 const TAG_LEAF: u32 = 1;
