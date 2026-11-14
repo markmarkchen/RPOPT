@@ -3,11 +3,13 @@
 //!
 //! Usage:
 //!   ppopt_bench <problems_dir> <out.json> [--only a,b] [--algos x,y] [--queries N] [--no-pl] [--threads T]
-//!               [--max-seconds S] [--resume] [--traj N,L] [--no-traj] [--geom-max-regions R] [--bst-max-regions R]
+//!               [--max-seconds S] [--resume] [--traj N,L] [--no-traj] [--geom-max-regions R] [--bst-max-regions R] [--lm-max-regions R] [--geom-seconds S]
 //!
 //! `--geom-max-regions R` skips the partition geometry (and every locator built on it) above R regions (default 15000):
 //! building it took 120 s at 10k regions. `--bst-max-regions R` (default 3000) skips the binary search tree and the multiway
-//! trees (1.7M nodes for 955 regions).
+//! trees (1.7M nodes for 955 regions); `--lm-max-regions R` (default 1500) skips the linear machine LP.
+//! `--geom-seconds S` (default 120) abandons the geometry if it takes longer (the problem is then timed without the
+//! geometry-based locators).
 //! `--max-seconds S` caps every first solve at S seconds (the run is recorded as timed out and the process
 //! re-executes itself with `--resume` so that the runaway solver thread dies). `--resume` skips (problem, algorithm)
 //! pairs already in the output file. Files named `*.model.json` are closed-loop model sidecars (A, B, u_index) of
@@ -46,6 +48,8 @@ fn main() {
     let mut do_traj = true;
     let mut geom_max_regions = 15_000usize;
     let mut bst_max_regions = 3_000usize;
+    let mut lm_max_regions = 1_500usize;
+    let mut geom_seconds = 120.0f64;
     let (mut traj_n, mut traj_len) = (1000usize, 100usize);
     let mut i = 3;
     while i < args.len() {
@@ -65,6 +69,14 @@ fn main() {
             "--no-pl" => do_pl = false,
             "--no-traj" => do_traj = false,
             "--resume" => resume = true,
+            "--geom-seconds" => {
+                geom_seconds = args[i + 1].parse().unwrap();
+                i += 1;
+            }
+            "--lm-max-regions" => {
+                lm_max_regions = args[i + 1].parse().unwrap();
+                i += 1;
+            }
             "--bst-max-regions" => {
                 bst_max_regions = args[i + 1].parse().unwrap();
                 i += 1;
@@ -106,6 +118,9 @@ fn main() {
             if !o.contains(&name) {
                 continue;
             }
+        }
+        if resume && algos.iter().all(|a| results.contains_key(&format!("{name}/{}", a.name()))) && (!do_pl || results.contains_key(&format!("{name}/point_location"))) {
+            continue; // finished in an earlier pass
         }
         // build (constraint processing) time, best of 5
         let mut build_s = f64::INFINITY;
@@ -249,7 +264,31 @@ fn main() {
         }
         // point location
         let t0 = Instant::now();
-        let geom_opt = if sol.len() <= geom_max_regions { Some(PartitionGeometry::new(&sol)) } else { None };
+        let geom_key = format!("{name}/geometry_timeout");
+        let geom_opt = if sol.len() > geom_max_regions || results.contains_key(&geom_key) {
+            None
+        } else {
+            let (tx, rx) = std::sync::mpsc::channel();
+            let sc = sol.clone();
+            std::thread::Builder::new().stack_size(256 << 20).spawn(move || {
+                let _ = tx.send(PartitionGeometry::new(&sc));
+            }).unwrap();
+            match rx.recv_timeout(std::time::Duration::from_secs_f64(geom_seconds)) {
+                Ok(g) => Some(g),
+                Err(_) => {
+                    println!("  geometry TIMED OUT after {geom_seconds} s: restarting without it for this problem");
+                    results.insert(geom_key, json!({"timed_out": true, "cap_s": geom_seconds}));
+                    std::fs::write(&out, serde_json::to_string_pretty(&Value::Object(results.clone())).unwrap()).unwrap();
+                    let mut a: Vec<String> = args[1..].to_vec();
+                    if !resume {
+                        a.push("--resume".into());
+                    }
+                    use std::os::unix::process::CommandExt;
+                    let err = std::process::Command::new(std::env::current_exe().unwrap()).args(&a).exec();
+                    panic!("re-exec failed: {err}");
+                }
+            }
+        };
         let geom_s = t0.elapsed().as_secs_f64();
         match &geom_opt {
             Some(geom) => println!(
@@ -314,7 +353,8 @@ fn main() {
                 println!("  BST and multiway trees skipped: {} regions > --bst-max-regions {} (node count explodes)", sol.len(), bst_max_regions);
             }
             let t0 = Instant::now();
-            match LinearMachine::new(geom) {
+            let lm_opt = if sol.len() <= lm_max_regions { LinearMachine::new(geom) } else { println!("  linear machine skipped: {} regions > --lm-max-regions {}", sol.len(), lm_max_regions); None };
+            match lm_opt {
                 Some(lm) => {
                     let rep = lm.report.clone();
                     println!(
@@ -324,6 +364,7 @@ fn main() {
                     let info = json!({"certified": rep.certified, "max_vertex_violation": rep.max_vertex_violation, "min_center_margin": rep.min_center_margin, "centers_correct": rep.centers_correct});
                     locators.push((Box::new(lm), t0.elapsed().as_secs_f64(), info));
                 }
+                None if sol.len() > lm_max_regions => {}
                 None => {
                     let nff = geom.non_facet_to_facet();
                     println!("  linear machine: LP infeasible ({nff} facets shared with 2+ neighbours: partition is not facet-to-facet, so not a regular subdivision)");

@@ -11,9 +11,9 @@ DIR=bench/problems_large
 OUT=bench/results/large.json
 PY=${PY:-python3}
 
-rm -f "$OUT"
+[ -n "$RESUME" ] || rm -f "$OUT"
 # main pass: every algorithm except the exponential combinatorial and mplcp_enum; point location in both query modes
-$BIN "$DIR" "$OUT" --algos geometric,graph,combinatorial_graph,ahmadi,mplcp --queries 100000 --traj 1000,100 --max-seconds "$CAP"
+$BIN "$DIR" "$OUT" --algos geometric,graph,combinatorial_graph,ahmadi,mplcp --queries 100000 --traj 1000,100 --max-seconds "$CAP" --geom-max-regions 20000 ${RESUME:+--resume}
 
 # combinatorial only where it can finish: problems whose graph solve took < 0.5 s, at most 60 s each
 ONLY=$($PY - "$OUT" <<'EOF'
