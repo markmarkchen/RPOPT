@@ -304,7 +304,8 @@ t = [r"\begin{tabular}{@{}lrrrr@{}}", r"\toprule", r"coverage level & minimum & 
 for l in lines:
     m = re.match(r"^([\w% ]+): speedup min (\d+)x \(([^)]*)\), median ([\d,]+)x, max ([\d,]+)x over (\d+) runs; (\d+) at 200x", l)
     if m:
-        t.append(f"{m.group(1)} & {m.group(2)}x & {m.group(4)}x & {m.group(5)}x & {m.group(7)} of {m.group(6)} \\\\")
+        level = m.group(1).replace("%", r"\%")
+        t.append(f"{level} & {m.group(2)}x & {m.group(4)}x & {m.group(5)}x & {m.group(7)} of {m.group(6)} \\\\")
 t += [r"\bottomrule", r"\end{tabular}"]
 write("tab_coverage.tex", "\n".join(t))
 print("tables written:", sorted(os.listdir(OUT)))

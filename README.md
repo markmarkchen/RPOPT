@@ -37,15 +37,16 @@ Arnström and Axehill (2024). Details: [Performance](#performance) and [bench/RE
 
 - **Exact and verified.** Each benchmark run checks that all algorithms agree. It also samples 2000 parameters
   against direct QP solves, looking for gaps, overlaps and wrong control laws.
-- **All of PPOPT's algorithms, plus ten from the literature:**
+- **All of PPOPT's algorithms, plus eleven from the literature:**
   - Arnström-Axehill with DAQP, as published;
   - Ahmadi-Moshkenani;
-  - mp-LCP pivoting and enumeration;
+  - mp-LCP pivoting, and mp-LCP enumeration;
   - lexicographic mpLP;
   - active-set dynamic programming;
   - randomized MPR;
   - approximate mpQP;
-  - mpMILP branch and bound.
+  - mpMILP comparison (Dua-Pistikopoulos), and mpMILP branch and bound;
+  - exact mpMIQP comparison (Oberdieck-Pistikopoulos).
 - **Robust on degenerate problems.** RPOPT closes holes that facet stepping (as implemented in PPOPT) leaves at
   degenerate points. On degenerate mpLPs, every RPOPT exact solver returns a gap-free partition; PPOPT's geometric
   and graph solvers leave 10% to 77% of the feasible parameter set uncovered on most of them.
@@ -299,8 +300,8 @@ combinatorial_graph are 213x to 17,227x. RPOPT's `geometric` is 185x to 968x on 
 geometric covers the feasible set. On the 7 where PPOPT's leaves gaps (0.3% to 77% uncovered, with fewer
 regions), it is 16x to 351x. Use `mplp_lex` for mpLPs.
 
-**Against the previous RPOPT release** (commit 778cdb9, frozen binaries, alternating runs, one thread, regions
-identical):
+**Against the previous RPOPT release** (commit 778cdb9, frozen binaries, alternating runs, one thread). The
+regions are identical, except for mpLP `graph`, whose old partitions had gaps and missing regions:
 
 | | pairs | median | range | below 0.95x |
 |---|---:|---:|---|---:|
@@ -330,7 +331,7 @@ thin but real: direct QP solves confirm them, and its default `lowdim_tol` disca
 | sys3x2_N5 | 973 | 9.6 ms (`mplcp`) |
 | masses2_N6 | 901 | 27.5 ms (`mplcp`) |
 
-**Larger problems** (`bench/problems_large`, 131 MPC, POP and random problems with up to 78,897 regions and 10
+**Larger problems** (`bench/problems_large`, 131 MPC, POP and random problems with up to 428,841 regions and 10
 parameters; `bench/results/large.md`): `mplcp` is the fastest exact solver overall, at a geometric mean of 0.76x the
 time of `graph`. Those runs come from a shared, busy machine.
 
