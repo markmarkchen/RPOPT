@@ -19,6 +19,7 @@ pub mod critical_region;
 pub mod fxhash;
 pub mod linalg;
 pub mod mpc;
+pub mod lowrank;
 pub mod mpqp_utils;
 pub mod plot;
 pub mod point_location;
@@ -27,6 +28,7 @@ pub mod program;
 pub mod solution;
 pub mod solver;
 pub mod stats;
+pub mod trimming;
 pub mod utils;
 
 pub use algorithms::{solve_mpqp, solve_mpqp_with, MpqpAlgorithm, SolveOptions};
