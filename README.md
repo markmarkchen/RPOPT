@@ -1,6 +1,6 @@
-# ppopt_rs
+# RPOPT
 
-A Rust rewrite of [PPOPT](https://github.com/TAMUparametric/PPOPT) (Kenefake and Pistikopoulos, TAMU), the
+RPOPT (crate `ppopt_rs`) is a Rust rewrite of [PPOPT](https://github.com/TAMUparametric/PPOPT) (Kenefake and Pistikopoulos, TAMU), the
 Python package for multiparametric programming, with seven point location methods for evaluating the
 explicit solution online.
 
