@@ -455,11 +455,51 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
     out
 }
 
-/// Solves the mpQP by enumerating the critical regions of its pLCP.
-pub fn mplcp(program: &MpProgram, seed: u64) -> Vec<CriticalRegion> {
-    let Some(plcp) = Plcp::new(program) else {
-        panic!("mplcp needs a strictly convex mpQP (M = A Q^-1 A') with nonsingular equality block; mpLPs are not supported");
-    };
+/// Which pLCP method `solve` runs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Method {
+    /// Jones-Morari 2006 facet pivoting with lexicographic perturbation (strictly convex mpQP)
+    Pivot,
+    /// Herceg et al. 2015 enumeration of complementary bases (mpQP and mpLP)
+    Enumeration,
+}
+
+/// Solves the program through its pLCP. Programs the method cannot handle give an `Err` with the
+/// reason (the dispatcher turns it into an empty solution and a warning); nothing panics.
+///
+/// Degenerate problems: the pivoting method follows a global lexicographic perturbation, so at a
+/// degenerate vertex (dependent active constraints) it splits the parameter space into the
+/// lexico-feasible regions, which can be more and smaller regions than the single region
+/// `geometric` finds there. The regions still partition the feasible set (no overlap, no gap, see
+/// tests/mplcp.rs), but the region signature can differ from `geometric`'s (and `ppopt_bench`'s
+/// same-as-first check can fail there).
+/// The enumeration method has no perturbation: where several bases describe the same
+/// parameter set (degenerate mpLPs) it may return overlapping regions.
+pub fn solve(program: &MpProgram, seed: u64, method: Method) -> Result<Vec<CriticalRegion>, String> {
+    match method {
+        Method::Pivot => {
+            if program.q.is_none() {
+                return Err("mplcp: mpLP not supported by the pivoting method (use mplcp_enum)".into());
+            }
+            let plcp = Plcp::new(program).ok_or("mplcp: no pLCP form (Q not positive definite or singular equality block)")?;
+            Ok(pivot_solve(program, &plcp, seed))
+        }
+        Method::Enumeration => enum_solve(program),
+    }
+}
+
+/// `solve` for the dispatcher: an unsupported program gives an empty list and a warning on stderr.
+pub fn regions(program: &MpProgram, seed: u64, method: Method) -> Vec<CriticalRegion> {
+    match solve(program, seed, method) {
+        Ok(r) => r,
+        Err(msg) => {
+            eprintln!("warning: {msg}");
+            vec![]
+        }
+    }
+}
+
+fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegion> {
     let mut rng = StdRng::seed_from_u64(seed);
     let Some(active_set) = program.gen_optimal_active_set(&mut rng) else { return vec![] };
     let Some(initial) = crate::mpqp_utils::gen_cr_from_active_set(program, &active_set, false) else { return vec![] };
@@ -472,9 +512,9 @@ pub fn mplcp(program: &MpProgram, seed: u64) -> Vec<CriticalRegion> {
     while let Some(cur) = queue.pop_front() {
         // z rows of the region (position in the reduced LCP)
         let z: Vec<usize> = cur.active_set[neq..].iter().map(|c| plcp.ineq.iter().position(|x| x == c).unwrap()).collect();
-        let Some(tab) = tableau_for(&plcp, &z) else { continue };
+        let Some(tab) = tableau_for(plcp, &z) else { continue };
         for k in 0..cur.e.rows {
-            for nz in adjacent(&plcp, &tab, cur.e.row(k), cur.f[k], &cur.e, &cur.f) {
+            for nz in adjacent(plcp, &tab, cur.e.row(k), cur.f[k], &cur.e, &cur.f) {
                 let aset = plcp.active_set(nz.into_iter());
                 if !seen.insert(aset.clone()) {
                     continue;
@@ -487,4 +527,272 @@ pub fn mplcp(program: &MpProgram, seed: u64) -> Vec<CriticalRegion> {
         }
     }
     regions
+}
+
+// ---------------------------------------------------------------------------- enumeration
+
+/// pLCP of an mpLP in the general-M form of Herceg et al. 2015 (eq. 9 with H = 0, x = x+ - x-):
+/// pairs (v+_i, u+_i), (v-_i, u-_i) for the split free variables, then (s_j, λ_j).
+fn lp_plcp(program: &MpProgram) -> Plcp {
+    let nx = program.num_x();
+    let nt = program.num_t();
+    let mc = program.num_constraints();
+    let n = 2 * nx + mc;
+    let mut m = vec![0.0; n * n];
+    let mut q = vec![0.0; n];
+    let mut r = vec![0.0; n * nt];
+    for i in 0..nx {
+        q[i] = program.c[i];
+        q[nx + i] = -program.c[i];
+        for t in 0..nt {
+            r[i * nt + t] = program.h[(i, t)];
+            r[(nx + i) * nt + t] = -program.h[(i, t)];
+        }
+        for j in 0..mc {
+            let a = program.a[(j, i)];
+            m[i * n + 2 * nx + j] = a; // v+ = c + Hθ + A'λ
+            m[(nx + i) * n + 2 * nx + j] = -a;
+            m[(2 * nx + j) * n + i] = -a; // s = b + Fθ - A (u+ - u-)
+            m[(2 * nx + j) * n + nx + i] = a;
+        }
+    }
+    for j in 0..mc {
+        q[2 * nx + j] = program.b[j];
+        for t in 0..nt {
+            r[(2 * nx + j) * nt + t] = program.f[(j, t)];
+        }
+    }
+    Plcp { n, nt, m, q, r, ineq: vec![], eq: vec![] }
+}
+
+/// State of the depth-first form of Algorithm 1 (pairs are decided one by one; `choice[j]` is
+/// true when z_j is basic and false when w_j is).
+struct Enumerator<'a> {
+    p: &'a Plcp,
+    a_t: &'a Mat,
+    b_t: &'a [f64],
+    choice: Vec<bool>,
+    /// orthonormal basis of the columns chosen so far (rank test, line 7)
+    ortho: Vec<Vec<f64>>,
+    leaves: Vec<Vec<bool>>,
+    /// scratch for the feasibility LP
+    zsel: Vec<usize>,
+}
+
+impl<'a> Enumerator<'a> {
+    /// w_j (j < n) at the point (z, θ).
+    fn w_value(&self, j: usize, z: &[f64], th: &[f64]) -> f64 {
+        let p = self.p;
+        let mut v = p.q[j];
+        for (t, x) in th.iter().enumerate() {
+            v += p.r[j * p.nt + t] * x;
+        }
+        for (k, zk) in z.iter().enumerate() {
+            if *zk != 0.0 {
+                v += p.m[j * p.n + k] * zk;
+            }
+        }
+        v
+    }
+
+    /// F(B') of eq. (10) for the partial basis of the first `i` pairs: is there (z, θ) with
+    /// θ in Θ, nonnegative w and z, z_k = 0 for k < i with w_k basic, and w_k = 0 for k < i with
+    /// z_k basic? (The undecided pairs are only required to be nonnegative.) Returns a point (z, θ).
+    fn feasible(&mut self, i: usize) -> Option<(Vec<f64>, Vec<f64>)> {
+        let p = self.p;
+        let (n, nt) = (p.n, p.nt);
+        self.zsel.clear();
+        self.zsel.extend((0..i).filter(|&k| self.choice[k]));
+        self.zsel.extend(i..n);
+        let nz = self.zsel.len();
+        let nv = nz + nt;
+        let neq = (0..i).filter(|&j| self.choice[j]).count();
+        let rows = n + nz + self.a_t.rows;
+        let mut a = Mat::zeros(rows, nv);
+        let mut b = vec![0.0; rows];
+        let (mut e_row, mut i_row) = (0, neq);
+        for j in 0..n {
+            // w_j = q_j + R_j θ + M_j z
+            let is_eq = j < i && self.choice[j];
+            let (row, sign) = if is_eq {
+                e_row += 1;
+                (e_row - 1, 1.0)
+            } else {
+                i_row += 1;
+                (i_row - 1, -1.0)
+            };
+            let ar = a.row_mut(row);
+            for (c, &k) in self.zsel.iter().enumerate() {
+                ar[c] = sign * p.m[j * n + k];
+            }
+            for t in 0..nt {
+                ar[nz + t] = sign * p.r[j * nt + t];
+            }
+            b[row] = -sign * p.q[j];
+        }
+        for c in 0..nz {
+            a[(n + c, c)] = -1.0;
+        }
+        for k in 0..self.a_t.rows {
+            let ar = a.row_mut(n + nz + k);
+            ar[nz..].copy_from_slice(self.a_t.row(k));
+            b[n + nz + k] = self.b_t[k];
+        }
+        let eq: Vec<usize> = (0..neq).collect();
+        let y = crate::solver::lp::lp_feasible_point(&a, &b, &eq, None)?;
+        let mut z = vec![0.0; n];
+        for (c, &k) in self.zsel.iter().enumerate() {
+            z[k] = y[c];
+        }
+        Some((z, y[nz..].to_vec()))
+    }
+
+    /// Residual of the column of pair `i` (w_i = e_i or z_i = -M e_i) against the chosen columns;
+    /// pushes the normalized residual when the rank grows.
+    fn push_column(&mut self, i: usize, z_basic: bool) -> bool {
+        let n = self.p.n;
+        let mut col = vec![0.0; n];
+        if z_basic {
+            for j in 0..n {
+                col[j] = -self.p.m[j * n + i];
+            }
+        } else {
+            col[i] = 1.0;
+        }
+        let nrm0 = col.iter().map(|v| v * v).sum::<f64>().sqrt();
+        for u in &self.ortho {
+            let d: f64 = col.iter().zip(u).map(|(a, b)| a * b).sum();
+            for (c, x) in col.iter_mut().zip(u) {
+                *c -= d * x;
+            }
+        }
+        let nrm = col.iter().map(|v| v * v).sum::<f64>().sqrt();
+        if nrm <= 1e-9 * nrm0.max(1e-300) || nrm0 == 0.0 {
+            return false;
+        }
+        for c in col.iter_mut() {
+            *c /= nrm;
+        }
+        self.ortho.push(col);
+        true
+    }
+
+    fn dfs(&mut self, i: usize, witness: Option<(Vec<f64>, Vec<f64>)>) {
+        let n = self.p.n;
+        if i == n {
+            self.leaves.push(self.choice.clone());
+            return;
+        }
+        for z_basic in [false, true] {
+            if !self.push_column(i, z_basic) {
+                continue;
+            }
+            self.choice[i] = z_basic;
+            // the parent's point is a witness when it already satisfies the new restriction
+            let mut wit = None;
+            if let Some((z, th)) = &witness {
+                let tol = 1e-10;
+                let ok = if z_basic { self.w_value(i, z, th).abs() <= tol * (1.0 + self.p.q[i].abs()) } else { z[i].abs() <= tol };
+                if ok {
+                    wit = Some((z.clone(), th.clone()));
+                }
+            }
+            if wit.is_none() {
+                wit = self.feasible(i + 1);
+            }
+            if let Some(w) = wit {
+                self.dfs(i + 1, Some(w));
+            }
+            self.ortho.pop();
+        }
+    }
+}
+
+/// How often each pLCP row is active at random parameters (a cheap probe for the pair order).
+fn activity(program: &MpProgram, p: &Plcp) -> Vec<usize> {
+    let mut act = vec![0usize; p.n];
+    let Some((lo, hi)) = program.theta_bbox() else { return act };
+    let mut rng = StdRng::seed_from_u64(1);
+    for _ in 0..64 {
+        let th: Vec<f64> = lo.iter().zip(hi).map(|(l, h)| rand::Rng::gen_range(&mut rng, *l..=*h)).collect();
+        if let Some(sol) = program.solve_theta_uncounted(&th) {
+            for c in sol.active_set {
+                if let Some(k) = p.ineq.iter().position(|&x| x == c) {
+                    act[k] += 1;
+                }
+            }
+        }
+    }
+    act
+}
+
+/// The pLCP with pair `perm[k]` moved to position k (any pair order is valid for Algorithm 1).
+fn permuted(p: &Plcp, perm: &[usize]) -> Plcp {
+    let n = p.n;
+    let nt = p.nt;
+    let mut m = vec![0.0; n * n];
+    let mut q = vec![0.0; n];
+    let mut r = vec![0.0; n * nt];
+    for (a, &i) in perm.iter().enumerate() {
+        q[a] = p.q[i];
+        r[a * nt..(a + 1) * nt].copy_from_slice(&p.r[i * nt..(i + 1) * nt]);
+        for (b, &j) in perm.iter().enumerate() {
+            m[a * n + b] = p.m[i * n + j];
+        }
+    }
+    Plcp { n, nt, m, q, r, ineq: p.ineq.clone(), eq: p.eq.clone() }
+}
+
+/// Herceg et al. (2015) Algorithm 1: enumerates the feasible complementary bases of the pLCP and
+/// builds the critical region of each (full-dimensional ones only).
+fn enum_solve(program: &MpProgram) -> Result<Vec<CriticalRegion>, String> {
+    let is_lp = program.q.is_none();
+    let plcp = if is_lp {
+        if !program.equality_indices.is_empty() {
+            return Err("mplcp_enum: mpLP with equality constraints is not supported".into());
+        }
+        lp_plcp(program)
+    } else {
+        Plcp::new(program).ok_or("mplcp_enum: no pLCP form (Q not positive definite or singular equality block)")?
+    };
+    let n = plcp.n;
+    // Any pair order is valid for Algorithm 1; deciding the rows that are rarely active first
+    // prunes far more (2.5x to 12x fewer LPs than the natural order on the bench problems).
+    let perm: Vec<usize> = if is_lp {
+        (0..n).collect()
+    } else {
+        let act = activity(program, &plcp);
+        let mut v: Vec<usize> = (0..n).collect();
+        v.sort_by_key(|&k| (act[k], std::cmp::Reverse(k)));
+        v
+    };
+    let pp = permuted(&plcp, &perm);
+    let mut en = Enumerator { p: &pp, a_t: &program.a_t, b_t: &program.b_t, choice: vec![false; n], ortho: vec![], leaves: vec![], zsel: vec![] };
+    en.dfs(0, None);
+    let nx = program.num_x();
+    let mut seen: HashSet<Vec<usize>> = HashSet::default();
+    let mut regions = vec![];
+    for leaf_p in std::mem::take(&mut en.leaves) {
+        let mut leaf = vec![false; n];
+        for (pos, &orig) in perm.iter().enumerate() {
+            leaf[orig] = leaf_p[pos];
+        }
+        let aset = if is_lp {
+            let mut a: Vec<usize> = (0..program.num_constraints()).filter(|&j| leaf[2 * nx + j]).collect();
+            a.sort_unstable();
+            if a.len() != nx || !program.check_active_set_rank(&a) {
+                continue;
+            }
+            a
+        } else {
+            plcp.active_set((0..n).filter(|&k| leaf[k]))
+        };
+        if !seen.insert(aset.clone()) {
+            continue;
+        }
+        if let Some(cr) = gen_cr_from_active_set_lambda_first(program, &aset, true) {
+            regions.push(cr);
+        }
+    }
+    Ok(regions)
 }

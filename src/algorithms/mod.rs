@@ -33,12 +33,14 @@ pub enum MpqpAlgorithm {
     GeometricParallel,
     /// Jones-Morari mp-LCP pivoting
     Mplcp,
+    /// Herceg et al. enumeration of pLCP bases (mpQP and mpLP)
+    MplcpEnum,
 }
 
 impl MpqpAlgorithm {
     pub fn all() -> &'static [MpqpAlgorithm] {
         use MpqpAlgorithm::*;
-        &[Combinatorial, CombinatorialParallel, Graph, GraphExp, GraphParallel, CombinatorialGraph, CombinatorialGraphParallel, Geometric, GeometricParallel, Mplcp]
+        &[Combinatorial, CombinatorialParallel, Graph, GraphExp, GraphParallel, CombinatorialGraph, CombinatorialGraphParallel, Geometric, GeometricParallel, Mplcp, MplcpEnum]
     }
 
     pub fn name(&self) -> &'static str {
@@ -54,6 +56,7 @@ impl MpqpAlgorithm {
             Geometric => "geometric",
             GeometricParallel => "geometric_parallel",
             Mplcp => "mplcp",
+            MplcpEnum => "mplcp_enum",
         }
     }
 
@@ -93,7 +96,8 @@ pub fn solve_mpqp_with(program: &Arc<MpProgram>, algorithm: MpqpAlgorithm, opts:
         CombinatorialGraphParallel => combinatorial_graph(program, opts, true),
         Geometric => geometric(program, opts, false),
         GeometricParallel => geometric(program, opts, true),
-        Mplcp => mplcp::mplcp(program, opts.seed),
+        Mplcp => mplcp::regions(program, opts.seed, mplcp::Method::Pivot),
+        MplcpEnum => mplcp::regions(program, opts.seed, mplcp::Method::Enumeration),
     };
     let mut sol = Solution::new(program.clone(), regions);
     // PPOPT flags every solution as overlapping (its isinstance check also matches MPQP). We only
