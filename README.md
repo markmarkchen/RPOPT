@@ -112,6 +112,20 @@ Implementation notes:
 - **YANN**: the five layers of the paper (step, ReLU indicator, first-active selector, big-M ReLU pairs,
   linear output), in f64; `locate` runs layers 1-3, `Yann::evaluate` all five.
 
+## Active-set dynamic programming for explicit MPC
+
+`algorithms::dp::solve_mpc_dp` (not part of `MpqpAlgorithm::all()`, because its input is the MPC structure
+`mpc::MpcProblem`, not the condensed mpQP) builds the set of optimal active sets for horizon N+1 from the one
+for horizon N, in stagewise constraint order: Mitze and Mönnigmann, Automatica 120 (2020) (Lemma 1, Cor. 3,
+Prop. 4, Algs. 2 to 4); the cardinality limit N·n_u of Mitze and Mönnigmann, CDC 2022; the central-symmetry
+reduction of Mitze, Kvasnica and Mönnigmann, Automatica 151 (2023). The optimal active sets are mapped to rows of
+the condensed `MpProgram` and turned into `CriticalRegion`s with `gen_cr_from_active_set`, so the output is
+comparable with the other algorithms (`bench/problems/*.json` carry the MPC data under the key `"mpc"`).
+Options (`DpOptions`): `paper2020()`, `cdc2022()`, `symmetric()`; `terminal_invariant` (Cor. 3 and Prop. 4,
+valid only when the terminal set is the maximal admissible set of the LQR, as in the `dinv_*` problems),
+`reduced_lps`, `global_order`, `parallel`. `cargo run --release --example dp_bench` times it against the
+other algorithms and over the horizon.
+
 ## Usage
 
 ```rust

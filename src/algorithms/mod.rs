@@ -2,6 +2,7 @@
 
 pub mod ahmadi;
 pub mod common;
+pub mod dp;
 pub mod incremental;
 pub mod mpmiqp;
 pub mod mplcp;
