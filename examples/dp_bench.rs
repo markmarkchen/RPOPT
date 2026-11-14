@@ -50,12 +50,13 @@ fn median_time<T>(limit: f64, mut f: impl FnMut() -> T) -> (f64, T) {
             let dt = thread_cpu() - t0;
             times.push(dt);
             total += dt;
-            if dt > limit || (times.len() >= 7 && total >= 0.5) || times.len() >= 200 {
+            if dt > limit || (times.len() >= 15 && total >= 0.5) || times.len() >= 200 {
                 break;
             }
         }
         times.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        return (times[times.len() / 2], last);
+        let idx = if std::env::var("DP_MIN").is_ok() { 0 } else { times.len() / 2 };
+        return (times[idx], last);
     }
     let mut times = vec![];
     let mut total = 0.0;

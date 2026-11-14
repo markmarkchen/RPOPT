@@ -988,6 +988,59 @@ fn to_y(rx: &[f64], c0: f64, ident: bool, xc: &[f64], t: &[f64], nf: usize, out:
     *b = c0 - sh;
 }
 
+
+type InactiveArgs<'a> = (&'a [f64], &'a [f64], &'a [f64], usize, Set, &'a [usize], &'a [f64], bool, &'a [f64], &'a [f64], usize, usize, &'a mut [f64], &'a mut [f64]);
+
+/// The rows `Cx_i x0 + W_iB (Lx x0 + l0) + w_i >= 0` of the inactive i in the variables y (NX parameters).
+/// Returns the number of rows written.
+fn inactive_rows<const NX: usize>(args: InactiveArgs) -> usize {
+    let (w_flat, cx_flat, w, q, a, act_b, sol, ident, xc, tm, nf, ncol, mat_data, bv) = args;
+    let nc = NX + 1;
+    let mut r = 0;
+    for i in 0..q {
+        if a >> i & 1 == 1 {
+            continue;
+        }
+        let wrow = &w_flat[i * q..(i + 1) * q];
+        let mut rx = [0.0f64; NX];
+        for c in 0..NX {
+            rx[c] = -cx_flat[i * NX + c];
+        }
+        let mut c0 = w[i];
+        for (k, &j) in act_b.iter().enumerate() {
+            let wij = wrow[j];
+            let sk = &sol[k * nc..(k + 1) * nc];
+            for c in 0..NX {
+                rx[c] -= wij * sk[c];
+            }
+            c0 += wij * sk[NX];
+        }
+        let out = &mut mat_data[r * ncol..r * ncol + nf];
+        if ident {
+            out.copy_from_slice(&rx);
+            bv[r] = c0;
+        } else {
+            let mut o = [0.0f64; NX];
+            let mut sh = 0.0;
+            for c in 0..NX {
+                let v = rx[c];
+                if v == 0.0 {
+                    continue;
+                }
+                sh += v * xc[c];
+                let tr = &tm[c * nf..(c + 1) * nf];
+                for f in 0..nf {
+                    o[f] += v * tr[f];
+                }
+            }
+            out.copy_from_slice(&o[..nf]);
+            bv[r] = c0 - sh;
+        }
+        r += 1;
+    }
+    r
+}
+
 impl Horizon<'_> {
     /// Same decisions as `classify` with the reduced LPs, on per-thread buffers. `None` when the
     /// reduced route does not apply (the caller uses the full LPs).
@@ -1160,29 +1213,18 @@ impl Horizon<'_> {
         sc.b.resize(n_in, 0.0);
         sc.rx.clear();
         sc.rx.resize(nx, 0.0);
-        let mut r = 0;
-        for i in 0..q {
-            if a >> i & 1 == 1 {
-                continue;
+        let mut r = {
+            let (mat_data, bv) = (&mut sc.mat.data[..], &mut sc.b[..]);
+            let args = (&self.w_mat.data[..], &self.cx.data[..], &qp.w[..], q, a, &sc.act_b[..], &sc.sol[..], ident, &sc.xc[..], &sc.tm[..], nf, ncol, mat_data, bv);
+            match nx {
+                2 => inactive_rows::<2>(args),
+                3 => inactive_rows::<3>(args),
+                4 => inactive_rows::<4>(args),
+                5 => inactive_rows::<5>(args),
+                6 => inactive_rows::<6>(args),
+                _ => return None,
             }
-            // Cx_i x0 + W_iB (Lx x0 + l0) + w_i >= 0
-            let mut c0 = qp.w[i];
-            for c in 0..nx {
-                sc.rx[c] = -self.cx[(i, c)];
-            }
-            for (k, &j) in sc.act_b.iter().enumerate() {
-                let wij = self.w_mat[(i, j)];
-                let sk = &sc.sol[k * nc..(k + 1) * nc];
-                for c in 0..nx {
-                    sc.rx[c] -= wij * sk[c];
-                }
-                c0 += wij * sk[nx];
-            }
-            let mut bb = 0.0;
-            to_y(&sc.rx, c0, ident, &sc.xc, &sc.tm, nf, &mut sc.mat.data[r * ncol..r * ncol + nf], &mut bb);
-            sc.b[r] = bb;
-            r += 1;
-        }
+        };
         for k in 0..nb {
             // lambda_k = mu_k - sum_d C_dk lambda_d >= 0
             for c in 0..nx {
@@ -1450,6 +1492,31 @@ fn run_levels(ctx: &Horizon, cands: &[Set], pruned: &mut Vec<Set>, out: &mut Vec
         let card = cands[start].count_ones();
         let end = start + cands[start..].iter().take_while(|c| c.count_ones() == card).count();
         let level = &cands[start..end];
+        if !(parallel && level.len() > 1) {
+            // serial: candidates of one cardinality cannot prune each other, so the outcomes are
+            // handled in place (no per-candidate result records)
+            let mut new_pruned = vec![];
+            for &a in level {
+                stats.candidates += 1;
+                if contains_pruned(pruned, a) {
+                    stats.pruned += 1;
+                    continue;
+                }
+                match ctx.classify(a, stats) {
+                    Outcome::Optimal(d) => out.push((a, d)),
+                    Outcome::Infeasible => {
+                        new_pruned.push(a);
+                        if let Some(p) = ctx.perm {
+                            new_pruned.push(apply_perm(a, p));
+                        }
+                    }
+                    Outcome::Other => {}
+                }
+            }
+            pruned.extend(new_pruned);
+            start = end;
+            continue;
+        }
         let known: &[Set] = pruned;
         let one = |&a: &Set| -> (Set, Option<Outcome>, DpStats) {
             let mut st = DpStats { candidates: 1, ..Default::default() };
