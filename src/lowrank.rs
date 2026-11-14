@@ -576,7 +576,7 @@ impl CompressedSolution {
     fn locate_with_x(&self, theta: &[f64]) -> Option<(usize, Vec<f64>)> {
         let (nx, nt, m) = (self.nx, self.nt, self.m);
         let omega: Vec<f64> = (0..self.program.a_t.rows).map(|t| dot(self.program.a_t.row(t), theta) - self.program.b_t[t]).collect();
-        let mut hits: Vec<(usize, Vec<f64>)> = vec![];
+        let mut hits: Vec<(usize, Vec<f64>, f64)> = vec![];
         let mut x = vec![0.0; nx];
         let mut pv = vec![0.0; m];
         let mut dv = vec![0.0; m];
@@ -674,7 +674,7 @@ impl CompressedSolution {
                 if !self.overlapping && margin < -1e-4 {
                     return Some((ni, x));
                 }
-                hits.push((ni, x.clone()));
+                hits.push((ni, x.clone(), margin));
             }
             stack.push(Op::Exit);
             for &c in node.children.iter().rev() {
@@ -686,17 +686,23 @@ impl CompressedSolution {
         }
         hits.sort_by_key(|h| h.0);
         if !self.overlapping {
-            return hits.into_iter().next();
+            return hits.into_iter().next().map(|(a, b, _)| (a, b));
         }
-        let mut best = f64::INFINITY;
-        let mut best_i = None;
-        for (k, (_, x)) in hits.iter().enumerate() {
+        // Regions containing theta strictly (margin <= 0) take precedence over those within tol.
+        let mut best = [f64::INFINITY; 2];
+        let mut best_k: [Option<usize>; 2] = [None, None];
+        for (k, (_, x, margin)) in hits.iter().enumerate() {
+            let class = if *margin <= 0.0 { 0 } else { 1 };
             let obj = self.program.evaluate_objective(x, theta);
-            if obj <= best {
-                best = obj;
-                best_i = Some(k);
+            if obj <= best[class] {
+                best[class] = obj;
+                best_k[class] = Some(k);
             }
         }
-        best_i.map(|k| hits.swap_remove(k))
+        let best_i = best_k[0].or(best_k[1]);
+        best_i.map(|k| {
+            let (a, b, _) = hits.swap_remove(k);
+            (a, b)
+        })
     }
 }

@@ -77,21 +77,33 @@ impl Solution {
         self.critical_regions.iter().position(|r| r.is_inside(theta, self.point_location_tolerance))
     }
 
-    /// Among all regions containing θ, the one with the lowest objective.
+    /// Among the regions containing θ, the one with the lowest objective. Regions that contain θ
+    /// strictly (tolerance 0) take precedence: a region that holds θ only within the tolerance
+    /// extrapolates its law slightly outside its own cell and can look better than the optimum.
+    /// The tolerance applies only when no region contains θ strictly.
     pub fn get_region_overlap(&self, theta: &[f64]) -> Option<usize> {
-        let mut best = f64::INFINITY;
-        let mut best_i = None;
+        let mut best = [f64::INFINITY; 2];
+        let mut best_i: [Option<usize>; 2] = [None, None];
         for (i, r) in self.critical_regions.iter().enumerate() {
-            if r.is_inside(theta, self.point_location_tolerance) {
-                let x = r.evaluate(theta);
-                let obj = self.program.evaluate_objective(&x, theta);
-                if obj <= best {
-                    best = obj;
-                    best_i = Some(i);
+            let mut viol = f64::NEG_INFINITY;
+            for k in 0..r.e.rows {
+                viol = viol.max(crate::linalg::dot(r.e.row(k), theta) - r.f[k]);
+                if viol >= self.point_location_tolerance {
+                    break;
                 }
             }
+            if viol >= self.point_location_tolerance {
+                continue;
+            }
+            let class = if viol <= 0.0 { 0 } else { 1 };
+            let x = r.evaluate(theta);
+            let obj = self.program.evaluate_objective(&x, theta);
+            if obj <= best[class] {
+                best[class] = obj;
+                best_i[class] = Some(i);
+            }
         }
-        best_i
+        best_i[0].or(best_i[1])
     }
 
     pub fn evaluate(&self, theta: &[f64]) -> Option<Vec<f64>> {
