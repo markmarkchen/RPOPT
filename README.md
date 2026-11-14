@@ -10,7 +10,7 @@ mpLP, mpQP, mpMILP and mpMIQP solvers, plus fast exact point location.
 ![license](https://img.shields.io/badge/license-MIT-blue)
 ![rust](https://img.shields.io/badge/rust-2024%20edition-orange)
 ![python](https://img.shields.io/badge/python-PPOPT--compatible%20bindings-3776AB)
-![tests](https://img.shields.io/badge/tests-127%20Rust%20%2B%2072%20Python-brightgreen)
+![tests](https://img.shields.io/badge/tests-133%20Rust%20%2B%2072%20Python-brightgreen)
 
 </div>
 
@@ -60,7 +60,7 @@ caveats: [Performance](#performance).</sub>
 - **Exact mixed-integer comparison.** mp-MIQP solutions with quadric region boundaries (Oberdieck and
   Pistikopoulos 2015), in addition to PPOPT's overlapping enumeration.
 - **Fast online evaluation.** Point location takes 9 to 32 ns per query with a hash table built to a storage
-  budget. Nine other exact locators are included. The table, trees, walking and sequential methods return the same
+  budget. Ten other exact locators are included. The table, trees, walking and sequential methods return the same
   region as `Solution::get_region` on every tested query, including points on region boundaries.
 - **Drop-in Python.** PPOPT-compatible bindings: `rpopt.install_as_ppopt()` runs existing PPOPT scripts unchanged.
 - **Deployable.** Solutions and point location indexes save to a bit-exact binary format and load in about 1 ms.
@@ -220,6 +220,7 @@ law violates the constraints by up to about 2e4 times the distance (0.16 at dist
 | YANN | `yann` | Braniff, Tian 2026 (arXiv 2505.07054) |
 | subdivision walking | `walk` | Wang, Jones, Maciejowski 2007 (sequences of nearby queries) |
 | graph traversal | `graph_traversal` | Herceg, Mariéthoz, Morari 2013 (sequences of nearby queries) |
+| weighted nearest neighbour (power diagram) | `wnn` | Jones, Grieder, Raković 2006; research locator, see below |
 
 **Recommendation: `HashTable::with_storage_limit(&geom, max_bytes)`.** It builds the fastest exact table that fits
 the budget. The choice is made by a deterministic predicted cost, so the same input always gives the same table.
@@ -243,6 +244,13 @@ parameters. The hash table is 5x to 20x faster at 2 to 4 parameters and 3x to 10
 1.4x to 2x deeper than log2 of the region count, because regions that straddle a cut are copied into both
 branches. Trees win only on region-uniform queries at 4 to 6 parameters, where many tiny regions crowd a few grid
 cells. The hash table supports up to 16 parameters.
+
+**Weighted nearest neighbour** (`examples/pl_wnn_bench.rs`, `bench/results/pl_wnn.md`): a partition that is a power
+diagram can be searched as a nearest-neighbour problem in one dimension more. Every mpLP partition qualifies (its
+sites and weights come from the value function, no LP), but most mpQP partitions do not: only the 8 small double
+integrator problems of the 12 benchmarks, and none of 15 random and mass-chain mpQPs, because those partitions are not
+facet-to-facet. Where it applies, the exact k-d search still scores 25% to 40% of the regions per query and is 5x to
+250x slower than the hash table, so it is kept as a tested research locator with the hash table as exact fallback.
 
 ## Saving and loading
 
@@ -371,7 +379,7 @@ time of `graph`. Those runs come from a shared, busy machine.
 - **`examples/mplp_bench.rs`** checks every mpLP solution at 2,000 random parameters against direct LP solves (no
   gaps, feasible laws, optimal objective). Every exact RPOPT solver has 0 gaps and 0 errors on all
   `bench/problems_lp` problems it finishes.
-- **`cargo test --release`** (127 tests) covers:
+- **`cargo test --release`** (133 tests) covers:
   - parity with PPOPT's results and examples;
   - each new algorithm against `geometric` and `combinatorial`, on the benchmark and on random problems;
   - degenerate problems (gaps and overlaps on 20,000 samples), including gap-free graph solvers on degenerate

@@ -73,7 +73,7 @@
 use super::geometry::PartitionGeometry;
 use super::hash_table::HashTable;
 use super::walk::RowGraph;
-use super::{pick_strict_first, PointLocator, LOCATE_TOL};
+use super::{pick_strict_first, PointLocator};
 use crate::linalg::dot;
 use crate::solution::Solution;
 use crate::solver::sparse_lp::SparseLp;
@@ -335,6 +335,8 @@ pub struct Wnn {
     graph: RowGraph,
     domain: Vec<Vec<f64>>,
     fallback: Option<Arc<dyn PointLocator>>,
+    /// boundary tolerance, taken from the geometry (the solution's point location tolerance)
+    tol: f64,
     pub report: WnnReport,
 }
 
@@ -420,7 +422,7 @@ impl Wnn {
                 report.status = last;
             }
         }
-        Wnn { n, num_regions: r, tree, graph: RowGraph::new(geom), domain: geom.domain_planes.clone(), fallback, report }
+        Wnn { n, num_regions: r, tree, graph: RowGraph::new(geom), domain: geom.domain_planes.clone(), fallback, tol: geom.tol, report }
     }
 
     pub fn is_power_diagram(&self) -> bool {
@@ -441,7 +443,7 @@ impl Wnn {
     fn exact(&self, theta: &[f64]) -> Option<usize> {
         match &self.fallback {
             Some(f) => f.locate(theta),
-            None => pick_strict_first(0..self.num_regions, |j| self.graph.violation(j, theta)),
+            None => pick_strict_first(self.tol, 0..self.num_regions, |j| self.graph.violation(j, theta)),
         }
     }
 
@@ -458,7 +460,7 @@ impl Wnn {
         // clearly outside the feasible set: beyond a domain plane by far more than the boundary
         // tolerance (the margin keeps the early exit exact when the rows of the solution and the
         // normalized rows of the geometry weigh LOCATE_TOL differently)
-        if !self.domain.iter().all(|p| dot(&p[..n], theta) <= p[n] + OUTSIDE_MARGIN * LOCATE_TOL) {
+        if !self.domain.iter().all(|p| dot(&p[..n], theta) <= p[n] + OUTSIDE_MARGIN * self.tol) {
             return (None, WnnOutcome::Outside);
         }
         let g0 = self.graph.row0(i);
