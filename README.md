@@ -10,7 +10,7 @@ mpLP, mpQP, mpMILP and mpMIQP solvers, plus fast exact point location.
 ![license](https://img.shields.io/badge/license-MIT-blue)
 ![rust](https://img.shields.io/badge/rust-2024%20edition-orange)
 ![python](https://img.shields.io/badge/python-PPOPT--compatible%20bindings-3776AB)
-![tests](https://img.shields.io/badge/tests-121%20Rust%20%2B%2072%20Python-brightgreen)
+![tests](https://img.shields.io/badge/tests-127%20Rust%20%2B%2072%20Python-brightgreen)
 
 </div>
 
@@ -43,7 +43,7 @@ caveats: [Performance](#performance).</sub>
 
 - **Exact and verified.** Each benchmark run checks that all algorithms agree. It also samples 2000 parameters
   against direct QP solves, looking for gaps, overlaps and wrong control laws.
-- **All of PPOPT's algorithms, plus eleven from the literature:**
+- **All of PPOPT's algorithms, plus twelve from the literature:**
   - Arnström-Axehill with DAQP, as published;
   - Ahmadi-Moshkenani;
   - mp-LCP pivoting, and mp-LCP enumeration;
@@ -52,7 +52,8 @@ caveats: [Performance](#performance).</sub>
   - randomized MPR;
   - approximate mpQP;
   - mpMILP comparison (Dua-Pistikopoulos), and mpMILP branch and bound;
-  - exact mpMIQP comparison (Oberdieck-Pistikopoulos).
+  - exact mpMIQP comparison (Oberdieck-Pistikopoulos);
+  - combinatorial with constraint-pair pruning (Kenefake-Pistikopoulos).
 - **Robust on degenerate problems.** RPOPT closes holes that facet stepping (as implemented in PPOPT) leaves at
   degenerate points. On degenerate mpLPs, every RPOPT exact solver returns a gap-free partition; PPOPT's geometric
   and graph solvers leave 10% to 77% of the feasible parameter set uncovered on most of them.
@@ -147,6 +148,7 @@ function. Every exact method returns the same set of critical regions as PPOPT o
 | name | method | origin | notes |
 |---|---|---|---|
 | `combinatorial`, `combinatorial_parallel` | Gupta, Bhartiya, Nataraj 2011 | PPOPT | exhaustive over active sets; exponential in the horizon |
+| `combinatorial_kp`, `combinatorial_kp_parallel` | Kenefake, Pistikopoulos 2023 | paper | `combinatorial` plus pruning by constraints and constraint pairs that can never be active together (pair LPs with complementarity branching in place of the paper's MILP); same regions; switches on above 2M candidates per level: 1.5x faster on sys3x2_N5, 1.2x slower on di_N10 |
 | `graph`, `graph_exp`, `graph_parallel` | Oberdieck et al. 2017, connected graph | PPOPT | `graph_exp` has no pruning list; on mpLPs, one-pivot swaps plus a facet-completion pass make the partition gap-free |
 | `geometric`, `geometric_parallel` | facet stepping (Spjøtvold et al. 2006) | PPOPT | handles every program class; fixed for degenerate problems (see below); skips facets whose neighbour is already known |
 | `combinatorial_graph`, `combinatorial_graph_parallel` | Arnström, Axehill 2024, as simplified in PPOPT | PPOPT | breadth-first visit order |
@@ -369,7 +371,7 @@ time of `graph`. Those runs come from a shared, busy machine.
 - **`examples/mplp_bench.rs`** checks every mpLP solution at 2,000 random parameters against direct LP solves (no
   gaps, feasible laws, optimal objective). Every exact RPOPT solver has 0 gaps and 0 errors on all
   `bench/problems_lp` problems it finishes.
-- **`cargo test --release`** (121 tests) covers:
+- **`cargo test --release`** (127 tests) covers:
   - parity with PPOPT's results and examples;
   - each new algorithm against `geometric` and `combinatorial`, on the benchmark and on random problems;
   - degenerate problems (gaps and overlaps on 20,000 samples), including gap-free graph solvers on degenerate
