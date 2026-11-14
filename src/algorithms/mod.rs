@@ -5,6 +5,7 @@ pub mod common;
 pub mod incremental;
 pub mod mpmiqp;
 pub mod mplcp;
+pub mod mplp_lex;
 
 use crate::critical_region::CriticalRegion;
 use crate::linalg::{min_eigenvalue_sym, Mat};
@@ -38,12 +39,14 @@ pub enum MpqpAlgorithm {
     Mplcp,
     /// Herceg et al. enumeration of pLCP bases (mpQP and mpLP)
     MplcpEnum,
+    /// Jones-Kerrigan-Maciejowski lexicographic perturbation (mpLP only; mpQPs go to `geometric`)
+    MplpLex,
 }
 
 impl MpqpAlgorithm {
     pub fn all() -> &'static [MpqpAlgorithm] {
         use MpqpAlgorithm::*;
-        &[Combinatorial, CombinatorialParallel, Graph, GraphExp, GraphParallel, CombinatorialGraph, CombinatorialGraphParallel, Geometric, GeometricParallel, Ahmadi, Mplcp, MplcpEnum]
+        &[Combinatorial, CombinatorialParallel, Graph, GraphExp, GraphParallel, CombinatorialGraph, CombinatorialGraphParallel, Geometric, GeometricParallel, Ahmadi, Mplcp, MplcpEnum, MplpLex]
     }
 
     pub fn name(&self) -> &'static str {
@@ -61,6 +64,7 @@ impl MpqpAlgorithm {
             Ahmadi => "ahmadi",
             Mplcp => "mplcp",
             MplcpEnum => "mplcp_enum",
+            MplpLex => "mplp_lex",
         }
     }
 
@@ -103,12 +107,19 @@ pub fn solve_mpqp_with(program: &Arc<MpProgram>, algorithm: MpqpAlgorithm, opts:
         Ahmadi => ahmadi::ahmadi(program),
         Mplcp => mplcp::regions(program, opts.seed, mplcp::Method::Pivot),
         MplcpEnum => mplcp::regions(program, opts.seed, mplcp::Method::Enumeration),
+        MplpLex => {
+            if program.is_qp() {
+                geometric(program, opts, false)
+            } else {
+                mplp_lex::regions(program, opts.seed)
+            }
+        }
     };
     let mut sol = Solution::new(program.clone(), regions);
     // PPOPT flags every solution as overlapping (its isinstance check also matches MPQP). We only
     // flag the cases where overlap is actually possible: mpLPs (degeneracy) and non-convex mpQPs.
     sol.is_overlapping = match &program.q {
-        None => true,
+        None => algorithm != MplpLex,
         Some(q) => min_eigenvalue_sym(q) <= 0.0,
     };
     sol
