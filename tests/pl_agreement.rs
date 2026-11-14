@@ -138,6 +138,8 @@ fn all_methods(sol: &Solution, geom: &PartitionGeometry) -> Vec<Box<dyn PointLoc
     if let Some(lm) = LinearMachine::new(geom) {
         locs.push(Box::new(lm));
     }
+    locs.push(Box::new(Wnn::new(geom, Some(sol))));
+    locs.push(Box::new(Wnn::with_fallback(geom, Some(sol), None)));
     let bst = BinarySearchTree::with_options(geom, &BstOptions { max_nodes: 100_000, ..Default::default() });
     let mut rows = vec![];
     let n = geom.dim;
