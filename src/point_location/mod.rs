@@ -19,6 +19,7 @@ pub mod multiway;
 pub mod opt_tree;
 pub mod sequential;
 pub mod walk;
+pub mod wnn;
 pub mod yann;
 
 pub use graph_traversal::GraphTraversal;
@@ -31,6 +32,7 @@ pub use linear_machine::LinearMachine;
 pub use multiway::MultiwayTree;
 pub use opt_tree::{Candidates, Criterion, OptTreeOptions, OptimizedTree};
 pub use sequential::{FlatSequential, SequentialSearch};
+pub use wnn::{Wnn, WnnOutcome, WnnReport, WnnStatus};
 pub use yann::Yann;
 
 pub trait PointLocator: Send + Sync {

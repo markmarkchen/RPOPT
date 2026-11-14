@@ -1,0 +1,727 @@
+# pl_wnn_bench on a busy machine (load average 10 to 160 from other jobs), 5 interleaved reps, medians, single-thread query loops, solves at 2 threads.
+# Columns after build_s: bytes (storage), ns per query for uniform / trajectory (closed loop, MPC problems only) / random walk (2% steps), mismatch vs sequential reference.
+# '# WNN' lines: power-diagram data status; '# WNNOUT': how queries were answered; '# WNNCOST': kd-tree work per query.
+== file:di_N4
+# file:di_N4: theta 2 regions 9 solve 0.0s
+# geometry done
+# bst 0.0s
+# opt tree 0.0s
+# wnn 0.0s
+# WNN file:di_N4: status Lp nftf 0 excluded 0 duplicate_sites 0 max_vertex_violation 7.77e-16 centers_correct 9/9 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 1792 bytes_incl_fallback 27504
+# WNNCOST file:di_N4 uniform: kd nodes visited 2.2 regions scored 5.7 of 9
+# WNNOUT file:di_N4 uniform: inside 67206 (tree 100.00% neighbor 0.00% fallback 0.000%), outside 32794 (outside-exit 100.00% fallback 0.000%)
+# WNNCOST file:di_N4 trajectory: kd nodes visited 2.0 regions scored 5.0 of 9
+# WNNOUT file:di_N4 trajectory: inside 100000 (tree 100.00% neighbor 0.00% fallback 0.000%), outside 0 (outside-exit NaN% fallback NaN%)
+# WNNCOST file:di_N4 walk: kd nodes visited 2.2 regions scored 5.8 of 9
+# WNNOUT file:di_N4 walk: inside 100000 (tree 99.99% neighbor 0.00% fallback 0.007%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_trajectory	ns_walk	mismatch
+file:di_N4	2	9	sequential	0.00	1056	29.7	8.8	12.1	0
+file:di_N4	2	9	bst	0.00	1448	35.6	16.0	19.8	0
+file:di_N4	2	9	opt tree	0.00	1832	39.4	20.5	23.9	0
+file:di_N4	2	9	hash 8MB	0.01	25708	9.7	4.8	9.9	0
+file:di_N4	2	9	walk	0.00	1488	61.2	8.5	13.4	0
+file:di_N4	2	9	graph	0.00	1344	58.9	7.6	10.6	0
+file:di_N4	2	9	wnn	0.00	27504	46.3	23.7	28.4	0
+exit 0
+== file:di_N6
+# file:di_N6: theta 2 regions 11 solve 0.0s
+# geometry done
+# bst 0.0s
+# opt tree 0.0s
+# wnn 0.0s
+# WNN file:di_N6: status Lp nftf 0 excluded 0 duplicate_sites 0 max_vertex_violation 4.44e-16 centers_correct 11/11 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 2096 bytes_incl_fallback 32768
+# WNNCOST file:di_N6 uniform: kd nodes visited 2.3 regions scored 7.1 of 11
+# WNNOUT file:di_N6 uniform: inside 67206 (tree 100.00% neighbor 0.00% fallback 0.000%), outside 32794 (outside-exit 100.00% fallback 0.000%)
+# WNNCOST file:di_N6 trajectory: kd nodes visited 2.0 regions scored 6.0 of 11
+# WNNOUT file:di_N6 trajectory: inside 100000 (tree 100.00% neighbor 0.00% fallback 0.000%), outside 0 (outside-exit NaN% fallback NaN%)
+# WNNCOST file:di_N6 walk: kd nodes visited 2.4 regions scored 7.6 of 11
+# WNNOUT file:di_N6 walk: inside 100000 (tree 99.99% neighbor 0.00% fallback 0.007%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_trajectory	ns_walk	mismatch
+file:di_N6	2	11	sequential	0.00	1248	32.6	8.8	17.9	0
+file:di_N6	2	11	bst	0.00	1736	42.5	15.9	20.8	0
+file:di_N6	2	11	opt tree	0.00	2032	38.8	20.2	23.0	0
+file:di_N6	2	11	hash 8MB	0.01	30672	9.6	4.8	9.6	0
+file:di_N6	2	11	walk	0.00	1768	62.5	9.2	13.4	0
+file:di_N6	2	11	graph	0.00	1592	59.9	7.6	10.5	0
+file:di_N6	2	11	wnn	0.00	32768	49.7	25.6	30.1	0
+exit 0
+== file:di_N8
+# file:di_N8: theta 2 regions 11 solve 0.0s
+# geometry done
+# bst 0.0s
+# opt tree 0.0s
+# wnn 0.0s
+# WNN file:di_N8: status Lp nftf 0 excluded 0 duplicate_sites 0 max_vertex_violation 2.22e-16 centers_correct 11/11 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 2096 bytes_incl_fallback 32768
+# WNNCOST file:di_N8 uniform: kd nodes visited 2.3 regions scored 7.1 of 11
+# WNNOUT file:di_N8 uniform: inside 67206 (tree 100.00% neighbor 0.00% fallback 0.000%), outside 32794 (outside-exit 100.00% fallback 0.000%)
+# WNNCOST file:di_N8 trajectory: kd nodes visited 2.0 regions scored 6.0 of 11
+# WNNOUT file:di_N8 trajectory: inside 100000 (tree 100.00% neighbor 0.00% fallback 0.000%), outside 0 (outside-exit NaN% fallback NaN%)
+# WNNCOST file:di_N8 walk: kd nodes visited 2.3 regions scored 7.4 of 11
+# WNNOUT file:di_N8 walk: inside 100000 (tree 99.99% neighbor 0.00% fallback 0.009%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_trajectory	ns_walk	mismatch
+file:di_N8	2	11	sequential	0.00	1248	31.2	7.1	16.2	0
+file:di_N8	2	11	bst	0.00	1736	42.7	16.2	20.7	0
+file:di_N8	2	11	opt tree	0.00	2032	38.9	20.2	23.0	0
+file:di_N8	2	11	hash 8MB	0.01	30672	9.6	4.8	9.5	0
+file:di_N8	2	11	walk	0.00	1768	61.9	9.2	13.8	0
+file:di_N8	2	11	graph	0.00	1592	60.3	7.6	10.3	0
+file:di_N8	2	11	wnn	0.00	32768	49.8	26.7	30.0	0
+exit 0
+== file:di_N10
+# file:di_N10: theta 2 regions 11 solve 0.0s
+# geometry done
+# bst 0.0s
+# opt tree 0.0s
+# wnn 0.0s
+# WNN file:di_N10: status Lp nftf 0 excluded 0 duplicate_sites 0 max_vertex_violation 3.33e-16 centers_correct 11/11 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 2096 bytes_incl_fallback 32768
+# WNNCOST file:di_N10 uniform: kd nodes visited 2.3 regions scored 7.1 of 11
+# WNNOUT file:di_N10 uniform: inside 67206 (tree 100.00% neighbor 0.00% fallback 0.000%), outside 32794 (outside-exit 100.00% fallback 0.000%)
+# WNNCOST file:di_N10 trajectory: kd nodes visited 2.0 regions scored 6.0 of 11
+# WNNOUT file:di_N10 trajectory: inside 100000 (tree 100.00% neighbor 0.00% fallback 0.000%), outside 0 (outside-exit NaN% fallback NaN%)
+# WNNCOST file:di_N10 walk: kd nodes visited 2.3 regions scored 7.4 of 11
+# WNNOUT file:di_N10 walk: inside 100000 (tree 99.99% neighbor 0.00% fallback 0.009%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_trajectory	ns_walk	mismatch
+file:di_N10	2	11	sequential	0.00	1248	31.5	7.1	16.3	0
+file:di_N10	2	11	bst	0.00	1736	43.0	16.3	20.7	0
+file:di_N10	2	11	opt tree	0.00	2032	39.0	20.2	23.1	0
+file:di_N10	2	11	hash 8MB	0.01	30672	9.6	4.8	9.7	0
+file:di_N10	2	11	walk	0.00	1768	61.6	9.3	13.5	0
+file:di_N10	2	11	graph	0.00	1592	59.9	7.6	10.4	0
+file:di_N10	2	11	wnn	0.00	32768	50.0	26.8	30.3	0
+exit 0
+== file:di_doc_N3
+# file:di_doc_N3: theta 2 regions 7 solve 0.0s
+# geometry done
+# bst 0.0s
+# opt tree 0.0s
+# wnn 0.0s
+# WNN file:di_doc_N3: status Lp nftf 0 excluded 0 duplicate_sites 0 max_vertex_violation 8.88e-16 centers_correct 7/7 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 1304 bytes_incl_fallback 20264
+# WNNCOST file:di_doc_N3 uniform: kd nodes visited 1.0 regions scored 7.0 of 7
+# WNNOUT file:di_doc_N3 uniform: inside 67590 (tree 100.00% neighbor 0.00% fallback 0.000%), outside 32410 (outside-exit 100.00% fallback 0.000%)
+# WNNCOST file:di_doc_N3 trajectory: kd nodes visited 1.0 regions scored 7.0 of 7
+# WNNOUT file:di_doc_N3 trajectory: inside 64464 (tree 100.00% neighbor 0.00% fallback 0.000%), outside 35536 (outside-exit 100.00% fallback 0.000%)
+# WNNCOST file:di_doc_N3 walk: kd nodes visited 1.0 regions scored 7.0 of 7
+# WNNOUT file:di_doc_N3 walk: inside 100000 (tree 100.00% neighbor 0.00% fallback 0.000%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_trajectory	ns_walk	mismatch
+file:di_doc_N3	2	7	sequential	0.00	816	30.4	23.8	11.7	0
+file:di_doc_N3	2	7	bst	0.00	1112	35.8	26.1	19.3	0
+file:di_doc_N3	2	7	opt tree	0.00	1200	33.2	26.9	19.9	0
+file:di_doc_N3	2	7	hash 8MB	0.06	18956	9.7	8.7	9.2	0
+file:di_doc_N3	2	7	walk	0.00	1152	55.9	41.3	13.0	0
+file:di_doc_N3	2	7	graph	0.00	1040	52.8	33.1	10.3	0
+file:di_doc_N3	2	7	wnn	0.00	20264	34.0	27.8	21.1	0
+exit 0
+== file:dinv_N4
+# file:dinv_N4: theta 2 regions 9 solve 0.0s
+# geometry done
+# bst 0.0s
+# opt tree 0.0s
+# wnn 0.0s
+# WNN file:dinv_N4: status Lp nftf 0 excluded 0 duplicate_sites 0 max_vertex_violation 4.44e-16 centers_correct 9/9 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 1736 bytes_incl_fallback 27608
+# WNNCOST file:dinv_N4 uniform: kd nodes visited 2.3 regions scored 6.2 of 9
+# WNNOUT file:dinv_N4 uniform: inside 98430 (tree 100.00% neighbor 0.00% fallback 0.000%), outside 1570 (outside-exit 100.00% fallback 0.000%)
+# WNNCOST file:dinv_N4 trajectory: kd nodes visited 2.0 regions scored 5.1 of 9
+# WNNOUT file:dinv_N4 trajectory: inside 100000 (tree 100.00% neighbor 0.00% fallback 0.000%), outside 0 (outside-exit NaN% fallback NaN%)
+# WNNCOST file:dinv_N4 walk: kd nodes visited 2.4 regions scored 6.4 of 9
+# WNNOUT file:dinv_N4 walk: inside 100000 (tree 100.00% neighbor 0.00% fallback 0.000%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_trajectory	ns_walk	mismatch
+file:dinv_N4	2	9	sequential	0.00	1008	16.9	10.6	9.0	0
+file:dinv_N4	2	9	bst	0.00	1400	19.3	15.0	16.1	0
+file:dinv_N4	2	9	opt tree	0.00	1784	24.5	18.8	20.5	0
+file:dinv_N4	2	9	hash 8MB	0.01	25868	8.6	4.8	7.1	0
+file:dinv_N4	2	9	walk	0.00	1432	30.3	8.0	9.0	0
+file:dinv_N4	2	9	graph	0.00	1288	23.8	7.4	8.0	0
+file:dinv_N4	2	9	wnn	0.00	27608	42.4	24.0	26.7	0
+exit 0
+== file:dinv_N6
+# file:dinv_N6: theta 2 regions 11 solve 0.1s
+# geometry done
+# bst 0.0s
+# opt tree 0.0s
+# wnn 0.0s
+# WNN file:dinv_N6: status Lp nftf 0 excluded 0 duplicate_sites 0 max_vertex_violation 1.33e-15 centers_correct 11/11 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 2096 bytes_incl_fallback 32768
+# WNNCOST file:dinv_N6 uniform: kd nodes visited 2.8 regions scored 9.8 of 11
+# WNNOUT file:dinv_N6 uniform: inside 67206 (tree 100.00% neighbor 0.00% fallback 0.000%), outside 32794 (outside-exit 100.00% fallback 0.000%)
+# WNNCOST file:dinv_N6 trajectory: kd nodes visited 3.0 regions scored 11.0 of 11
+# WNNOUT file:dinv_N6 trajectory: inside 100000 (tree 100.00% neighbor 0.00% fallback 0.000%), outside 0 (outside-exit NaN% fallback NaN%)
+# WNNCOST file:dinv_N6 walk: kd nodes visited 2.8 regions scored 10.1 of 11
+# WNNOUT file:dinv_N6 walk: inside 100000 (tree 99.99% neighbor 0.00% fallback 0.007%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_trajectory	ns_walk	mismatch
+file:dinv_N6	2	11	sequential	0.00	1248	31.8	15.7	22.7	0
+file:dinv_N6	2	11	bst	0.00	1736	43.9	16.6	22.7	0
+file:dinv_N6	2	11	opt tree	0.00	2032	40.8	21.0	23.8	0
+file:dinv_N6	2	11	hash 8MB	0.04	30672	9.9	5.0	9.9	0
+file:dinv_N6	2	11	walk	0.00	1768	64.0	8.9	14.1	0
+file:dinv_N6	2	11	graph	0.00	1592	61.5	8.0	10.8	0
+file:dinv_N6	2	11	wnn	0.00	32768	52.4	33.4	35.1	0
+exit 0
+== file:dinv_N8
+# file:dinv_N8: theta 2 regions 11 solve 0.0s
+# geometry done
+# bst 0.0s
+# opt tree 0.0s
+# wnn 0.0s
+# WNN file:dinv_N8: status Lp nftf 0 excluded 0 duplicate_sites 0 max_vertex_violation 4.44e-16 centers_correct 11/11 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 2096 bytes_incl_fallback 32768
+# WNNCOST file:dinv_N8 uniform: kd nodes visited 2.8 regions scored 9.8 of 11
+# WNNOUT file:dinv_N8 uniform: inside 67206 (tree 100.00% neighbor 0.00% fallback 0.000%), outside 32794 (outside-exit 100.00% fallback 0.000%)
+# WNNCOST file:dinv_N8 trajectory: kd nodes visited 3.0 regions scored 11.0 of 11
+# WNNOUT file:dinv_N8 trajectory: inside 100000 (tree 100.00% neighbor 0.00% fallback 0.000%), outside 0 (outside-exit NaN% fallback NaN%)
+# WNNCOST file:dinv_N8 walk: kd nodes visited 2.8 regions scored 10.1 of 11
+# WNNOUT file:dinv_N8 walk: inside 100000 (tree 100.00% neighbor 0.00% fallback 0.000%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_trajectory	ns_walk	mismatch
+file:dinv_N8	2	11	sequential	0.00	1248	32.0	15.8	22.9	0
+file:dinv_N8	2	11	bst	0.00	1736	43.5	16.7	22.6	0
+file:dinv_N8	2	11	opt tree	0.00	2032	40.0	21.0	23.7	0
+file:dinv_N8	2	11	hash 8MB	0.10	30672	9.8	4.9	9.7	0
+file:dinv_N8	2	11	walk	0.00	1768	63.3	9.4	14.3	0
+file:dinv_N8	2	11	graph	0.00	1592	62.2	7.9	10.7	0
+file:dinv_N8	2	11	wnn	0.00	32768	52.4	33.2	34.9	0
+exit 0
+== file:masses2_N4
+# file:masses2_N4: theta 4 regions 307 solve 0.2s
+# geometry done
+# bst 0.2s
+# opt tree 3.1s
+# wnn 0.0s
+# WNN file:masses2_N4: status NotFacetToFacet nftf 118 excluded 0 duplicate_sites 0 max_vertex_violation NaN centers_correct 0/307 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 137912 bytes_incl_fallback 3459752
+# WNNOUT file:masses2_N4 uniform: inside 42608 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 57392 (outside-exit 0.00% fallback 100.000%)
+# WNNOUT file:masses2_N4 trajectory: inside 99955 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 125 (outside-exit 0.00% fallback 100.000%)
+# WNNOUT file:masses2_N4 walk: inside 100000 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_trajectory	ns_walk	mismatch
+file:masses2_N4	4	307	sequential	0.00	116800	1348.8	386.2	538.9	0
+file:masses2_N4	4	307	bst	0.18	762144	209.7	203.9	195.7	0
+file:masses2_N4	4	307	opt tree	3.07	755260	189.8	174.5	185.7	0
+file:masses2_N4	4	307	hash 8MB	0.78	3321840	37.2	17.6	20.4	0
+file:masses2_N4	4	307	walk	0.00	147736	635.2	125.6	84.1	0
+file:masses2_N4	4	307	graph	0.00	137912	206.3	56.5	47.9	0
+file:masses2_N4	4	307	wnn	0.00	3459752	39.6	20.0	23.6	0
+exit 0
+== file:masses2_N6
+# file:masses2_N6: theta 4 regions 901 solve 0.0s
+# geometry done
+# bst 1.3s
+# opt tree 6.4s
+# wnn 0.0s
+# WNN file:masses2_N6: status NotFacetToFacet nftf 286 excluded 0 duplicate_sites 0 max_vertex_violation NaN centers_correct 0/901 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 382008 bytes_incl_fallback 6446600
+# WNNOUT file:masses2_N6 uniform: inside 38568 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 61432 (outside-exit 0.00% fallback 100.000%)
+# WNNOUT file:masses2_N6 trajectory: inside 100000 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 0 (outside-exit NaN% fallback NaN%)
+# WNNOUT file:masses2_N6 walk: inside 100000 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_trajectory	ns_walk	mismatch
+file:masses2_N6	4	901	sequential	0.00	321040	5525.1	1546.4	1713.1	0
+file:masses2_N6	4	901	bst	1.28	2393312	265.9	235.2	213.0	0
+file:masses2_N6	4	901	opt tree	6.38	3727016	232.8	219.5	197.4	0
+file:masses2_N6	4	901	hash 8MB	3.28	6064588	43.6	23.7	27.7	0
+file:masses2_N6	4	901	walk	0.00	410840	857.4	153.0	91.8	0
+file:masses2_N6	4	901	graph	0.00	382008	270.1	59.6	45.6	0
+file:masses2_N6	4	901	wnn	0.00	6446600	46.2	25.8	30.9	0
+exit 0
+== file:sys3x2_N3
+# file:sys3x2_N3: theta 3 regions 211 solve 0.0s
+# geometry done
+# bst 0.0s
+# opt tree 0.3s
+# wnn 0.0s
+# WNN file:sys3x2_N3: status NotFacetToFacet nftf 6 excluded 0 duplicate_sites 0 max_vertex_violation NaN centers_correct 0/211 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 54280 bytes_incl_fallback 1484280
+# WNNOUT file:sys3x2_N3 uniform: inside 71548 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 28452 (outside-exit 0.00% fallback 100.000%)
+# WNNOUT file:sys3x2_N3 trajectory: inside 97837 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 2206 (outside-exit 0.00% fallback 100.000%)
+# WNNOUT file:sys3x2_N3 walk: inside 100000 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_trajectory	ns_walk	mismatch
+file:sys3x2_N3	3	211	sequential	0.00	43648	604.5	263.1	402.9	0
+file:sys3x2_N3	3	211	bst	0.02	146584	129.0	102.5	121.6	0
+file:sys3x2_N3	3	211	opt tree	0.26	223096	139.9	112.6	124.2	0
+file:sys3x2_N3	3	211	hash 8MB	0.27	1429996	21.8	12.6	15.8	0
+file:sys3x2_N3	3	211	walk	0.00	59344	297.7	40.0	51.8	0
+file:sys3x2_N3	3	211	graph	0.00	54280	167.1	25.4	30.0	0
+file:sys3x2_N3	3	211	wnn	0.00	1484280	25.8	15.0	17.2	0
+exit 0
+== file:sys3x2_N5
+# file:sys3x2_N5: theta 3 regions 973 solve 0.0s
+# geometry done
+# bst 0.4s
+# opt tree 1.5s
+# wnn 0.0s
+# WNN file:sys3x2_N5: status NotFacetToFacet nftf 22 excluded 0 duplicate_sites 0 max_vertex_violation NaN centers_correct 0/973 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 241560 bytes_incl_fallback 6533416
+# WNNOUT file:sys3x2_N5 uniform: inside 59707 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 40293 (outside-exit 0.00% fallback 100.000%)
+# WNNOUT file:sys3x2_N5 trajectory: inside 98746 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 1346 (outside-exit 0.00% fallback 100.000%)
+# WNNOUT file:sys3x2_N5 walk: inside 100000 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_trajectory	ns_walk	mismatch
+file:sys3x2_N5	3	973	sequential	0.00	192576	3325.5	1017.1	1489.6	0
+file:sys3x2_N5	3	973	bst	0.43	942704	167.6	151.0	151.6	0
+file:sys3x2_N5	3	973	opt tree	1.48	1196344	164.6	143.5	152.2	0
+file:sys3x2_N5	3	973	hash 8MB	1.38	6291856	25.2	12.0	21.2	0
+file:sys3x2_N5	3	973	walk	0.00	264912	517.3	49.8	76.7	0
+file:sys3x2_N5	3	973	graph	0.00	241560	292.1	31.4	41.1	0
+file:sys3x2_N5	3	973	wnn	0.00	6533416	28.0	14.1	24.3	0
+exit 0
+== lpfile:diinf_N4
+# lpfile:diinf_N4: theta 2 regions 39 solve 0.0s
+# geometry done
+# bst 0.0s
+# opt tree 0.0s
+# wnn 0.0s
+# WNN lpfile:diinf_N4: status Theory nftf 0 excluded 0 duplicate_sites 3 max_vertex_violation 1.06e-15 centers_correct 39/39 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 13176 bytes_incl_fallback 129752
+# WNNCOST lpfile:diinf_N4 uniform: kd nodes visited 10.6 regions scored 20.4 of 39
+# WNNOUT lpfile:diinf_N4 uniform: inside 67206 (tree 93.33% neighbor 6.67% fallback 0.000%), outside 32794 (outside-exit 100.00% fallback 0.000%)
+# WNNCOST lpfile:diinf_N4 walk: kd nodes visited 10.8 regions scored 21.1 of 39
+# WNNOUT lpfile:diinf_N4 walk: inside 100000 (tree 94.45% neighbor 5.54% fallback 0.000%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_walk	mismatch
+lpfile:diinf_N4	2	39	sequential	0.00	9048	142.9	102.5	0
+lpfile:diinf_N4	2	39	bst	0.00	11216	70.2	56.3	0
+lpfile:diinf_N4	2	39	opt tree	0.00	11624	64.9	52.6	0
+lpfile:diinf_N4	2	39	hash 8MB	0.02	116572	10.1	11.1	0
+lpfile:diinf_N4	2	39	walk	0.00	11744	139.4	29.5	0
+lpfile:diinf_N4	2	39	graph	0.00	11120	87.2	21.2	0
+lpfile:diinf_N4	2	39	wnn	0.00	129752	127.4	114.5	0
+exit 0
+== lpfile:diinf_N8
+# lpfile:diinf_N8: theta 2 regions 62 solve 0.0s
+# geometry done
+# bst 0.0s
+# opt tree 0.0s
+# wnn 0.0s
+# WNN lpfile:diinf_N8: status Theory nftf 0 excluded 0 duplicate_sites 0 max_vertex_violation 2.38e-15 centers_correct 62/62 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 25832 bytes_incl_fallback 235056
+# WNNCOST lpfile:diinf_N8 uniform: kd nodes visited 12.7 regions scored 44.6 of 62
+# WNNOUT lpfile:diinf_N8 uniform: inside 67206 (tree 100.00% neighbor 0.00% fallback 0.000%), outside 32794 (outside-exit 100.00% fallback 0.000%)
+# WNNCOST lpfile:diinf_N8 walk: kd nodes visited 13.0 regions scored 46.9 of 62
+# WNNOUT lpfile:diinf_N8 walk: inside 100000 (tree 99.99% neighbor 0.00% fallback 0.007%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_walk	mismatch
+lpfile:diinf_N8	2	62	sequential	0.00	19008	204.5	94.3	0
+lpfile:diinf_N8	2	62	bst	0.00	22184	76.7	67.6	0
+lpfile:diinf_N8	2	62	opt tree	0.01	23404	75.5	65.4	0
+lpfile:diinf_N8	2	62	hash 8MB	0.04	209224	10.2	11.2	0
+lpfile:diinf_N8	2	62	walk	0.00	24128	231.5	47.2	0
+lpfile:diinf_N8	2	62	graph	0.00	23136	125.7	33.0	0
+lpfile:diinf_N8	2	62	wnn	0.00	235056	169.2	160.2	0
+exit 0
+== lpfile:dione_N4
+# lpfile:dione_N4: theta 2 regions 43 solve 0.0s
+# geometry done
+# bst 0.0s
+# opt tree 0.0s
+# wnn 0.0s
+# WNN lpfile:dione_N4: status Theory nftf 0 excluded 0 duplicate_sites 1 max_vertex_violation 1.67e-15 centers_correct 43/43 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 10664 bytes_incl_fallback 126456
+# WNNCOST lpfile:dione_N4 uniform: kd nodes visited 12.0 regions scored 28.4 of 43
+# WNNOUT lpfile:dione_N4 uniform: inside 67206 (tree 99.94% neighbor 0.06% fallback 0.000%), outside 32794 (outside-exit 100.00% fallback 0.000%)
+# WNNCOST lpfile:dione_N4 walk: kd nodes visited 12.2 regions scored 29.2 of 43
+# WNNOUT lpfile:dione_N4 walk: inside 100000 (tree 99.86% neighbor 0.14% fallback 0.000%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_walk	mismatch
+lpfile:dione_N4	2	43	sequential	0.00	6816	139.0	37.9	0
+lpfile:dione_N4	2	43	bst	0.00	9320	67.2	46.3	0
+lpfile:dione_N4	2	43	opt tree	0.00	10512	64.5	46.4	0
+lpfile:dione_N4	2	43	hash 8MB	0.02	115792	9.4	10.3	0
+lpfile:dione_N4	2	43	walk	0.00	9184	89.8	22.6	0
+lpfile:dione_N4	2	43	graph	0.00	8496	57.5	17.7	0
+lpfile:dione_N4	2	43	wnn	0.00	126456	137.4	122.0	0
+exit 0
+== lpfile:dione_N8
+# lpfile:dione_N8: theta 2 regions 93 solve 0.0s
+# geometry done
+# bst 0.0s
+# opt tree 0.0s
+# wnn 0.0s
+# WNN lpfile:dione_N8: status Theory nftf 0 excluded 0 duplicate_sites 1 max_vertex_violation 2.40e-14 centers_correct 93/93 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 23960 bytes_incl_fallback 298704
+# WNNCOST lpfile:dione_N8 uniform: kd nodes visited 22.7 regions scored 53.1 of 93
+# WNNOUT lpfile:dione_N8 uniform: inside 67206 (tree 99.80% neighbor 0.20% fallback 0.000%), outside 32794 (outside-exit 100.00% fallback 0.000%)
+# WNNCOST lpfile:dione_N8 walk: kd nodes visited 22.5 regions scored 52.8 of 93
+# WNNOUT lpfile:dione_N8 walk: inside 100000 (tree 99.68% neighbor 0.31% fallback 0.007%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_walk	mismatch
+lpfile:dione_N8	2	93	sequential	0.00	15648	219.0	141.2	0
+lpfile:dione_N8	2	93	bst	0.00	20936	80.8	63.8	0
+lpfile:dione_N8	2	93	opt tree	0.01	22664	77.2	63.2	0
+lpfile:dione_N8	2	93	hash 8MB	0.05	274740	10.9	12.4	0
+lpfile:dione_N8	2	93	walk	0.00	20856	88.6	33.0	0
+lpfile:dione_N8	2	93	graph	0.00	19368	48.4	24.0	0
+lpfile:dione_N8	2	93	wnn	0.00	298704	246.5	236.6	0
+exit 0
+== lpfile:masses2inf_N3
+# lpfile:masses2inf_N3: theta 4 regions 1098 solve 0.1s
+# geometry done
+# bst 0.3s
+# opt tree 2.0s
+# wnn 0.1s
+# WNN lpfile:masses2inf_N3: status Theory nftf 0 excluded 0 duplicate_sites 0 max_vertex_violation 1.68e-12 centers_correct 1098/1098 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.07 bytes_excl_fallback 745344 bytes_incl_fallback 7582832
+# WNNCOST lpfile:masses2inf_N3 uniform: kd nodes visited 217.9 regions scored 491.1 of 1098
+# WNNOUT lpfile:masses2inf_N3 uniform: inside 45477 (tree 100.00% neighbor 0.00% fallback 0.000%), outside 54523 (outside-exit 100.00% fallback 0.000%)
+# WNNCOST lpfile:masses2inf_N3 walk: kd nodes visited 213.2 regions scored 483.6 of 1098
+# WNNOUT lpfile:masses2inf_N3 walk: inside 100000 (tree 100.00% neighbor 0.00% fallback 0.000%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_walk	mismatch
+lpfile:masses2inf_N3	4	1098	sequential	0.00	570960	11163.2	2466.2	0
+lpfile:masses2inf_N3	4	1098	bst	0.28	1139032	226.2	192.1	0
+lpfile:masses2inf_N3	4	1098	opt tree	1.97	1655052	204.3	189.6	0
+lpfile:masses2inf_N3	4	1098	hash 8MB	6.91	6837488	45.7	29.1	0
+lpfile:masses2inf_N3	4	1098	walk	0.00	693480	1109.3	131.1	0
+lpfile:masses2inf_N3	4	1098	graph	0.00	658344	226.9	58.9	0
+lpfile:masses2inf_N3	4	1098	wnn	0.07	7582832	3204.1	2801.3	0
+exit 0
+== lpfile:masses2inf_N5
+# lpfile:masses2inf_N5: theta 4 regions 7602 solve 0.8s
+# geometry done
+# bst 16.8s
+# opt tree 19.5s
+# wnn 2.1s
+# WNN lpfile:masses2inf_N5: status Theory nftf 0 excluded 0 duplicate_sites 0 max_vertex_violation 1.49e-12 centers_correct 7602/7602 lp_s 0.00 tree_s 0.001 build_s_excl_hash 2.11 bytes_excl_fallback 5491992 bytes_incl_fallback 13181024
+# WNNCOST lpfile:masses2inf_N5 uniform: kd nodes visited 882.8 regions scored 2597.6 of 7602
+# WNNOUT lpfile:masses2inf_N5 uniform: inside 39747 (tree 100.00% neighbor 0.00% fallback 0.000%), outside 60253 (outside-exit 100.00% fallback 0.000%)
+# WNNCOST lpfile:masses2inf_N5 walk: kd nodes visited 883.1 regions scored 2604.6 of 7602
+# WNNOUT lpfile:masses2inf_N5 walk: inside 100000 (tree 100.00% neighbor 0.00% fallback 0.000%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_walk	mismatch
+lpfile:masses2inf_N5	4	7602	sequential	0.00	4299840	92673.7	27369.9	0
+lpfile:masses2inf_N5	4	7602	bst	16.84	10265352	349.8	267.3	0
+lpfile:masses2inf_N5	4	7602	opt tree	19.51	14670364	299.9	258.3	0
+lpfile:masses2inf_N5	4	7602	hash 8MB	15.96	7689032	81.6	77.8	0
+lpfile:masses2inf_N5	4	7602	walk	0.00	5204256	2413.4	230.5	0
+lpfile:masses2inf_N5	4	7602	graph	0.00	4960992	385.8	91.0	0
+lpfile:masses2inf_N5	4	7602	wnn	2.11	13181024	13630.7	14831.9	0
+exit 0
+== lpfile:masses2one_N4
+# lpfile:masses2one_N4: theta 4 regions 10974 solve 0.9s
+# geometry done
+# bst 8.9s
+# opt tree 18.9s
+# wnn 5.3s
+# WNN lpfile:masses2one_N4: status Theory nftf 0 excluded 0 duplicate_sites 0 max_vertex_violation 9.26e-13 centers_correct 10974/10974 lp_s 0.00 tree_s 0.002 build_s_excl_hash 5.28 bytes_excl_fallback 6339872 bytes_incl_fallback 13734448
+# WNNCOST lpfile:masses2one_N4 uniform: kd nodes visited 1319.5 regions scored 2629.7 of 10974
+# WNNOUT lpfile:masses2one_N4 uniform: inside 42608 (tree 100.00% neighbor 0.00% fallback 0.000%), outside 57392 (outside-exit 100.00% fallback 0.000%)
+# WNNCOST lpfile:masses2one_N4 walk: kd nodes visited 1343.0 regions scored 2668.4 of 10974
+# WNNOUT lpfile:masses2one_N4 walk: inside 100000 (tree 100.00% neighbor 0.00% fallback 0.000%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_walk	mismatch
+lpfile:masses2one_N4	4	10974	sequential	0.00	4642000	126043.6	38894.0	0
+lpfile:masses2one_N4	4	10974	bst	8.89	11985072	342.8	229.0	0
+lpfile:masses2one_N4	4	10974	opt tree	18.89	15533932	276.7	208.8	0
+lpfile:masses2one_N4	4	10974	hash 8MB	11.64	7394576	77.8	61.4	0
+lpfile:masses2one_N4	4	10974	walk	0.00	5815064	1873.4	126.8	0
+lpfile:masses2one_N4	4	10974	graph	0.00	5463896	375.5	48.7	0
+lpfile:masses2one_N4	4	10974	wnn	5.28	13734448	18834.6	19625.0	0
+exit 0
+== lpfile:sys3x2inf_N3
+# lpfile:sys3x2inf_N3: theta 3 regions 504 solve 0.0s
+# geometry done
+# bst 0.0s
+# opt tree 0.2s
+# wnn 0.0s
+# WNN lpfile:sys3x2inf_N3: status Theory nftf 0 excluded 0 duplicate_sites 214 max_vertex_violation 2.51e-15 centers_correct 504/504 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 251056 bytes_incl_fallback 3593824
+# WNNCOST lpfile:sys3x2inf_N3 uniform: kd nodes visited 32.7 regions scored 69.4 of 504
+# WNNOUT lpfile:sys3x2inf_N3 uniform: inside 71548 (tree 71.01% neighbor 14.98% fallback 14.019%), outside 28452 (outside-exit 100.00% fallback 0.000%)
+# WNNCOST lpfile:sys3x2inf_N3 walk: kd nodes visited 33.5 regions scored 71.6 of 504
+# WNNOUT lpfile:sys3x2inf_N3 walk: inside 100000 (tree 71.83% neighbor 14.90% fallback 13.263%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_walk	mismatch
+lpfile:sys3x2inf_N3	3	504	sequential	0.00	189728	2025.6	695.2	0
+lpfile:sys3x2inf_N3	3	504	bst	0.04	285440	130.1	113.8	0
+lpfile:sys3x2inf_N3	3	504	opt tree	0.20	319836	124.4	111.3	0
+lpfile:sys3x2inf_N3	3	504	hash 8MB	0.65	3342764	21.2	16.5	0
+lpfile:sys3x2inf_N3	3	504	walk	0.00	234848	259.6	52.6	0
+lpfile:sys3x2inf_N3	3	504	graph	0.00	222752	103.8	29.9	0
+lpfile:sys3x2inf_N3	3	504	wnn	0.00	3593824	562.4	478.5	0
+exit 0
+== lpfile:sys3x2inf_N5
+# lpfile:sys3x2inf_N5: theta 3 regions 2757 solve 0.2s
+# geometry done
+# bst 1.0s
+# opt tree 1.6s
+# wnn 0.1s
+# WNN lpfile:sys3x2inf_N5: status Theory nftf 0 excluded 0 duplicate_sites 705 max_vertex_violation 2.47e-15 centers_correct 2757/2757 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.09 bytes_excl_fallback 1360720 bytes_incl_fallback 8902472
+# WNNCOST lpfile:sys3x2inf_N5 uniform: kd nodes visited 72.9 regions scored 83.5 of 2757
+# WNNOUT lpfile:sys3x2inf_N5 uniform: inside 59707 (tree 58.62% neighbor 28.37% fallback 13.015%), outside 40293 (outside-exit 100.00% fallback 0.000%)
+# WNNCOST lpfile:sys3x2inf_N5 walk: kd nodes visited 77.7 regions scored 92.2 of 2757
+# WNNOUT lpfile:sys3x2inf_N5 walk: inside 100000 (tree 58.45% neighbor 29.90% fallback 11.644%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_walk	mismatch
+lpfile:sys3x2inf_N5	3	2757	sequential	0.00	1003776	14166.3	5628.4	0
+lpfile:sys3x2inf_N5	3	2757	bst	1.02	1635712	181.2	150.6	0
+lpfile:sys3x2inf_N5	3	2757	opt tree	1.61	1989348	162.8	143.0	0
+lpfile:sys3x2inf_N5	3	2757	hash 8MB	6.26	7541752	28.5	24.9	0
+lpfile:sys3x2inf_N5	3	2757	walk	0.00	1245792	306.1	76.5	0
+lpfile:sys3x2inf_N5	3	2757	graph	0.00	1179624	132.3	38.6	0
+lpfile:sys3x2inf_N5	3	2757	wnn	0.09	8902472	1008.8	1080.1	0
+exit 0
+== lpfile:sys3x2one_N4
+# lpfile:sys3x2one_N4: theta 3 regions 2316 solve 0.1s
+# geometry done
+# bst 0.4s
+# opt tree 1.1s
+# wnn 0.1s
+# WNN lpfile:sys3x2one_N4: status Theory nftf 0 excluded 0 duplicate_sites 168 max_vertex_violation 7.85e-15 centers_correct 2316/2316 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.09 bytes_excl_fallback 842560 bytes_incl_fallback 9127200
+# WNNCOST lpfile:sys3x2one_N4 uniform: kd nodes visited 138.7 regions scored 156.7 of 2316
+# WNNOUT lpfile:sys3x2one_N4 uniform: inside 65268 (tree 99.24% neighbor 0.76% fallback 0.000%), outside 34732 (outside-exit 100.00% fallback 0.000%)
+# WNNCOST lpfile:sys3x2one_N4 walk: kd nodes visited 139.6 regions scored 157.9 of 2316
+# WNNOUT lpfile:sys3x2one_N4 walk: inside 100000 (tree 99.21% neighbor 0.79% fallback 0.000%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_walk	mismatch
+lpfile:sys3x2one_N4	3	2316	sequential	0.00	553280	15445.7	3766.3	0
+lpfile:sys3x2one_N4	3	2316	bst	0.40	1054488	168.8	141.6	0
+lpfile:sys3x2one_N4	3	2316	opt tree	1.10	1269396	152.2	133.3	0
+lpfile:sys3x2one_N4	3	2316	hash 8MB	4.39	8284636	27.2	22.6	0
+lpfile:sys3x2one_N4	3	2316	walk	0.00	732928	700.5	65.6	0
+lpfile:sys3x2one_N4	3	2316	graph	0.00	677344	274.1	33.8	0
+lpfile:sys3x2one_N4	3	2316	wnn	0.09	9127200	1880.1	1714.8	0
+exit 0
+== qp:8:2:100:1
+# qp:8:2:100:1: theta 2 regions 293 solve 0.0s
+# geometry done
+# bst 0.0s
+# opt tree 0.1s
+# wnn 0.0s
+# WNN qp:8:2:100:1: status NotFacetToFacet nftf 20 excluded 0 duplicate_sites 0 max_vertex_violation NaN centers_correct 0/293 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 39840 bytes_incl_fallback 674352
+# WNNOUT qp:8:2:100:1 uniform: inside 68 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 99932 (outside-exit 0.00% fallback 100.000%)
+# WNNOUT qp:8:2:100:1 walk: inside 100000 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_walk	mismatch
+qp:8:2:100:1	2	293	sequential	0.00	29112	960.2	343.0	0
+qp:8:2:100:1	2	293	bst	0.01	67280	91.6	75.6	0
+qp:8:2:100:1	2	293	opt tree	0.09	97024	87.0	73.4	0
+qp:8:2:100:1	2	293	hash 8MB	0.12	634508	4.7	8.0	0
+qp:8:2:100:1	2	293	walk	0.00	44528	176.2	80.7	0
+qp:8:2:100:1	2	293	graph	0.00	39840	147.9	58.7	0
+qp:8:2:100:1	2	293	wnn	0.00	674352	6.3	9.8	0
+exit 0
+== qp:8:3:100:1
+# qp:8:3:100:1: theta 3 regions 1225 solve 0.1s
+# geometry done
+# bst 1.2s
+# opt tree 2.3s
+# wnn 0.0s
+# WNN qp:8:3:100:1: status NotFacetToFacet nftf 100 excluded 0 duplicate_sites 0 max_vertex_violation NaN centers_correct 0/1225 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 324408 bytes_incl_fallback 6804464
+# WNNOUT qp:8:3:100:1 uniform: inside 0 (tree NaN% neighbor NaN% fallback NaN%), outside 100000 (outside-exit 0.00% fallback 100.000%)
+# WNNOUT qp:8:3:100:1 walk: inside 100000 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_walk	mismatch
+qp:8:3:100:1	3	1225	sequential	0.00	256992	12189.6	1937.0	0
+qp:8:3:100:1	3	1225	bst	1.18	2042312	165.6	160.2	0
+qp:8:3:100:1	3	1225	opt tree	2.32	1764664	140.2	125.3	0
+qp:8:3:100:1	3	1225	hash 8MB	1.26	6480056	5.6	9.1	0
+qp:8:3:100:1	3	1225	walk	0.00	353808	426.1	25.9	0
+qp:8:3:100:1	3	1225	graph	0.00	324408	223.3	19.6	0
+qp:8:3:100:1	3	1225	wnn	0.00	6804464	7.2	10.9	0
+exit 0
+== qp:8:3:100:2
+# qp:8:3:100:2: theta 3 regions 2236 solve 0.2s
+# geometry done
+# bst 1.1s
+# opt tree 2.4s
+# wnn 0.0s
+# WNN qp:8:3:100:2: status NotFacetToFacet nftf 1325 excluded 0 duplicate_sites 0 max_vertex_violation NaN centers_correct 0/2236 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 582976 bytes_incl_fallback 6294624
+# WNNOUT qp:8:3:100:2 uniform: inside 691 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 99309 (outside-exit 0.00% fallback 100.000%)
+# WNNOUT qp:8:3:100:2 walk: inside 100000 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_walk	mismatch
+qp:8:3:100:2	3	2236	sequential	0.00	458592	18396.0	2803.7	0
+qp:8:3:100:2	3	2236	bst	1.11	2003896	130.1	174.6	0
+qp:8:3:100:2	3	2236	opt tree	2.39	2050396	135.0	158.2	0
+qp:8:3:100:2	3	2236	hash 8MB	4.07	5711648	6.9	26.3	0
+qp:8:3:100:2	3	2236	walk	0.00	636640	522.4	142.0	0
+qp:8:3:100:2	3	2236	graph	0.00	582976	278.6	60.0	0
+qp:8:3:100:2	3	2236	wnn	0.00	6294624	7.9	29.5	0
+exit 0
+== qp:5:4:25:1
+# qp:5:4:25:1: theta 4 regions 906 solve 0.0s
+# geometry done
+# bst 3.9s
+# opt tree 10.9s
+# wnn 0.0s
+# WNN qp:5:4:25:1: status NotFacetToFacet nftf 1204 excluded 0 duplicate_sites 0 max_vertex_violation NaN centers_correct 0/906 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 379200 bytes_incl_fallback 5648360
+# WNNOUT qp:5:4:25:1 uniform: inside 39951 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 60049 (outside-exit 0.00% fallback 100.000%)
+# WNNOUT qp:5:4:25:1 walk: inside 100000 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_walk	mismatch
+qp:5:4:25:1	4	906	sequential	0.00	310520	4170.8	89.2	0
+qp:5:4:25:1	4	906	bst	3.85	8589520	191.4	184.6	0
+qp:5:4:25:1	4	906	opt tree	10.90	6678936	188.5	188.2	0
+qp:5:4:25:1	4	906	hash 8MB	1.02	5269156	22.2	15.4	0
+qp:5:4:25:1	4	906	walk	0.00	408192	221.0	42.9	0
+qp:5:4:25:1	4	906	graph	0.00	379200	114.0	28.5	0
+qp:5:4:25:1	4	906	wnn	0.00	5648360	23.9	17.5	0
+exit 0
+== qp:4:4:14:1
+# qp:4:4:14:1: theta 4 regions 320 solve 0.0s
+# geometry done
+# bst 1.1s
+# opt tree 2.6s
+# wnn 0.0s
+# WNN qp:4:4:14:1: status NotFacetToFacet nftf 500 excluded 0 duplicate_sites 0 max_vertex_violation NaN centers_correct 0/320 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 141264 bytes_incl_fallback 4585968
+# WNNOUT qp:4:4:14:1 uniform: inside 100000 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 0 (outside-exit NaN% fallback NaN%)
+# WNNOUT qp:4:4:14:1 walk: inside 100000 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_walk	mismatch
+qp:4:4:14:1	4	320	sequential	0.00	116200	954.0	862.0	0
+qp:4:4:14:1	4	320	bst	1.15	5094384	228.8	171.5	0
+qp:4:4:14:1	4	320	opt tree	2.60	1586008	197.5	164.8	0
+qp:4:4:14:1	4	320	hash 8MB	0.93	4444704	31.6	18.7	0
+qp:4:4:14:1	4	320	walk	0.00	151504	492.2	50.2	0
+qp:4:4:14:1	4	320	graph	0.00	141264	179.8	29.8	0
+qp:4:4:14:1	4	320	wnn	0.00	4585968	34.6	19.6	0
+exit 0
+== qp:8:4:60:1
+# qp:8:4:60:1: theta 4 regions 4639 solve 1.0s
+# geometry done
+# bst 95.3s
+# opt tree 30.0s
+# wnn 0.0s
+# WNN qp:8:4:60:1: status NotFacetToFacet nftf 726 excluded 0 duplicate_sites 0 max_vertex_violation NaN centers_correct 0/4639 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 1968584 bytes_incl_fallback 7352280
+# WNNOUT qp:8:4:60:1 uniform: inside 0 (tree NaN% neighbor NaN% fallback NaN%), outside 100000 (outside-exit 0.00% fallback 100.000%)
+# WNNOUT qp:8:4:60:1 walk: inside 100000 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_walk	mismatch
+qp:8:4:60:1	4	4639	sequential	0.00	1632480	56711.4	5867.2	0
+qp:8:4:60:1	4	4639	bst	95.27	37070472	288.7	232.1	0
+qp:8:4:60:1	4	4639	opt tree (truncated)	30.05	9435240	254.3	199.7	0
+qp:8:4:60:1	4	4639	hash 8MB	13.50	5383696	6.7	26.6	0
+qp:8:4:60:1	4	4639	walk	0.00	2117032	733.4	47.9	0
+qp:8:4:60:1	4	4639	graph	0.00	1968584	256.4	31.7	0
+qp:8:4:60:1	4	4639	wnn	0.00	7352280	8.4	28.2	0
+exit 0
+== qp:5:5:20:1
+# qp:5:5:20:1: theta 5 regions 1136 solve 0.1s
+# geometry done
+# bst 21.4s
+# opt tree 30.0s
+# wnn 0.0s
+# WNN qp:5:5:20:1: status NotFacetToFacet nftf 2081 excluded 0 duplicate_sites 0 max_vertex_violation NaN centers_correct 0/1136 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 669824 bytes_incl_fallback 6496248
+# WNNOUT qp:5:5:20:1 uniform: inside 43 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 99957 (outside-exit 0.00% fallback 100.000%)
+# WNNOUT qp:5:5:20:1 walk: inside 100000 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_walk	mismatch
+qp:5:5:20:1	5	1136	sequential	0.00	564672	10830.7	477.8	0
+qp:5:5:20:1	5	1136	bst (truncated)	21.35	35710744	1115.4	734.3	0
+qp:5:5:20:1	5	1136	opt tree (truncated)	30.02	5623408	282.0	226.5	0
+qp:5:5:20:1	5	1136	hash 8MB	2.15	5826420	20.7	18.5	0
+qp:5:5:20:1	5	1136	walk	0.00	715264	268.9	37.9	0
+qp:5:5:20:1	5	1136	graph	0.00	669824	162.4	31.1	0
+qp:5:5:20:1	5	1136	wnn	0.00	6496248	20.5	20.1	0
+exit 0
+== qp:6:5:40:1
+# qp:6:5:40:1: theta 5 regions 7919 solve 2.9s
+# geometry done
+# bst 115.1s
+# opt tree 30.0s
+# wnn 0.0s
+# WNN qp:6:5:40:1: status NotFacetToFacet nftf 18655 excluded 0 duplicate_sites 0 max_vertex_violation NaN centers_correct 0/7919 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 5042048 bytes_incl_fallback 11591248
+# WNNOUT qp:6:5:40:1 uniform: inside 78835 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 21165 (outside-exit 0.00% fallback 100.000%)
+# WNNOUT qp:6:5:40:1 walk: inside 100000 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_walk	mismatch
+qp:6:5:40:1	5	7919	sequential	0.00	4234080	28843.3	7387.9	0
+qp:6:5:40:1	5	7919	bst (truncated)	115.07	38445760	16063.6	3941.9	0
+qp:6:5:40:1	5	7919	opt tree (truncated)	30.01	7816748	726.0	431.3	0
+qp:6:5:40:1	5	7919	hash 8MB	14.59	6549200	76.0	50.2	0
+qp:6:5:40:1	5	7919	walk	0.00	5358808	1063.7	103.6	0
+qp:6:5:40:1	5	7919	graph	0.00	5042048	390.4	57.7	0
+qp:6:5:40:1	5	7919	wnn	0.00	11591248	77.6	50.2	0
+exit 0
+== qp:4:6:14:1
+# qp:4:6:14:1: theta 6 regions 841 solve 0.1s
+# geometry done
+# bst 19.3s
+# opt tree 30.0s
+# wnn 0.0s
+# WNN qp:4:6:14:1: status NotFacetToFacet nftf 2119 excluded 0 duplicate_sites 0 max_vertex_violation NaN centers_correct 0/841 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 752256 bytes_incl_fallback 8628048
+# WNNOUT qp:4:6:14:1 uniform: inside 35012 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 64988 (outside-exit 0.00% fallback 100.000%)
+# WNNOUT qp:4:6:14:1 walk: inside 100000 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_walk	mismatch
+qp:4:6:14:1	6	841	sequential	0.00	655928	10259.0	948.9	0
+qp:4:6:14:1	6	841	bst (truncated)	19.31	34776752	5943.5	1165.4	0
+qp:4:6:14:1	6	841	opt tree (truncated)	30.01	3404808	765.0	340.4	0
+qp:4:6:14:1	6	841	hash 8MB	39.52	7875792	97.4	59.8	0
+qp:4:6:14:1	6	841	walk	0.00	792624	1064.5	114.3	0
+qp:4:6:14:1	6	841	graph	0.00	752256	420.3	65.4	0
+qp:4:6:14:1	6	841	wnn	0.00	8628048	95.6	60.7	0
+exit 0
+== qp:3:6:14:1
+# qp:3:6:14:1: theta 6 regions 182 solve 0.1s
+# geometry done
+# bst 0.4s
+# opt tree 12.3s
+# wnn 0.0s
+# WNN qp:3:6:14:1: status NotFacetToFacet nftf 304 excluded 0 duplicate_sites 0 max_vertex_violation NaN centers_correct 0/182 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 163856 bytes_incl_fallback 4168768
+# WNNOUT qp:3:6:14:1 uniform: inside 100000 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 0 (outside-exit NaN% fallback NaN%)
+# WNNOUT qp:3:6:14:1 walk: inside 100000 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_walk	mismatch
+qp:3:6:14:1	6	182	sequential	0.00	144704	327.0	157.8	0
+qp:3:6:14:1	6	182	bst	0.42	2166712	248.5	194.3	0
+qp:3:6:14:1	6	182	opt tree	12.33	3700740	245.7	209.2	0
+qp:3:6:14:1	6	182	hash 8MB	1.37	4004912	45.5	24.1	0
+qp:3:6:14:1	6	182	walk	0.00	172592	650.0	66.9	0
+qp:3:6:14:1	6	182	graph	0.00	163856	223.2	46.4	0
+qp:3:6:14:1	6	182	wnn	0.00	4168768	49.4	25.1	0
+exit 0
+== qp:6:6:40:2
+# qp:6:6:40:2: theta 6 regions 4297 solve 2.4s
+# geometry done
+# bst 46.3s
+# opt tree 30.0s
+# wnn 0.0s
+# WNN qp:6:6:40:2: status NotFacetToFacet nftf 4168 excluded 0 duplicate_sites 0 max_vertex_violation NaN centers_correct 0/4297 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 3759024 bytes_incl_fallback 11978184
+# WNNOUT qp:6:6:40:2 uniform: inside 3 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 99997 (outside-exit 0.00% fallback 100.000%)
+# WNNOUT qp:6:6:40:2 walk: inside 100000 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_walk	mismatch
+qp:6:6:40:2	6	4297	sequential	0.00	3295824	63885.7	4255.6	0
+qp:6:6:40:2	6	4297	bst (truncated)	46.31	39310544	35423.9	3581.4	0
+qp:6:6:40:2	6	4297	opt tree (truncated)	30.00	4788388	1065.2	468.2	0
+qp:6:6:40:2	6	4297	hash 8MB	56.38	8219160	11.1	221.3	0
+qp:6:6:40:2	6	4297	walk	0.00	3965280	726.3	309.0	0
+qp:6:6:40:2	6	4297	graph	0.00	3759024	226.9	113.2	0
+qp:6:6:40:2	6	4297	wnn	0.00	11978184	11.4	223.4	0
+exit 0
+== qp:3:8:10:1
+# qp:3:8:10:1: theta 8 regions 123 solve 0.0s
+# geometry done
+# bst 1.2s
+# opt tree 30.0s
+# wnn 0.0s
+# WNN qp:3:8:10:1: status NotFacetToFacet nftf 213 excluded 0 duplicate_sites 0 max_vertex_violation NaN centers_correct 0/123 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 192000 bytes_incl_fallback 8143344
+# WNNOUT qp:3:8:10:1 uniform: inside 100000 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 0 (outside-exit NaN% fallback NaN%)
+# WNNOUT qp:3:8:10:1 walk: inside 100000 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_walk	mismatch
+qp:3:8:10:1	8	123	sequential	0.00	176112	316.6	139.1	0
+qp:3:8:10:1	8	123	bst	1.18	5464664	314.4	240.1	0
+qp:3:8:10:1	8	123	opt tree (truncated)	30.00	1513124	259.1	203.5	0
+qp:3:8:10:1	8	123	hash 8MB	6.88	7951344	74.9	48.5	0
+qp:3:8:10:1	8	123	walk	0.00	199872	635.0	57.0	0
+qp:3:8:10:1	8	123	graph	0.00	192000	202.9	38.1	0
+qp:3:8:10:1	8	123	wnn	0.00	8143344	76.7	48.2	0
+exit 0
+== qp:4:8:14:1
+# qp:4:8:14:1: theta 8 regions 1204 solve 0.1s
+# geometry done
+# bst 30.7s
+# opt tree 30.0s
+# wnn 0.0s
+# WNN qp:4:8:14:1: status NotFacetToFacet nftf 5412 excluded 0 duplicate_sites 0 max_vertex_violation NaN centers_correct 0/1204 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 2002504 bytes_incl_fallback 6386624
+# WNNOUT qp:4:8:14:1 uniform: inside 100000 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 0 (outside-exit NaN% fallback NaN%)
+# WNNOUT qp:4:8:14:1 walk: inside 100000 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_walk	mismatch
+qp:4:8:14:1	8	1204	sequential	0.00	1807056	5152.4	960.4	0
+qp:4:8:14:1	8	1204	bst (truncated)	30.72	36162208	4732.3	2070.7	0
+qp:4:8:14:1	8	1204	opt tree (truncated)	30.00	2486460	2663.4	1146.6	0
+qp:4:8:14:1	8	1204	hash 8MB	86.10	4384120	177.2	107.5	0
+qp:4:8:14:1	8	1204	walk	0.00	2079560	1174.3	81.3	0
+qp:4:8:14:1	8	1204	graph	0.00	2002504	403.4	48.5	0
+qp:4:8:14:1	8	1204	wnn	0.00	6386624	178.4	108.3	0
+exit 0
+== mass:2:4
+# mass:2:4: theta 4 regions 307 solve 0.0s
+# geometry done
+# bst 0.2s
+# opt tree 1.2s
+# wnn 0.0s
+# WNN mass:2:4: status NotFacetToFacet nftf 118 excluded 0 duplicate_sites 0 max_vertex_violation NaN centers_correct 0/307 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 137912 bytes_incl_fallback 3459752
+# WNNOUT mass:2:4 uniform: inside 42608 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 57392 (outside-exit 0.00% fallback 100.000%)
+# WNNOUT mass:2:4 trajectory: inside 99955 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 125 (outside-exit 0.00% fallback 100.000%)
+# WNNOUT mass:2:4 walk: inside 100000 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_trajectory	ns_walk	mismatch
+mass:2:4	4	307	sequential	0.00	116800	1222.5	365.6	637.0	0
+mass:2:4	4	307	bst	0.15	760080	188.6	192.6	180.5	0
+mass:2:4	4	307	opt tree	1.16	803592	172.1	161.3	165.1	0
+mass:2:4	4	307	hash 8MB	0.62	3321840	34.1	16.1	18.3	0
+mass:2:4	4	307	walk	0.00	147736	599.0	116.8	77.6	0
+mass:2:4	4	307	graph	0.00	137912	189.2	53.4	44.8	0
+mass:2:4	4	307	wnn	0.00	3459752	35.2	17.7	19.9	0
+exit 0
+== mass:3:3
+# mass:3:3: theta 6 regions 955 solve 0.4s
+# geometry done
+# bst 23.3s
+# opt tree 30.0s
+# wnn 0.0s
+# WNN mass:3:3: status NotFacetToFacet nftf 1040 excluded 0 duplicate_sites 0 max_vertex_violation NaN centers_correct 0/955 lp_s 0.00 tree_s 0.000 build_s_excl_hash 0.00 bytes_excl_fallback 970320 bytes_incl_fallback 8423816
+# WNNOUT mass:3:3 uniform: inside 27333 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 72667 (outside-exit 0.00% fallback 100.000%)
+# WNNOUT mass:3:3 trajectory: inside 99565 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 455 (outside-exit 0.00% fallback 100.000%)
+# WNNOUT mass:3:3 walk: inside 100000 (tree 0.00% neighbor 0.00% fallback 100.000%), outside 0 (outside-exit NaN% fallback NaN%)
+spec	theta	regions	method	build_s	bytes	ns_uniform	ns_trajectory	ns_walk	mismatch
+mass:3:3	6	955	sequential	0.00	865200	8627.7	1136.6	362.2	0
+mass:3:3	6	955	bst (truncated)	23.28	34811376	5552.7	1352.1	1768.6	0
+mass:3:3	6	955	opt tree (truncated)	30.01	2263032	748.8	447.7	386.1	0
+mass:3:3	6	955	hash 8MB	38.71	7453496	224.9	99.6	79.6	0
+mass:3:3	6	955	walk	0.00	1016160	1938.1	562.7	255.4	0
+mass:3:3	6	955	graph	0.00	970320	788.7	252.4	162.5	0
+mass:3:3	6	955	wnn	0.00	8423816	179.6	144.0	80.4	0
+exit 0
