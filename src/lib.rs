@@ -24,6 +24,7 @@ pub mod mpqp_utils;
 pub mod plot;
 pub mod point_location;
 pub mod problem_generator;
+pub mod reduction;
 pub mod program;
 pub mod solution;
 pub mod solver;
