@@ -1017,6 +1017,13 @@ fn geometric(program: &Arc<MpProgram>, opts: &SolveOptions, parallel: bool) -> V
     let mut solution = Solution::new(program.clone(), vec![initial.clone()]);
     let mut indexed: HashSet<Vec<usize>> = HashSet::default();
     indexed.insert(active_set.clone());
+    // sorted active set -> index in the solution (QPs: facets shared with known regions are skipped)
+    let skip_known = program.is_qp();
+    let mut by_set: std::collections::HashMap<Vec<usize>, usize> = std::collections::HashMap::new();
+    let key = |a: &[usize]| { let mut v = a.to_vec(); v.sort_unstable(); v };
+    if skip_known {
+        by_set.insert(key(&active_set), 0);
+    }
     use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
     let degen = AtomicBool::new(false);
     // Degeneracy bookkeeping: facets whose step met a degenerate active set (or whose region has a
@@ -1028,7 +1035,8 @@ fn geometric(program: &Arc<MpProgram>, opts: &SolveOptions, parallel: bool) -> V
     if !parallel {
         while let Some((ci, cur)) = unchecked.pop_front() {
             let region_flag = AtomicBool::new(false);
-            let centers = get_facet_centers_degen(&cur.e, &cur.f, Some(&region_flag));
+            let skip = if skip_known { common::known_neighbour_facets(&cur, &|k| by_set.get(k).map(|&i| &solution.critical_regions[i])) } else { vec![] };
+            let centers = common::get_facet_centers_skip(&cur.e, &cur.f, Some(&region_flag), &skip);
             if region_flag.load(Relaxed) {
                 suspects.push((ci, None));
             }
@@ -1045,6 +1053,9 @@ fn geometric(program: &Arc<MpProgram>, opts: &SolveOptions, parallel: bool) -> V
                     if flagged {
                         suspects.push((idx, None));
                     }
+                    if skip_known {
+                        by_set.insert(key(&cr.active_set), idx);
+                    }
                     unchecked.push_back((idx, cr.clone()));
                     solution.add_region(cr);
                 }
@@ -1058,7 +1069,8 @@ fn geometric(program: &Arc<MpProgram>, opts: &SolveOptions, parallel: bool) -> V
                 .enumerate()
                 .flat_map_iter(|(wi, (_, r))| {
                     let region_flag = AtomicBool::new(false);
-                    let mut v: Vec<_> = get_facet_centers_degen(&r.e, &r.f, Some(&region_flag)).into_iter().map(|(c, n, rad)| (wi, c, n, rad)).collect();
+                    let skip = if skip_known { common::known_neighbour_facets(r, &|k| by_set.get(k).map(|&i| &solution.critical_regions[i])) } else { vec![] };
+                    let mut v: Vec<_> = common::get_facet_centers_skip(&r.e, &r.f, Some(&region_flag), &skip).into_iter().map(|(c, n, rad)| (wi, c, n, rad)).collect();
                     if region_flag.load(Relaxed) {
                         v.push((wi, vec![], vec![], f64::NAN)); // marker: whole region suspect
                     }
@@ -1086,6 +1098,9 @@ fn geometric(program: &Arc<MpProgram>, opts: &SolveOptions, parallel: bool) -> V
                         let idx = solution.critical_regions.len();
                         if flagged {
                             suspects.push((idx, None));
+                        }
+                        if skip_known {
+                            by_set.insert(key(&cr.active_set), idx);
                         }
                         unchecked.push_back((idx, cr.clone()));
                         solution.add_region(cr);
