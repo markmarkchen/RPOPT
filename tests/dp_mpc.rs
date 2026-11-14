@@ -37,6 +37,39 @@ fn dp_matches_geometric_small() {
     }
 }
 
+/// The reduced LPs, the full LPs (5) of the paper, the global candidate order and the parallel
+/// version all give the same active sets.
+#[test]
+fn dp_variants_agree() {
+    for name in ["di_N4", "sys3x2_N3", "masses2_N4"] {
+        let sym = DpOptions::symmetric();
+        let (mpc, prog) = problem(name);
+        let base = solve_mpc_dp(&mpc, &prog, &sym);
+        let sig = region_signature(&base.solution.critical_regions);
+        let full = solve_mpc_dp(&mpc, &prog, &DpOptions { reduced_lps: false, ..sym.clone() });
+        assert_eq!(region_signature(&full.solution.critical_regions), sig, "{name} full LPs");
+        let ordered = solve_mpc_dp(&mpc, &prog, &DpOptions { global_order: true, ..sym.clone() });
+        let par = solve_mpc_dp(&mpc, &prog, &DpOptions { parallel: true, ..sym.clone() });
+        assert_eq!(region_signature(&ordered.solution.critical_regions), sig, "{name} global order");
+        assert_eq!(region_signature(&par.solution.critical_regions), sig, "{name} parallel");
+        assert_eq!(par.stats.set_sizes, ordered.stats.set_sizes, "{name}: parallel run is deterministic");
+        assert_eq!(par.stats.optimality_lps, ordered.stats.optimality_lps, "{name}: parallel run is deterministic");
+    }
+}
+
+/// Terminal set = maximal admissible set of the LQR (the setting of the 2020 paper): Cor. 3 (copy
+/// the sets without terminal constraints) and the early stop of Prop. 4 apply.
+#[test]
+fn dp_invariant_terminal_matches_geometric() {
+    for name in ["dinv_N4", "dinv_N6", "dinv_N8"] {
+        let inv = |o: DpOptions| DpOptions { terminal_invariant: true, ..o };
+        check(name, &inv(DpOptions::paper2020()), "paper2020 Cor.3");
+        check(name, &inv(DpOptions::cdc2022()), "cdc2022 Cor.3");
+        check(name, &inv(DpOptions::symmetric()), "symmetric Cor.3");
+        check(name, &DpOptions::symmetric(), "symmetric plain");
+    }
+}
+
 #[test]
 fn dp_matches_geometric_all() {
     for name in ["di_N6", "di_N8", "di_N10", "masses2_N4", "masses2_N6", "sys3x2_N5"] {

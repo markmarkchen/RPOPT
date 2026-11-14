@@ -19,13 +19,14 @@
 //! `A (+) {q0}` is `A << q0` and the subset test `A >= pruned` is `A & p == p`.
 
 use crate::critical_region::CriticalRegion;
-use crate::linalg::{is_full_rank_rows, Mat};
+use crate::linalg::{is_full_rank_rows, Cholesky, Mat};
 use crate::mpc::{HorizonQp, MpcProblem};
 use crate::mpqp_utils::gen_cr_from_active_set;
 use crate::program::MpProgram;
 use crate::solution::Solution;
-use crate::solver::lp::solve_lp;
+use crate::solver::lp::{lp_feasible, solve_lp};
 use crate::fxhash::FxHashSet as HashSet;
+use rayon::prelude::*;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -46,6 +47,15 @@ pub struct DpOptions {
     /// Process all candidates of one horizon step by increasing cardinality (more pruning) instead
     /// of per parent set A_l as in Alg. 2. Same result.
     pub global_order: bool,
+    /// Solve the LPs (5) in reduced form when G_A has full row rank: lambda and U are eliminated
+    /// through the KKT system (the optimality LP has the variables (x0, t) only), and the equalities
+    /// of the feasibility LP are eliminated by Gauss-Jordan. Same answers as the full LPs, which are
+    /// still used for rank-deficient candidates.
+    pub reduced_lps: bool,
+    /// Test the candidates of equal cardinality in parallel (rayon, global pool); implies
+    /// `global_order`. Candidates of the same cardinality cannot prune each other, so the result
+    /// and the counters are identical to the serial run with `global_order`.
+    pub parallel: bool,
     /// Largest horizon to compute (defaults to the horizon of the MPC problem).
     pub horizon: Option<usize>,
 }
@@ -53,7 +63,7 @@ pub struct DpOptions {
 impl DpOptions {
     /// Mitze and Moennigmann 2020, as published (Cor. 3 pruning needs `terminal_invariant`).
     pub fn paper2020() -> Self {
-        DpOptions { cardinality_limit: false, symmetry: false, terminal_invariant: false, global_order: false, horizon: None }
+        DpOptions { cardinality_limit: false, symmetry: false, terminal_invariant: false, global_order: false, reduced_lps: true, parallel: false, horizon: None }
     }
 
     /// 2020 plus the cardinality limit of the CDC 2022 paper.
@@ -88,6 +98,24 @@ pub struct DpStats {
     pub horizon_reached: usize,
     pub seconds_enumeration: f64,
     pub seconds_regions: f64,
+    /// time inside the optimality / feasibility LPs and outcome counts (optimal, infeasible, other)
+    pub seconds_opt_lp: f64,
+    pub seconds_feas_lp: f64,
+    pub outcomes: [usize; 3],
+}
+
+impl DpStats {
+    fn add(&mut self, o: &DpStats) {
+        self.candidates += o.candidates;
+        self.pruned += o.pruned;
+        self.optimality_lps += o.optimality_lps;
+        self.feasibility_lps += o.feasibility_lps;
+        self.seconds_opt_lp += o.seconds_opt_lp;
+        self.seconds_feas_lp += o.seconds_feas_lp;
+        for k in 0..3 {
+            self.outcomes[k] += o.outcomes[k];
+        }
+    }
 }
 
 pub struct DpResult {
@@ -110,12 +138,12 @@ pub fn enumerate_active_sets(mpc: &MpcProblem, opts: &DpOptions, stats: &mut DpS
     let subsets = subsets_by_cardinality(q0);
 
     // S_1 (Alg. 3 / CDC Alg. 1 / symmetric Alg. 1)
-    let mut cur: Vec<(Set, bool)> = initial_sets(&qps[0], cmax, syms[0].as_deref(), stats);
+    let mut cur: Vec<(Set, bool)> = initial_sets(&qps[0], cmax, syms[0].as_deref(), opts, stats);
     stats.set_sizes.push(cur.len());
     stats.cumulative_seconds.push(t0.elapsed().as_secs_f64());
     let mut last = 1;
     for n in 1..nbar {
-        let ctx = Horizon { qp: &qps[n], perm: syms[n].as_deref() };
+        let ctx = Horizon::new(&qps[n], syms[n].as_deref(), opts.reduced_lps);
         cur = extend(&ctx, &qps[n - 1], &cur, &subsets, cmax, opts, stats);
         stats.set_sizes.push(cur.len());
         stats.cumulative_seconds.push(t0.elapsed().as_secs_f64());
@@ -288,6 +316,10 @@ fn orbit_of(a: Set, perm: &[usize]) -> Vec<Set> {
 struct Horizon<'a> {
     qp: &'a HorizonQp,
     perm: Option<&'a [usize]>,
+    reduced: bool,
+    /// `G H^-1 G'` (q x q) and `G H^-1 fm + E` (q x nx): everything the KKT elimination needs
+    w_mat: Mat,
+    cx: Mat,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -365,13 +397,209 @@ impl Horizon<'_> {
         solve_lp(Some(&c), &m, &b, &eq).map(|s| s.x[nz - 1])
     }
 
+    fn new<'a>(qp: &'a HorizonQp, perm: Option<&'a [usize]>, reduced: bool) -> Horizon<'a> {
+        let (w_mat, cx) = if reduced {
+            let chol = Cholesky::new(&qp.h).expect("H must be positive definite");
+            let hinv_gt = chol.solve_mat(&qp.g.transpose()); // H^-1 G'  (nm x q)
+            let hinv_fm = chol.solve_mat(&qp.fm); // H^-1 fm  (nm x nx)
+            (qp.g.matmul(&hinv_gt), qp.g.matmul(&hinv_fm).add(&qp.e))
+        } else {
+            (Mat::zeros(0, 0), Mat::zeros(0, 0))
+        };
+        Horizon { qp, perm, reduced, w_mat, cx }
+    }
+
+    /// Optimality LP (5) for a candidate whose G_A has full row rank, in the variables (x0, t):
+    /// with `S = G_A H^-1 G_A'` the multipliers are `lambda = -S^-1 (Cx_A x0 + w_A)`, the primal
+    /// solution `U = -H^-1 (fm x0 + G_A' lambda)`, and the slack of an inactive row i is
+    /// `-(Cx_i x0 + W_iA lambda + w_i)`. `None` when S is not positive definite.
+    fn lp_full_reduced(&self, a: Set, act: &[usize]) -> Option<Option<f64>> {
+        let qp = self.qp;
+        let (nx, q, na) = (qp.nx, qp.num_rows(), act.len());
+        let mut s = Mat::zeros(na, na);
+        for (r, &i) in act.iter().enumerate() {
+            for (c, &j) in act.iter().enumerate() {
+                s[(r, c)] = self.w_mat[(i, j)];
+            }
+        }
+        // right hand sides [Cx_A | w_A]
+        let mut rhs = Mat::zeros(na, nx + 1);
+        for (r, &i) in act.iter().enumerate() {
+            rhs.row_mut(r)[..nx].copy_from_slice(self.cx.row(i));
+            rhs[(r, nx)] = qp.w[i];
+        }
+        let chol = Cholesky::new(&s)?;
+        let sol = chol.solve_mat(&rhs).neg(); // [Lx | l0]
+        let n_in = q;
+        let mut m = Mat::zeros(n_in, nx);
+        let mut b = vec![0.0; n_in];
+        let mut r = 0;
+        for i in 0..q {
+            if a >> i & 1 == 1 {
+                continue;
+            }
+            // Cx_i x0 + W_iA (Lx x0 + l0) + w_i >= t
+            let row = m.row_mut(r);
+            let mut c0 = qp.w[i];
+            for c in 0..nx {
+                row[c] = -self.cx[(i, c)];
+            }
+            for (k, &j) in act.iter().enumerate() {
+                let wij = self.w_mat[(i, j)];
+                for c in 0..nx {
+                    row[c] -= wij * sol[(k, c)];
+                }
+                c0 += wij * sol[(k, nx)];
+            }
+            b[r] = c0;
+            r += 1;
+        }
+        for k in 0..na {
+            // lambda_k >= t
+            let row = m.row_mut(r);
+            for c in 0..nx {
+                row[c] = -sol[(k, c)];
+            }
+            b[r] = sol[(k, nx)];
+            r += 1;
+        }
+        // t* >= 0 iff the rows hold at t = 0; t* > T_TOL iff they hold at t = T_TOL (a feasibility LP
+        // in x0 only, which has a fast path for up to four parameters)
+        if !lp_feasible(&m, &b, &[]) {
+            return Some(None);
+        }
+        for v in b.iter_mut() {
+            *v -= T_TOL;
+        }
+        Some(Some(if lp_feasible(&m, &b, &[]) { 1.0 } else { 0.0 }))
+    }
+
+    /// Feasibility LP (5 without 5b, 5c), equalities eliminated by Gauss-Jordan on `[G_A | -E_A | w_A]`
+    /// (complete pivoting on the G_A columns); variables (x0, U of the non-pivot columns).
+    /// `None` when G_A is rank deficient. t is dropped: a solution with t >= 0 exists iff t = 0 is feasible.
+    fn feasible_reduced(&self, a: Set, act: &[usize]) -> Option<bool> {
+        let qp = self.qp;
+        let (nm, nx, q, na) = (qp.nm, qp.nx, qp.num_rows(), act.len());
+        let width = nm + nx + 1;
+        let mut aug = Mat::zeros(na, width);
+        for (r, &i) in act.iter().enumerate() {
+            let row = aug.row_mut(r);
+            row[..nm].copy_from_slice(qp.g.row(i));
+            for c in 0..nx {
+                row[nm + c] = -qp.e[(i, c)];
+            }
+            row[nm + nx] = qp.w[i];
+        }
+        let scale = aug.max_abs().max(1.0);
+        let mut pivot_cols = Vec::with_capacity(na);
+        let mut used = vec![false; nm];
+        for r in 0..na {
+            let (mut br, mut bc, mut bv) = (r, usize::MAX, 0.0f64);
+            for rr in r..na {
+                for c in 0..nm {
+                    if !used[c] && aug[(rr, c)].abs() > bv {
+                        bv = aug[(rr, c)].abs();
+                        br = rr;
+                        bc = c;
+                    }
+                }
+            }
+            if bc == usize::MAX || bv <= 1e-10 * scale {
+                return None;
+            }
+            if br != r {
+                for c in 0..width {
+                    let t = aug[(r, c)];
+                    aug[(r, c)] = aug[(br, c)];
+                    aug[(br, c)] = t;
+                }
+            }
+            let pv = aug[(r, bc)];
+            for c in 0..width {
+                aug[(r, c)] /= pv;
+            }
+            for rr in 0..na {
+                if rr != r {
+                    let f = aug[(rr, bc)];
+                    if f != 0.0 {
+                        for c in 0..width {
+                            let t = aug[(r, c)];
+                            aug[(rr, c)] -= f * t;
+                        }
+                    }
+                }
+            }
+            used[bc] = true;
+            pivot_cols.push(bc);
+        }
+        let rest: Vec<usize> = (0..nm).filter(|&c| !used[c]).collect();
+        let nz = nx + rest.len();
+        let n_in = q - na;
+        let mut m = Mat::zeros(n_in, nz);
+        let mut b = vec![0.0; n_in];
+        let mut r = 0;
+        for i in 0..q {
+            if a >> i & 1 == 1 {
+                continue;
+            }
+            let gi = qp.g.row(i);
+            let row = m.row_mut(r);
+            let mut rhs = qp.w[i];
+            for c in 0..nx {
+                row[c] = -qp.e[(i, c)];
+            }
+            for (k, &jc) in pivot_cols.iter().enumerate() {
+                let g = gi[jc];
+                if g == 0.0 {
+                    continue;
+                }
+                for c in 0..nx {
+                    row[c] -= g * aug[(k, nm + c)];
+                }
+                rhs -= g * aug[(k, nm + nx)];
+                for (u, &rc) in rest.iter().enumerate() {
+                    row[nx + u] -= g * aug[(k, rc)];
+                }
+            }
+            for (u, &rc) in rest.iter().enumerate() {
+                row[nx + u] += gi[rc];
+            }
+            b[r] = rhs;
+            r += 1;
+        }
+        Some(lp_feasible(&m, &b, &[]))
+    }
+
     fn classify(&self, a: Set, stats: &mut DpStats) -> Outcome {
+        let act = bits(a);
+        let reduced = self.reduced && is_full_rank_rows(&self.qp.g, &act);
         stats.optimality_lps += 1;
-        if let Some(t) = self.lp(a, true) {
+        let t0 = Instant::now();
+        let full = if reduced { self.lp_full_reduced(a, &act) } else { None };
+        let full = match full {
+            Some(r) => r,
+            None => self.lp(a, true),
+        };
+        stats.seconds_opt_lp += t0.elapsed().as_secs_f64();
+        if let Some(t) = full {
+            stats.outcomes[0] += 1;
             return Outcome::Optimal(t <= T_TOL);
         }
         stats.feasibility_lps += 1;
-        if self.lp(a, false).is_none() { Outcome::Infeasible } else { Outcome::Other }
+        let t0 = Instant::now();
+        let feas = if reduced { self.feasible_reduced(a, &act) } else { None };
+        let feasible = match feas {
+            Some(f) => f,
+            None => self.lp(a, false).is_some(),
+        };
+        stats.seconds_feas_lp += t0.elapsed().as_secs_f64();
+        if !feasible {
+            stats.outcomes[1] += 1;
+            Outcome::Infeasible
+        } else {
+            stats.outcomes[2] += 1;
+            Outcome::Other
+        }
     }
 }
 
@@ -395,17 +623,22 @@ fn contains_pruned(pruned: &[Set], a: Set) -> bool {
 
 /// S_1 and S_1^degen: every subset of the horizon-1 constraints (cardinality at most `cmax`) that is
 /// optimal. With a symmetry only the primary active set of each orbit is tested and kept.
-fn initial_sets(qp: &HorizonQp, cmax: usize, perm: Option<&[usize]>, stats: &mut DpStats) -> Vec<(Set, bool)> {
+fn initial_sets(qp: &HorizonQp, cmax: usize, perm: Option<&[usize]>, opts: &DpOptions, stats: &mut DpStats) -> Vec<(Set, bool)> {
     let q = qp.num_rows();
-    let ctx = Horizon { qp, perm };
+    let ctx = Horizon::new(qp, perm, opts.reduced_lps);
     let mut all: Vec<Set> = (0..1u128 << q).filter(|s| (s.count_ones() as usize) <= cmax).collect();
     all.sort_by_key(|&s| (s.count_ones(), lex_key(s)));
     let mut out = vec![];
     let mut pruned: Vec<Set> = vec![];
+    if perm.is_none() {
+        // no symmetry: the candidates of one cardinality are independent of each other
+        run_levels(&ctx, &all, &mut pruned, &mut out, opts.parallel, stats);
+        return out;
+    }
     let mut nonprim: Vec<Set> = vec![];
     for a in all {
         stats.candidates += 1;
-        if perm.is_some() && in_descendants(&nonprim, a) {
+        if in_descendants(&nonprim, a) {
             continue;
         }
         if contains_pruned(&pruned, a) {
@@ -432,6 +665,45 @@ fn initial_sets(qp: &HorizonQp, cmax: usize, perm: Option<&[usize]>, stats: &mut
     out
 }
 
+/// Tests `cands` (sorted by cardinality) level by level: dismisses the candidates containing a
+/// known infeasible set, classifies the others (in parallel if asked) and merges the outcomes in
+/// order, so the result does not depend on the thread count.
+fn run_levels(ctx: &Horizon, cands: &[Set], pruned: &mut Vec<Set>, out: &mut Vec<(Set, bool)>, parallel: bool, stats: &mut DpStats) {
+    let mut start = 0;
+    while start < cands.len() {
+        let card = cands[start].count_ones();
+        let end = start + cands[start..].iter().take_while(|c| c.count_ones() == card).count();
+        let level = &cands[start..end];
+        let known: &[Set] = pruned;
+        let one = |&a: &Set| -> (Set, Option<Outcome>, DpStats) {
+            let mut st = DpStats { candidates: 1, ..Default::default() };
+            if contains_pruned(known, a) {
+                st.pruned = 1;
+                return (a, None, st);
+            }
+            let o = ctx.classify(a, &mut st);
+            (a, Some(o), st)
+        };
+        let res: Vec<(Set, Option<Outcome>, DpStats)> = if parallel && level.len() > 1 { level.par_iter().map(one).collect() } else { level.iter().map(one).collect() };
+        let mut new_pruned = vec![];
+        for (a, o, st) in res {
+            stats.add(&st);
+            match o {
+                Some(Outcome::Optimal(d)) => out.push((a, d)),
+                Some(Outcome::Infeasible) => {
+                    new_pruned.push(a);
+                    if let Some(p) = ctx.perm {
+                        new_pruned.push(apply_perm(a, p));
+                    }
+                }
+                _ => {}
+            }
+        }
+        pruned.extend(new_pruned);
+        start = end;
+    }
+}
+
 /// `a` is `a_tilde` or a descendant of it in the combinatorial tree: a superset whose extra
 /// indices all exceed the largest index of `a_tilde`.
 fn in_descendants(nonprim: &[Set], a: Set) -> bool {
@@ -452,23 +724,7 @@ fn extend(ctx: &Horizon, prev: &HorizonQp, s_n: &[(Set, bool)], subsets: &[Set],
     let mut out: Vec<(Set, bool)> = vec![];
     let mut pruned: Vec<Set> = vec![];
     let mut cands: Vec<Set> = vec![];
-    let test = |a: Set, out: &mut Vec<(Set, bool)>, pruned: &mut Vec<Set>, stats: &mut DpStats| {
-        stats.candidates += 1;
-        if contains_pruned(pruned, a) {
-            stats.pruned += 1;
-            return;
-        }
-        match ctx.classify(a, stats) {
-            Outcome::Optimal(d) => out.push((a, d)),
-            Outcome::Infeasible => {
-                pruned.push(a);
-                if let Some(p) = ctx.perm {
-                    pruned.push(apply_perm(a, p));
-                }
-            }
-            Outcome::Other => {}
-        }
-    };
+    let ordered = opts.global_order || opts.parallel;
     for &(al, degen) in s_n {
         let card_l = al.count_ones() as usize;
         if opts.terminal_invariant {
@@ -485,23 +741,22 @@ fn extend(ctx: &Horizon, prev: &HorizonQp, s_n: &[(Set, bool)], subsets: &[Set],
             continue;
         }
         let room = cmax.saturating_sub(card_l);
+        // Alg. 2: the candidates of one parent A_l by increasing cardinality (pruning list shared)
+        let start = cands.len();
         for &aj in subsets {
             if (aj.count_ones() as usize) > room {
                 break;
             }
-            let cand = aj | (al << q0);
-            if opts.global_order {
-                cands.push(cand);
-            } else {
-                test(cand, &mut out, &mut pruned, stats);
-            }
+            cands.push(aj | (al << q0));
+        }
+        if !ordered {
+            let batch: Vec<Set> = cands.drain(start..).collect();
+            run_levels(ctx, &batch, &mut pruned, &mut out, false, stats);
         }
     }
-    if opts.global_order {
+    if ordered {
         cands.sort_by_key(|&s| s.count_ones());
-        for cand in cands {
-            test(cand, &mut out, &mut pruned, stats);
-        }
+        run_levels(ctx, &cands, &mut pruned, &mut out, opts.parallel, stats);
     }
     out
 }
