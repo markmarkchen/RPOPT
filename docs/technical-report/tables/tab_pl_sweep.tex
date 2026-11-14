@@ -1,0 +1,14 @@
+\begin{tabular}{@{}llrrrrrr@{}}
+\toprule
+instance & $n_\theta$ & regions & sequential & BST & optimized tree & hash table, 8 MB & mismatches (hash) \\
+\midrule
+\texttt{di\_N10} & 2 & 11 & 34 & 44 & 40 & 9 & 0 \\
+\texttt{qp:8:3:100:2} & 3 & 2,236 & 19,728 & 148 & 142 & 7 & 0 \\
+\texttt{masses2\_N6} & 4 & 901 & 5,758 & 269 & 230 & 45 & 0 \\
+\texttt{qp:8:4:60:1} & 4 & 4,639 & 110,865 & 344 & 925* & 8 & 0 \\
+\texttt{qp:6:5:40:1} & 5 & 7,919 & 83,398 & 41,722* & 1,579* & 86 & 0 \\
+\texttt{qp:4:6:14:1} & 6 & 841 & 10,883 & 4,564* & 978* & 109 & 0 \\
+\texttt{mass:3:3} & 6 & 955 & 18,498 & 6,339* & 1,306* & 282 & 0 \\
+\texttt{qp:4:8:14:1} & 8 & 1,204 & 24,559 & 26,754* & 17,118* & 1,660 & 0 \\
+\bottomrule
+\end{tabular}

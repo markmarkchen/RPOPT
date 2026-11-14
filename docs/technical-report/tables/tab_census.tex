@@ -1,0 +1,22 @@
+\begin{tabular}{@{}llrrrrr@{}}
+\toprule
+problem & algorithm & regions & LPs & LPs per region & QPs & LP time / solve$^\dagger$ \\
+\midrule
+\texttt{masses2\_N6} & \texttt{geometric} & 901 & 31,611 & 35.1 & 7,347 & 77\% \\
+\texttt{masses2\_N6} & \texttt{graph} & 901 & 48,903 & 54.3 & 100 & 29\% \\
+\texttt{masses2\_N6} & \texttt{graph\_exp} & 901 & 52,961 & 58.8 & 100 & 65\% \\
+\texttt{masses2\_N6} & \texttt{combinatorial\_graph} & 901 & 157,087 & 174.3 & 1 & 42\% \\
+\texttt{masses2\_N6} & \texttt{mplcp} & 901 & 4,469 & 5.0 & 1 & 2\% \\
+\texttt{masses2\_N6} & \texttt{combinatorial} & 901 & 342,759 & 380.4 & 0 & 42\% \\
+\addlinespace[2pt]
+\texttt{sys3x2\_N5} & \texttt{geometric} & 973 & 22,179 & 22.8 & 5,511 & 44\% \\
+\texttt{sys3x2\_N5} & \texttt{graph} & 973 & 88,226 & 90.7 & 100 & 23\% \\
+\texttt{sys3x2\_N5} & \texttt{graph\_exp} & 973 & 111,492 & 114.6 & 100 & 21\% \\
+\texttt{sys3x2\_N5} & \texttt{combinatorial\_graph} & 973 & 358,390 & 368.3 & 1 & 17\% \\
+\texttt{sys3x2\_N5} & \texttt{mplcp} & 973 & 1,515 & 1.6 & 1 & 9\% \\
+\texttt{sys3x2\_N5} & \texttt{combinatorial} & 973 & 7,543,221 & 7752.5 & 0 & 40\% \\
+\addlinespace[2pt]
+\texttt{diinf\_N4} & \texttt{geometric} & 39 & 2,284 & 58.6 & 0 & 52\% \\
+\texttt{diinf\_N4} & \texttt{mplp\_lex} & 39 & 982 & 25.2 & 0 & 2\% \\
+\bottomrule
+\end{tabular}
