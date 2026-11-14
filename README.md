@@ -10,7 +10,7 @@ mpLP, mpQP, mpMILP and mpMIQP solvers, plus fast exact point location.
 ![license](https://img.shields.io/badge/license-MIT-blue)
 ![rust](https://img.shields.io/badge/rust-2024%20edition-orange)
 ![python](https://img.shields.io/badge/python-PPOPT--compatible%20bindings-3776AB)
-![tests](https://img.shields.io/badge/tests-116%20Rust%20%2B%2072%20Python-brightgreen)
+![tests](https://img.shields.io/badge/tests-117%20Rust%20%2B%2072%20Python-brightgreen)
 
 </div>
 
@@ -252,7 +252,7 @@ cells. The hash table supports up to 16 parameters.
   same solution always gives the same bytes.
 - **Errors, not panics:** wrong headers, truncation, bit flips and dimension mismatches all return errors.
 - **Hash tables:** `HashTable::save/load` stores the built index, so a controller starts in milliseconds instead
-  of rebuilding it.
+  of rebuilding it. Format version 2 also stores the point location tolerance; version 1 files must be rebuilt.
 
 | problem | regions | JSON | binary | binary load | hash table rebuild | hash table load |
 |---|---|---|---|---|---|---|
@@ -369,7 +369,7 @@ time of `graph`. Those runs come from a shared, busy machine.
 - **`examples/mplp_bench.rs`** checks every mpLP solution at 2,000 random parameters against direct LP solves (no
   gaps, feasible laws, optimal objective). Every exact RPOPT solver has 0 gaps and 0 errors on all
   `bench/problems_lp` problems it finishes.
-- **`cargo test --release`** (116 tests) covers:
+- **`cargo test --release`** (117 tests) covers:
   - parity with PPOPT's results and examples;
   - each new algorithm against `geometric` and `combinatorial`, on the benchmark and on random problems;
   - degenerate problems (gaps and overlaps on 20,000 samples), including gap-free graph solvers on degenerate
@@ -440,6 +440,8 @@ Deliberate:
   mpQP.
 - **Equality rows.** `get_independent_rows` keeps the last equality row when it is independent.
 - **Dual signs.** Duals use the standard sign convention (Qx + c + A'λ = 0, λ ≥ 0).
+- **Point location tolerance.** 1e-9 instead of PPOPT's 1e-5, shared by `Solution` and every locator (see
+  [Point location](#point-location)); set `point_location_tolerance = 1e-5` for PPOPT's behaviour.
 
 Bugs found and fixed while porting:
 
