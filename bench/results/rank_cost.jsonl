@@ -1,0 +1,9 @@
+{"problem": "problems/di_doc_N3.json", "ranks": 5000, "us_per_rank": 9.938641596818343}
+{"problem": "problems/di_N10.json", "ranks": 5000, "us_per_rank": 12.66602500109002}
+{"problem": "problems/di_N4.json", "ranks": 5000, "us_per_rank": 11.136733402963728}
+{"problem": "problems/di_N6.json", "ranks": 5000, "us_per_rank": 9.894891799194738}
+{"problem": "problems/di_N8.json", "ranks": 5000, "us_per_rank": 8.394191804109141}
+{"problem": "problems/masses2_N4.json", "ranks": 5000, "us_per_rank": 12.131224997574463}
+{"problem": "problems/masses2_N6.json", "ranks": 5000, "us_per_rank": 9.26084999809973}
+{"problem": "problems/sys3x2_N3.json", "ranks": 5000, "us_per_rank": 10.070683399681002}
+{"problem": "problems/sys3x2_N5.json", "ranks": 5000, "us_per_rank": 8.918133401311934}

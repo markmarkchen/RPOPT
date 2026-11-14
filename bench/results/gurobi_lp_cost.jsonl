@@ -1,0 +1,9 @@
+{"problem": "problems/di_doc_N3.json", "lps": 1000, "us_per_lp": 335.61345798079856, "feasible": 805, "gurobi": "12.0.2"}
+{"problem": "problems/di_N10.json", "lps": 1000, "us_per_lp": 476.8181249964982, "feasible": 381, "gurobi": "12.0.2"}
+{"problem": "problems/di_N4.json", "lps": 1000, "us_per_lp": 355.1020000013523, "feasible": 355, "gurobi": "12.0.2"}
+{"problem": "problems/di_N6.json", "lps": 1000, "us_per_lp": 386.9913329835981, "feasible": 352, "gurobi": "12.0.2"}
+{"problem": "problems/di_N8.json", "lps": 1000, "us_per_lp": 433.578915981343, "feasible": 374, "gurobi": "12.0.2"}
+{"problem": "problems/masses2_N4.json", "lps": 1000, "us_per_lp": 374.02333397767507, "feasible": 492, "gurobi": "12.0.2"}
+{"problem": "problems/masses2_N6.json", "lps": 1000, "us_per_lp": 490.3382080083247, "feasible": 476, "gurobi": "12.0.2"}
+{"problem": "problems/sys3x2_N3.json", "lps": 1000, "us_per_lp": 394.5123750017956, "feasible": 582, "gurobi": "12.0.2"}
+{"problem": "problems/sys3x2_N5.json", "lps": 1000, "us_per_lp": 441.58783298917115, "feasible": 601, "gurobi": "12.0.2"}

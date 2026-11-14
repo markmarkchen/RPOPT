@@ -1,0 +1,29 @@
+[package]
+name = "ppopt_rs"
+version = "0.1.0"
+edition = "2024"
+description = "Rust rewrite of PPOPT (multiparametric LP/QP/MILP/MIQP) with explicit-MPC point location methods"
+license = "MIT"
+
+[dependencies]
+clarabel = "0.11.1"
+mimalloc = { version = "0.1.52", default-features = false, optional = true }
+nalgebra = "0.33"
+rand = "0.8"
+rayon = "1.12.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+
+[features]
+default = ["mimalloc"]
+mimalloc = ["dep:mimalloc"]
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+debug = false
+
+[profile.profiling]
+inherits = "release"
+debug = "line-tables-only"

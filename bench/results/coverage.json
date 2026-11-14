@@ -1,0 +1,1514 @@
+[
+ {
+  "problem": "di_N10",
+  "algorithm": "combinatorial",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 67133,
+  "regions": 11,
+  "regions_hit": 11,
+  "rust": {
+   "runs": 1,
+   "solve_s": 8.622773125,
+   "levels": [
+    0.006893333,
+    8.596894416,
+    8.596894416,
+    8.596894416,
+    8.596894416
+   ],
+   "all_regions_built_s": 8.596894416
+  },
+  "ppopt": {
+   "finished": false,
+   "solve_s": null,
+   "observed_s": 600.0,
+   "levels": [
+    7.80935575,
+    null,
+    null,
+    null,
+    null
+   ],
+   "all_regions_built_s": null,
+   "final_regions_built": 9,
+   "final_regions_not_in_rust": null
+  }
+ },
+ {
+  "problem": "di_N10",
+  "algorithm": "combinatorial_graph",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 67133,
+  "regions": 11,
+  "regions_hit": 11,
+  "rust": {
+   "runs": 809,
+   "solve_s": 0.0003625,
+   "levels": [
+    3.0541e-05,
+    0.000103792,
+    0.000162209,
+    0.00019575,
+    0.00019575
+   ],
+   "all_regions_built_s": 0.00019575
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 2.155468083,
+   "observed_s": 1.596881,
+   "levels": [
+    0.168546541,
+    0.266086958,
+    0.999116,
+    1.596881333,
+    1.596881333
+   ],
+   "all_regions_built_s": 1.596881333,
+   "final_regions_built": 11,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "di_N10",
+  "algorithm": "geometric",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 67133,
+  "regions": 11,
+  "regions_hit": 11,
+  "rust": {
+   "runs": 1760,
+   "solve_s": 0.000166458,
+   "levels": [
+    2.9875e-05,
+    8.0208e-05,
+    0.00012825,
+    0.000145667,
+    0.000145667
+   ],
+   "all_regions_built_s": 0.000145667
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 0.126305916,
+   "observed_s": 0.123101,
+   "levels": [
+    0.034167666,
+    0.080218625,
+    0.113383,
+    0.123100833,
+    0.123100833
+   ],
+   "all_regions_built_s": 0.123100833,
+   "final_regions_built": 11,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "di_N10",
+  "algorithm": "graph",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 67133,
+  "regions": 11,
+  "regions_hit": 11,
+  "rust": {
+   "runs": 1071,
+   "solve_s": 0.000272083,
+   "levels": [
+    0.000108958,
+    0.000148708,
+    0.000190333,
+    0.000213125,
+    0.000213125
+   ],
+   "all_regions_built_s": 0.000213125
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 1.0188515,
+   "observed_s": 0.821078,
+   "levels": [
+    0.062306167,
+    0.286785042,
+    0.721670084,
+    0.821077667,
+    0.821077667
+   ],
+   "all_regions_built_s": 0.821077667,
+   "final_regions_built": 11,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "di_N4",
+  "algorithm": "combinatorial",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 67133,
+  "regions": 9,
+  "regions_hit": 9,
+  "rust": {
+   "runs": 572,
+   "solve_s": 0.000513916,
+   "levels": [
+    0.00023175,
+    0.000509291,
+    0.000509291,
+    0.000509291,
+    0.000509291
+   ],
+   "all_regions_built_s": 0.000509291
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 0.849214792,
+   "observed_s": 0.848829,
+   "levels": [
+    0.411889792,
+    0.848828875,
+    0.848828875,
+    0.848828875,
+    0.848828875
+   ],
+   "all_regions_built_s": 0.848828875,
+   "final_regions_built": 9,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "di_N4",
+  "algorithm": "combinatorial_graph",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 67133,
+  "regions": 9,
+  "regions_hit": 9,
+  "rust": {
+   "runs": 2000,
+   "solve_s": 0.000118292,
+   "levels": [
+    1.65e-05,
+    5.1083e-05,
+    7.0042e-05,
+    7.0042e-05,
+    7.0042e-05
+   ],
+   "all_regions_built_s": 7.0042e-05
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 0.112803958,
+   "observed_s": 0.091761,
+   "levels": [
+    0.044904083,
+    0.080710416,
+    0.091761083,
+    0.091761083,
+    0.091761083
+   ],
+   "all_regions_built_s": 0.091761083,
+   "final_regions_built": 9,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "di_N4",
+  "algorithm": "geometric",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 67133,
+  "regions": 9,
+  "regions_hit": 9,
+  "rust": {
+   "runs": 2000,
+   "solve_s": 7.4208e-05,
+   "levels": [
+    1.7e-05,
+    5.4875e-05,
+    6.7625e-05,
+    6.7625e-05,
+    6.7625e-05
+   ],
+   "all_regions_built_s": 6.7625e-05
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 0.161474291,
+   "observed_s": 0.154659,
+   "levels": [
+    0.034768958,
+    0.079216208,
+    0.154659,
+    0.154659,
+    0.154659
+   ],
+   "all_regions_built_s": 0.154659,
+   "final_regions_built": 9,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "di_N4",
+  "algorithm": "graph",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 67133,
+  "regions": 9,
+  "regions_hit": 9,
+  "rust": {
+   "runs": 2000,
+   "solve_s": 0.0001185,
+   "levels": [
+    4.3e-05,
+    6.7166e-05,
+    8.4292e-05,
+    8.4292e-05,
+    8.4292e-05
+   ],
+   "all_regions_built_s": 8.4292e-05
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 0.351153875,
+   "observed_s": 0.289378,
+   "levels": [
+    0.104239333,
+    0.127648333,
+    0.289378292,
+    0.289378292,
+    0.289378292
+   ],
+   "all_regions_built_s": 0.289378292,
+   "final_regions_built": 9,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "di_N6",
+  "algorithm": "combinatorial",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 67133,
+  "regions": 11,
+  "regions_hit": 11,
+  "rust": {
+   "runs": 25,
+   "solve_s": 0.01218025,
+   "levels": [
+    0.000936209,
+    0.012107209,
+    0.012107209,
+    0.012107209,
+    0.012107209
+   ],
+   "all_regions_built_s": 0.012107209
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 14.413627583,
+   "observed_s": 14.413114,
+   "levels": [
+    1.628772666,
+    14.413114125,
+    14.413114125,
+    14.413114125,
+    14.413114125
+   ],
+   "all_regions_built_s": 14.413114125,
+   "final_regions_built": 11,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "di_N6",
+  "algorithm": "combinatorial_graph",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 67133,
+  "regions": 11,
+  "regions_hit": 11,
+  "rust": {
+   "runs": 1061,
+   "solve_s": 0.000275042,
+   "levels": [
+    2.0458e-05,
+    7.0041e-05,
+    0.000111083,
+    0.000132083,
+    0.000132083
+   ],
+   "all_regions_built_s": 0.000132083
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 0.537603625,
+   "observed_s": 0.149784,
+   "levels": [
+    0.03807,
+    0.082202917,
+    0.114671125,
+    0.149784042,
+    0.149784042
+   ],
+   "all_regions_built_s": 0.149784042,
+   "final_regions_built": 11,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "di_N6",
+  "algorithm": "geometric",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 67133,
+  "regions": 11,
+  "regions_hit": 11,
+  "rust": {
+   "runs": 2000,
+   "solve_s": 0.000120875,
+   "levels": [
+    2.1583e-05,
+    7.0583e-05,
+    9.4167e-05,
+    0.000111875,
+    0.000111875
+   ],
+   "all_regions_built_s": 0.000111875
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 0.079997667,
+   "observed_s": 0.07691,
+   "levels": [
+    0.019559583,
+    0.047924375,
+    0.070355542,
+    0.07690975,
+    0.07690975
+   ],
+   "all_regions_built_s": 0.07690975,
+   "final_regions_built": 11,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "di_N6",
+  "algorithm": "graph",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 67133,
+  "regions": 11,
+  "regions_hit": 11,
+  "rust": {
+   "runs": 1493,
+   "solve_s": 0.000194083,
+   "levels": [
+    5.6416e-05,
+    8.6209e-05,
+    0.000119417,
+    0.000139375,
+    0.000139375
+   ],
+   "all_regions_built_s": 0.000139375
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 0.752089625,
+   "observed_s": 0.601591,
+   "levels": [
+    0.0438625,
+    0.130571833,
+    0.393343125,
+    0.601590792,
+    0.601590792
+   ],
+   "all_regions_built_s": 0.601590792,
+   "final_regions_built": 11,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "di_N8",
+  "algorithm": "combinatorial",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 67133,
+  "regions": 11,
+  "regions_hit": 11,
+  "rust": {
+   "runs": 5,
+   "solve_s": 0.322926917,
+   "levels": [
+    0.002786167,
+    0.321225042,
+    0.321225042,
+    0.321225042,
+    0.321225042
+   ],
+   "all_regions_built_s": 0.321225042
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 501.960425917,
+   "observed_s": 501.958582,
+   "levels": [
+    3.206471708,
+    501.958581583,
+    501.958581583,
+    501.958581583,
+    501.958581583
+   ],
+   "all_regions_built_s": 501.958581583,
+   "final_regions_built": 11,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "di_N8",
+  "algorithm": "combinatorial_graph",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 67133,
+  "regions": 11,
+  "regions_hit": 11,
+  "rust": {
+   "runs": 916,
+   "solve_s": 0.000318417,
+   "levels": [
+    2.5875e-05,
+    8.65e-05,
+    0.00013775,
+    0.000164667,
+    0.000164667
+   ],
+   "all_regions_built_s": 0.000164667
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 0.31497575,
+   "observed_s": 0.254325,
+   "levels": [
+    0.147856917,
+    0.228147125,
+    0.247421,
+    0.254324917,
+    0.254324917
+   ],
+   "all_regions_built_s": 0.254324917,
+   "final_regions_built": 11,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "di_N8",
+  "algorithm": "geometric",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 67133,
+  "regions": 11,
+  "regions_hit": 11,
+  "rust": {
+   "runs": 2000,
+   "solve_s": 0.000136375,
+   "levels": [
+    2.4792e-05,
+    6.7417e-05,
+    0.000107083,
+    0.000121125,
+    0.000121125
+   ],
+   "all_regions_built_s": 0.000121125
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 0.128950041,
+   "observed_s": 0.12727,
+   "levels": [
+    0.040822166,
+    0.098309416,
+    0.118116166,
+    0.127270166,
+    0.127270166
+   ],
+   "all_regions_built_s": 0.127270166,
+   "final_regions_built": 11,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "di_N8",
+  "algorithm": "graph",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 67133,
+  "regions": 11,
+  "regions_hit": 11,
+  "rust": {
+   "runs": 1263,
+   "solve_s": 0.000230333,
+   "levels": [
+    8.0042e-05,
+    0.000114584,
+    0.000152375,
+    0.000174084,
+    0.000174084
+   ],
+   "all_regions_built_s": 0.000174084
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 0.333792625,
+   "observed_s": 0.167494,
+   "levels": [
+    0.030327709,
+    0.070465209,
+    0.130050625,
+    0.167493834,
+    0.167493834
+   ],
+   "all_regions_built_s": 0.167493834,
+   "final_regions_built": 11,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "di_doc_N3",
+  "algorithm": "combinatorial",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 67528,
+  "regions": 7,
+  "regions_hit": 7,
+  "rust": {
+   "runs": 1091,
+   "solve_s": 0.000268084,
+   "levels": [
+    0.000138875,
+    0.000266417,
+    0.000266417,
+    0.000266417,
+    0.000266417
+   ],
+   "all_regions_built_s": 0.000266417
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 0.206635833,
+   "observed_s": 0.20622,
+   "levels": [
+    0.125614458,
+    0.2062205,
+    0.2062205,
+    0.2062205,
+    0.2062205
+   ],
+   "all_regions_built_s": 0.2062205,
+   "final_regions_built": 7,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "di_doc_N3",
+  "algorithm": "combinatorial_graph",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 67528,
+  "regions": 7,
+  "regions_hit": 7,
+  "rust": {
+   "runs": 2000,
+   "solve_s": 9.5417e-05,
+   "levels": [
+    1.925e-05,
+    4.6458e-05,
+    6.1167e-05,
+    6.1167e-05,
+    6.1167e-05
+   ],
+   "all_regions_built_s": 6.1167e-05
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 0.329477084,
+   "observed_s": 0.192261,
+   "levels": [
+    0.049658,
+    0.117661917,
+    0.192260917,
+    0.192260917,
+    0.192260917
+   ],
+   "all_regions_built_s": 0.192260917,
+   "final_regions_built": 7,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "di_doc_N3",
+  "algorithm": "geometric",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 67528,
+  "regions": 7,
+  "regions_hit": 7,
+  "rust": {
+   "runs": 2000,
+   "solve_s": 6.0125e-05,
+   "levels": [
+    2.6916e-05,
+    4.6083e-05,
+    5.3958e-05,
+    5.3958e-05,
+    5.3958e-05
+   ],
+   "all_regions_built_s": 5.3958e-05
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 0.1064915,
+   "observed_s": 0.104793,
+   "levels": [
+    0.070652667,
+    0.097588542,
+    0.10479275,
+    0.10479275,
+    0.10479275
+   ],
+   "all_regions_built_s": 0.10479275,
+   "final_regions_built": 7,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "di_doc_N3",
+  "algorithm": "graph",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 67528,
+  "regions": 7,
+  "regions_hit": 7,
+  "rust": {
+   "runs": 2000,
+   "solve_s": 0.000139208,
+   "levels": [
+    6.9542e-05,
+    8.8167e-05,
+    0.000103875,
+    0.000103875,
+    0.000103875
+   ],
+   "all_regions_built_s": 0.000103875
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 0.200124125,
+   "observed_s": 0.144165,
+   "levels": [
+    0.057953792,
+    0.087683375,
+    0.144164792,
+    0.144164792,
+    0.144164792
+   ],
+   "all_regions_built_s": 0.144164792,
+   "final_regions_built": 7,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "masses2_N4",
+  "algorithm": "combinatorial",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 42795,
+  "regions": 307,
+  "regions_hit": 142,
+  "rust": {
+   "runs": 13,
+   "solve_s": 0.024651292,
+   "levels": [
+    0.010726209,
+    0.020517125,
+    0.020517125,
+    0.024568125,
+    0.024568125
+   ],
+   "all_regions_built_s": 0.024568125
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 9.949998,
+   "observed_s": 9.949466,
+   "levels": [
+    6.03789125,
+    8.916489416,
+    8.916489416,
+    9.94946625,
+    9.94946625
+   ],
+   "all_regions_built_s": 9.94946625,
+   "final_regions_built": 307,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "masses2_N4",
+  "algorithm": "combinatorial_graph",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 42795,
+  "regions": 307,
+  "regions_hit": 142,
+  "rust": {
+   "runs": 15,
+   "solve_s": 0.020067792,
+   "levels": [
+    0.004079708,
+    0.013877875,
+    0.015372834,
+    0.016447833,
+    0.016593292
+   ],
+   "all_regions_built_s": 0.019116833
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 6.069347916,
+   "observed_s": 5.288715,
+   "levels": [
+    1.535509208,
+    2.478288166,
+    5.06423925,
+    5.06423925,
+    5.06423925
+   ],
+   "all_regions_built_s": 5.288715458,
+   "final_regions_built": 307,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "masses2_N4",
+  "algorithm": "geometric",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 42795,
+  "regions": 307,
+  "regions_hit": 142,
+  "rust": {
+   "runs": 16,
+   "solve_s": 0.0199695,
+   "levels": [
+    0.006315958,
+    0.016722,
+    0.017696375,
+    0.018976083,
+    0.0192835
+   ],
+   "all_regions_built_s": 0.0192835
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 5.505521625,
+   "observed_s": 5.30368,
+   "levels": [
+    1.51759875,
+    4.293719417,
+    5.087994292,
+    5.087994292,
+    5.303680417
+   ],
+   "all_regions_built_s": 5.303680417,
+   "final_regions_built": 307,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "masses2_N4",
+  "algorithm": "graph",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 42795,
+  "regions": 307,
+  "regions_hit": 142,
+  "rust": {
+   "runs": 20,
+   "solve_s": 0.015007042,
+   "levels": [
+    0.005508917,
+    0.009670292,
+    0.010557667,
+    0.011619042,
+    0.013554459
+   ],
+   "all_regions_built_s": 0.014840209
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 5.66447275,
+   "observed_s": 5.566798,
+   "levels": [
+    1.826074875,
+    3.010844083,
+    3.264159167,
+    3.973776458,
+    4.673235333
+   ],
+   "all_regions_built_s": 5.566797667,
+   "final_regions_built": 307,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "masses2_N6",
+  "algorithm": "combinatorial",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 38562,
+  "regions": 901,
+  "regions_hit": 424,
+  "rust": {
+   "runs": 5,
+   "solve_s": 0.445992917,
+   "levels": [
+    0.203083375,
+    0.358236917,
+    0.41825575,
+    0.444204833,
+    0.444204833
+   ],
+   "all_regions_built_s": 0.444204833
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 468.202878667,
+   "observed_s": 468.200821,
+   "levels": [
+    307.009171667,
+    431.471720542,
+    455.578225709,
+    468.2008205,
+    468.2008205
+   ],
+   "all_regions_built_s": 468.2008205,
+   "final_regions_built": 901,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "masses2_N6",
+  "algorithm": "combinatorial_graph",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 38562,
+  "regions": 901,
+  "regions_hit": 424,
+  "rust": {
+   "runs": 5,
+   "solve_s": 0.170566917,
+   "levels": [
+    0.033076166,
+    0.11849825,
+    0.127697584,
+    0.138854709,
+    0.140751375
+   ],
+   "all_regions_built_s": 0.151018834
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 332.153487583,
+   "observed_s": 328.341331,
+   "levels": [
+    18.911582917,
+    267.069714333,
+    288.709516417,
+    293.744314333,
+    309.204582417
+   ],
+   "all_regions_built_s": 328.34133125,
+   "final_regions_built": 901,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "masses2_N6",
+  "algorithm": "geometric",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 38562,
+  "regions": 901,
+  "regions_hit": 424,
+  "rust": {
+   "runs": 5,
+   "solve_s": 0.082607625,
+   "levels": [
+    0.03908225,
+    0.072947083,
+    0.076037417,
+    0.07897525,
+    0.080502625
+   ],
+   "all_regions_built_s": 0.082274458
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 96.496366958,
+   "observed_s": 95.595421,
+   "levels": [
+    52.443678917,
+    89.938583375,
+    93.820169458,
+    93.905119292,
+    95.27502975
+   ],
+   "all_regions_built_s": 95.595421375,
+   "final_regions_built": 901,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "masses2_N6",
+  "algorithm": "graph",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 38562,
+  "regions": 901,
+  "regions_hit": 424,
+  "rust": {
+   "runs": 5,
+   "solve_s": 0.074069667,
+   "levels": [
+    0.02279,
+    0.044153333,
+    0.048784708,
+    0.049402,
+    0.051275375
+   ],
+   "all_regions_built_s": 0.071533375
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 140.910292125,
+   "observed_s": 139.420813,
+   "levels": [
+    51.21901825,
+    87.849322125,
+    95.861432625,
+    118.3382645,
+    118.793370458
+   ],
+   "all_regions_built_s": 139.420813,
+   "final_regions_built": 901,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "sys3x2_N3",
+  "algorithm": "combinatorial",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 71282,
+  "regions": 211,
+  "regions_hit": 149,
+  "rust": {
+   "runs": 12,
+   "solve_s": 0.026558291,
+   "levels": [
+    0.0177815,
+    0.025370125,
+    0.025370125,
+    0.026406041,
+    0.026406041
+   ],
+   "all_regions_built_s": 0.026406041
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 37.993148625,
+   "observed_s": 37.992201,
+   "levels": [
+    31.73939475,
+    37.739973,
+    37.739973,
+    37.992200875,
+    37.992200875
+   ],
+   "all_regions_built_s": 37.992200875,
+   "final_regions_built": 211,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "sys3x2_N3",
+  "algorithm": "combinatorial_graph",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 71282,
+  "regions": 211,
+  "regions_hit": 149,
+  "rust": {
+   "runs": 39,
+   "solve_s": 0.007826292,
+   "levels": [
+    0.002226709,
+    0.006921584,
+    0.006921584,
+    0.006921584,
+    0.006921584
+   ],
+   "all_regions_built_s": 0.006921584
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 27.85812675,
+   "observed_s": 16.907986,
+   "levels": [
+    6.3844225,
+    11.771866042,
+    15.623322834,
+    15.962869084,
+    16.9079855
+   ],
+   "all_regions_built_s": 16.9079855,
+   "final_regions_built": 211,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "sys3x2_N3",
+  "algorithm": "geometric",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 71282,
+  "regions": 211,
+  "regions_hit": 149,
+  "rust": {
+   "runs": 52,
+   "solve_s": 0.005853875,
+   "levels": [
+    0.00229225,
+    0.005737166,
+    0.005737166,
+    0.005737166,
+    0.005737166
+   ],
+   "all_regions_built_s": 0.005737166
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 5.440494083,
+   "observed_s": 5.361948,
+   "levels": [
+    2.36917275,
+    5.361948417,
+    5.361948417,
+    5.361948417,
+    5.361948417
+   ],
+   "all_regions_built_s": 5.361948417,
+   "final_regions_built": 211,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "sys3x2_N3",
+  "algorithm": "graph",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 71282,
+  "regions": 211,
+  "regions_hit": 149,
+  "rust": {
+   "runs": 61,
+   "solve_s": 0.004917125,
+   "levels": [
+    0.003186125,
+    0.003234458,
+    0.003831708,
+    0.003831708,
+    0.004014833
+   ],
+   "all_regions_built_s": 0.004805375
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 6.089861208,
+   "observed_s": 5.789547,
+   "levels": [
+    3.727782125,
+    3.952188375,
+    4.527675917,
+    4.697105792,
+    4.941279375
+   ],
+   "all_regions_built_s": 5.789546583,
+   "final_regions_built": 211,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "sys3x2_N5",
+  "algorithm": "combinatorial",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 59342,
+  "regions": 973,
+  "regions_hit": 430,
+  "rust": {
+   "runs": 1,
+   "solve_s": 9.853316667,
+   "levels": [
+    8.397684792,
+    9.758774875,
+    9.758774875,
+    9.825756292,
+    9.825756292
+   ],
+   "all_regions_built_s": 9.825756292
+  },
+  "ppopt": {
+   "finished": false,
+   "solve_s": null,
+   "observed_s": 600.0,
+   "levels": [
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "all_regions_built_s": null,
+   "final_regions_built": 286,
+   "final_regions_not_in_rust": null
+  }
+ },
+ {
+  "problem": "sys3x2_N5",
+  "algorithm": "combinatorial_graph",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 59342,
+  "regions": 973,
+  "regions_hit": 430,
+  "rust": {
+   "runs": 5,
+   "solve_s": 0.3476975,
+   "levels": [
+    0.069043375,
+    0.287317292,
+    0.287317292,
+    0.287317292,
+    0.287317292
+   ],
+   "all_regions_built_s": 0.287317292
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 255.807212125,
+   "observed_s": 178.634254,
+   "levels": [
+    98.785825542,
+    112.005609292,
+    122.620652709,
+    138.663574709,
+    144.651174667
+   ],
+   "all_regions_built_s": 178.634253917,
+   "final_regions_built": 973,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "sys3x2_N5",
+  "algorithm": "geometric",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 59342,
+  "regions": 973,
+  "regions_hit": 430,
+  "rust": {
+   "runs": 7,
+   "solve_s": 0.043049834,
+   "levels": [
+    0.018631417,
+    0.042681625,
+    0.042681625,
+    0.042681625,
+    0.042681625
+   ],
+   "all_regions_built_s": 0.042872042
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 88.528175459,
+   "observed_s": 88.349053,
+   "levels": [
+    25.676947,
+    87.990693292,
+    87.990693292,
+    87.990693292,
+    87.990693292
+   ],
+   "all_regions_built_s": 88.349052959,
+   "final_regions_built": 973,
+   "final_regions_not_in_rust": 0
+  }
+ },
+ {
+  "problem": "sys3x2_N5",
+  "algorithm": "graph",
+  "levels": [
+   0.5,
+   0.9,
+   0.99,
+   0.999,
+   1
+  ],
+  "samples_in_theta": 100000,
+  "samples_covered": 59342,
+  "regions": 973,
+  "regions_hit": 430,
+  "rust": {
+   "runs": 5,
+   "solve_s": 0.106812833,
+   "levels": [
+    0.040804209,
+    0.041238334,
+    0.061842666,
+    0.061842666,
+    0.064322875
+   ],
+   "all_regions_built_s": 0.100297291
+  },
+  "ppopt": {
+   "finished": true,
+   "solve_s": 291.554789208,
+   "observed_s": 280.483569,
+   "levels": [
+    217.284018333,
+    237.259422917,
+    243.016829917,
+    251.675257958,
+    254.099581375
+   ],
+   "all_regions_built_s": 280.483569083,
+   "final_regions_built": 973,
+   "final_regions_not_in_rust": 0
+  }
+ }
+]

@@ -1,0 +1,249 @@
+//! Binary search tree over the distinct facet hyperplanes (Tøndel, Johansen & Bemporad, 2003,
+//! "Evaluation of piecewise affine control via binary search tree", Automatica 39(5)).
+//!
+//! Every node stores one hyperplane a'θ <= b. Each region is pre-classified against every
+//! hyperplane from its vertices (entirely below, entirely above, or split). At a node with region
+//! index set I, the hyperplane minimising max(|I-|, |I+|) (ties: min |I-| + |I+|) is selected and
+//! split regions are re-checked with an LP on the node's polytope (the Tøndel refinement), so a
+//! region follows a branch only if it meets that branch with nonzero volume. Leaves keep the few
+//! remaining candidates, which are checked directly.
+
+use super::geometry::PartitionGeometry;
+use super::{PointLocator, LOCATE_TOL};
+use crate::linalg::{dot, Mat};
+use crate::utils::chebyshev_ball;
+
+#[derive(Clone, Debug)]
+pub enum BstNode {
+    Split { plane: Vec<f64>, below: usize, above: usize },
+    Leaf { candidates: Vec<usize> },
+}
+
+pub struct BinarySearchTree {
+    pub dim: usize,
+    pub nodes: Vec<BstNode>,
+    geom_rows: Vec<f64>, // [a | b] per row, per region
+    offsets: Vec<usize>,
+    pub depth: usize,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Side {
+    Below,
+    Above,
+    Both,
+}
+
+pub struct BstOptions {
+    /// stop splitting at this many candidates
+    pub leaf_size: usize,
+    /// re-check split regions on the node polytope with an LP (Tøndel refinement)
+    pub exact_refinement: bool,
+    pub max_depth: usize,
+}
+
+impl Default for BstOptions {
+    fn default() -> Self {
+        BstOptions { leaf_size: 1, exact_refinement: true, max_depth: 64 }
+    }
+}
+
+impl BinarySearchTree {
+    pub fn new(geom: &PartitionGeometry) -> Self {
+        Self::with_options(geom, &BstOptions::default())
+    }
+
+    pub fn with_options(geom: &PartitionGeometry, opts: &BstOptions) -> Self {
+        let n = geom.dim;
+        let np = geom.planes.len();
+        let r = geom.num_regions;
+        // classification of each region against each plane from its vertices
+        let tol = 1e-9;
+        let mut side = vec![Side::Both; r * np];
+        for i in 0..r {
+            for (p, pl) in geom.planes.iter().enumerate() {
+                let mut lo = false;
+                let mut hi = false;
+                for v in &geom.vertices[i] {
+                    let s = dot(&pl[..n], v) - pl[n];
+                    if s < -tol {
+                        lo = true;
+                    } else if s > tol {
+                        hi = true;
+                    }
+                }
+                side[i * np + p] = match (lo, hi) {
+                    (true, false) => Side::Below,
+                    (false, true) => Side::Above,
+                    (false, false) => Side::Below, // degenerate (lies in the plane): never happens for full-dim regions
+                    (true, true) => Side::Both,
+                };
+            }
+        }
+        let mut geom_rows = vec![];
+        for i in 0..r {
+            let (e, f) = geom.region_rows(i);
+            for k in 0..f.len() {
+                geom_rows.extend_from_slice(&e[k * n..(k + 1) * n]);
+                geom_rows.push(f[k]);
+            }
+        }
+        let mut tree = BinarySearchTree { dim: n, nodes: vec![], geom_rows, offsets: geom.offsets.clone(), depth: 0 };
+        // iterative build: (node index, candidate set, path halfspaces, depth)
+        tree.nodes.push(BstNode::Leaf { candidates: vec![] });
+        let mut work: Vec<(usize, Vec<usize>, Vec<Vec<f64>>, usize)> = vec![(0, (0..r).collect(), vec![], 0)];
+        while let Some((node, set, path, depth)) = work.pop() {
+            tree.depth = tree.depth.max(depth);
+            if set.len() <= opts.leaf_size || depth >= opts.max_depth {
+                tree.nodes[node] = BstNode::Leaf { candidates: set };
+                continue;
+            }
+            // choose the most balanced plane
+            let mut best: Option<(usize, usize, usize)> = None; // (plane, max, sum)
+            for p in 0..np {
+                let mut nb = 0;
+                let mut na = 0;
+                for &i in &set {
+                    match side[i * np + p] {
+                        Side::Below => nb += 1,
+                        Side::Above => na += 1,
+                        Side::Both => {
+                            nb += 1;
+                            na += 1;
+                        }
+                    }
+                }
+                if nb == set.len() && na == set.len() {
+                    continue;
+                }
+                if nb == 0 || na == 0 {
+                    continue;
+                }
+                let key = (nb.max(na), nb + na);
+                if best.map(|(_, m, s)| key < (m, s)).unwrap_or(true) {
+                    best = Some((p, key.0, key.1));
+                }
+            }
+            let Some((p, _, _)) = best else {
+                tree.nodes[node] = BstNode::Leaf { candidates: set };
+                continue;
+            };
+            let pl = geom.planes[p].clone();
+            let mut below = vec![];
+            let mut above = vec![];
+            for &i in &set {
+                match side[i * np + p] {
+                    Side::Below => below.push(i),
+                    Side::Above => above.push(i),
+                    Side::Both => {
+                        if opts.exact_refinement {
+                            let (in_b, in_a) = split_check(geom, i, &path, &pl);
+                            if in_b {
+                                below.push(i);
+                            }
+                            if in_a {
+                                above.push(i);
+                            }
+                        } else {
+                            below.push(i);
+                            above.push(i);
+                        }
+                    }
+                }
+            }
+            if below.len() == set.len() && above.len() == set.len() {
+                tree.nodes[node] = BstNode::Leaf { candidates: set };
+                continue;
+            }
+            let bi = tree.nodes.len();
+            tree.nodes.push(BstNode::Leaf { candidates: vec![] });
+            let ai = tree.nodes.len();
+            tree.nodes.push(BstNode::Leaf { candidates: vec![] });
+            tree.nodes[node] = BstNode::Split { plane: pl.clone(), below: bi, above: ai };
+            let mut pb = path.clone();
+            pb.push(pl.clone());
+            let mut pa = path;
+            let mut neg: Vec<f64> = pl.iter().map(|v| -v).collect();
+            neg[n] = -pl[n];
+            pa.push(neg);
+            work.push((bi, below, pb, depth + 1));
+            work.push((ai, above, pa, depth + 1));
+        }
+        tree
+    }
+
+    #[inline]
+    fn region_contains(&self, j: usize, theta: &[f64]) -> bool {
+        let w = self.dim + 1;
+        let n = self.dim;
+        for k in self.offsets[j]..self.offsets[j + 1] {
+            let r = &self.geom_rows[k * w..(k + 1) * w];
+            if dot(&r[..n], theta) > r[n] + LOCATE_TOL {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Leaf reached by θ (without the final membership check).
+    pub fn leaf(&self, theta: &[f64]) -> &[usize] {
+        let n = self.dim;
+        let mut node = 0;
+        loop {
+            match &self.nodes[node] {
+                BstNode::Split { plane, below, above } => {
+                    node = if dot(&plane[..n], theta) <= plane[n] { *below } else { *above };
+                }
+                BstNode::Leaf { candidates } => return candidates,
+            }
+        }
+    }
+
+    pub fn num_nodes(&self) -> usize {
+        self.nodes.len()
+    }
+}
+
+/// Does region i ∩ path polytope meet the closed below / above side of `pl` with volume?
+fn split_check(geom: &PartitionGeometry, i: usize, path: &[Vec<f64>], pl: &[f64]) -> (bool, bool) {
+    let n = geom.dim;
+    let (a, b) = geom.region_mat(i);
+    let mut rows = a;
+    let mut rhs = b;
+    for h in path {
+        rows.push_row(&h[..n]);
+        rhs.push(h[n]);
+    }
+    let check = |sign: f64| -> bool {
+        let mut r2 = rows.clone();
+        let mut b2 = rhs.clone();
+        let row: Vec<f64> = pl[..n].iter().map(|v| sign * v).collect();
+        r2.push_row(&row);
+        b2.push(sign * pl[n]);
+        matches!(chebyshev_ball(&r2, &b2, &[]), Some(s) if s.x[n] > 1e-9)
+    };
+    let _ = Mat::zeros(0, 0);
+    (check(1.0), check(-1.0))
+}
+
+impl PointLocator for BinarySearchTree {
+    fn name(&self) -> &'static str {
+        "binary search tree"
+    }
+
+    fn locate(&self, theta: &[f64]) -> Option<usize> {
+        self.leaf(theta).iter().cloned().find(|&j| self.region_contains(j, theta))
+    }
+
+    fn storage_floats(&self) -> usize {
+        let tree: usize = self
+            .nodes
+            .iter()
+            .map(|nd| match nd {
+                BstNode::Split { plane, .. } => plane.len() + 2,
+                BstNode::Leaf { candidates } => candidates.len(),
+            })
+            .sum();
+        tree + self.geom_rows.len()
+    }
+}

@@ -1,0 +1,221 @@
+== di_N10: x=10 t=2 constraints=42 (eq 0) build 0.165 ms
+  combinatorial                    11 regions    9286.772 ms  (min 9286.772, runs 1)  LPs 6737371 (PPOPT-equivalent LPs 20807911 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_parallel           11 regions    1525.230 ms  (min 1524.449, runs 2)  LPs 6737371 (PPOPT-equivalent LPs 20807911 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                            11 regions       0.273 ms  (min 0.259, runs 1068)  LPs 389 (PPOPT-equivalent LPs 699 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_exp                        11 regions       0.270 ms  (min 0.255, runs 957)  LPs 389 (PPOPT-equivalent LPs 699 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_parallel                   11 regions       0.676 ms  (min 0.299, runs 424)  LPs 389 (PPOPT-equivalent LPs 699 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph              11 regions       0.379 ms  (min 0.358, runs 763)  LPs 921 (PPOPT-equivalent LPs 1181 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph_parallel     11 regions       0.503 ms  (min 0.381, runs 529)  LPs 921 (PPOPT-equivalent LPs 1181 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric                        11 regions       0.167 ms  (min 0.162, runs 1785)  LPs 216 (PPOPT-equivalent LPs 539 QPs 25)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric_parallel               11 regions       0.255 ms  (min 0.192, runs 1106)  LPs 216 (PPOPT-equivalent LPs 539 QPs 25)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+  geometry: 22 planes, 10 adjacencies, 12 domain planes, 0 facets with 2+ neighbours (0.3 ms)
+  linear machine check: centers 11/11 correct, max vertex violation 2.66e-15, min center margin 1.25e-1, certified true
+  sequential (PPOPT)              75.4 ns/query  storage       156 floats  build      0.00 ms  mismatches 0  {}
+  sequential (early exit)         34.5 ns/query  storage       156 floats  build      0.00 ms  mismatches 0  {}
+  binary search tree              41.6 ns/query  storage       217 floats  build      0.01 ms  mismatches 0  {"depth":4,"nodes":21}
+  multiway tree                   39.8 ns/query  storage       232 floats  build      0.00 ms  mismatches 0  {"height":2,"levels":2,"order":3}
+  multiway tree                   36.7 ns/query  storage       257 floats  build      0.00 ms  mismatches 0  {"height":2,"levels":3,"order":7}
+  multiway tree                   36.3 ns/query  storage       228 floats  build      0.00 ms  mismatches 0  {"height":1,"levels":4,"order":15}
+  linear machine                  32.4 ns/query  storage       189 floats  build      0.09 ms  mismatches 0  {"centers_correct":11,"certified":true,"max_vertex_violation":2.6645352591003757e-15,"min_center_margin":0.12488361186704378}
+  descriptor function             41.8 ns/query  storage       233 floats  build      0.00 ms  mismatches 0  {"compared_facets":20,"explicit_rows":32}
+  hash table                      32.5 ns/query  storage       209 floats  build      0.03 ms  mismatches 0  {"cells":9,"max_candidates":6,"mean_candidates":4.111111111111111}
+  hash table                      26.8 ns/query  storage       327 floats  build      0.04 ms  mismatches 0  {"cells":49,"max_candidates":4,"mean_candidates":2.3469387755102042}
+  hash table                      22.6 ns/query  storage       591 floats  build      0.08 ms  mismatches 0  {"cells":169,"max_candidates":4,"mean_candidates":1.532544378698225}
+  YANN                            78.6 ns/query  storage       498 floats  build      0.01 ms  mismatches 0  {}
+== di_N4: x=4 t=2 constraints=18 (eq 0) build 0.033 ms
+  combinatorial                     9 regions       0.582 ms  (min 0.548, runs 483)  LPs 1231 (PPOPT-equivalent LPs 2513 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_parallel            9 regions       0.827 ms  (min 0.532, runs 353)  LPs 1231 (PPOPT-equivalent LPs 2513 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                             9 regions       0.120 ms  (min 0.112, runs 2000)  LPs 257 (PPOPT-equivalent LPs 309 QPs 91)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_exp                         9 regions       0.116 ms  (min 0.109, runs 2000)  LPs 257 (PPOPT-equivalent LPs 309 QPs 91)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_parallel                    9 regions       0.347 ms  (min 0.208, runs 774)  LPs 257 (PPOPT-equivalent LPs 309 QPs 91)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph               9 regions       0.119 ms  (min 0.112, runs 2000)  LPs 369 (PPOPT-equivalent LPs 409 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph_parallel      9 regions       0.311 ms  (min 0.242, runs 949)  LPs 369 (PPOPT-equivalent LPs 409 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric                         9 regions       0.073 ms  (min 0.071, runs 2000)  LPs 166 (PPOPT-equivalent LPs 231 QPs 21)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric_parallel                9 regions       0.194 ms  (min 0.140, runs 1475)  LPs 166 (PPOPT-equivalent LPs 231 QPs 21)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+  geometry: 20 planes, 8 adjacencies, 12 domain planes, 0 facets with 2+ neighbours (0.1 ms)
+  linear machine check: centers 9/9 correct, max vertex violation 3.55e-15, min center margin 2.81e-1, certified true
+  sequential (PPOPT)              67.4 ns/query  storage       132 floats  build      0.00 ms  mismatches 0  {}
+  sequential (early exit)         31.8 ns/query  storage       132 floats  build      0.00 ms  mismatches 0  {}
+  binary search tree              35.3 ns/query  storage       181 floats  build      0.00 ms  mismatches 0  {"depth":4,"nodes":17}
+  multiway tree                   34.3 ns/query  storage       200 floats  build      0.00 ms  mismatches 0  {"height":2,"levels":2,"order":3}
+  multiway tree                   31.6 ns/query  storage       195 floats  build      0.00 ms  mismatches 0  {"height":2,"levels":3,"order":7}
+  multiway tree                   31.6 ns/query  storage       196 floats  build      0.00 ms  mismatches 0  {"height":1,"levels":4,"order":15}
+  linear machine                  29.7 ns/query  storage       159 floats  build      0.07 ms  mismatches 0  {"centers_correct":9,"certified":true,"max_vertex_violation":3.552713678800501e-15,"min_center_margin":0.2805537998898706}
+  descriptor function             39.4 ns/query  storage       199 floats  build      0.00 ms  mismatches 0  {"compared_facets":16,"explicit_rows":28}
+  hash table                      32.0 ns/query  storage       183 floats  build      0.04 ms  mismatches 0  {"cells":9,"max_candidates":5,"mean_candidates":3.888888888888889}
+  hash table                      27.8 ns/query  storage       263 floats  build      0.05 ms  mismatches 0  {"cells":36,"max_candidates":5,"mean_candidates":2.4444444444444446}
+  hash table                      22.5 ns/query  storage       505 floats  build      0.07 ms  mismatches 0  {"cells":144,"max_candidates":4,"mean_candidates":1.5416666666666667}
+  YANN                            65.0 ns/query  storage       250 floats  build      0.01 ms  mismatches 0  {}
+== di_N6: x=6 t=2 constraints=26 (eq 0) build 0.060 ms
+  combinatorial                    11 regions      13.109 ms  (min 12.871, runs 23)  LPs 20515 (PPOPT-equivalent LPs 51503 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_parallel           11 regions       6.058 ms  (min 5.194, runs 47)  LPs 20515 (PPOPT-equivalent LPs 51503 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                            11 regions       0.191 ms  (min 0.188, runs 1563)  LPs 387 (PPOPT-equivalent LPs 523 QPs 91)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_exp                        11 regions       0.186 ms  (min 0.183, runs 1610)  LPs 387 (PPOPT-equivalent LPs 523 QPs 91)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_parallel                   11 regions       0.462 ms  (min 0.227, runs 626)  LPs 387 (PPOPT-equivalent LPs 523 QPs 91)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph              11 regions       0.270 ms  (min 0.262, runs 1107)  LPs 731 (PPOPT-equivalent LPs 829 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph_parallel     11 regions       0.432 ms  (min 0.329, runs 650)  LPs 731 (PPOPT-equivalent LPs 829 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric                        11 regions       0.119 ms  (min 0.118, runs 2000)  LPs 214 (PPOPT-equivalent LPs 363 QPs 25)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric_parallel               11 regions       0.249 ms  (min 0.145, runs 1116)  LPs 214 (PPOPT-equivalent LPs 363 QPs 25)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+  geometry: 22 planes, 10 adjacencies, 12 domain planes, 0 facets with 2+ neighbours (0.1 ms)
+  linear machine check: centers 11/11 correct, max vertex violation 2.66e-15, min center margin 1.25e-1, certified true
+  sequential (PPOPT)              78.6 ns/query  storage       156 floats  build      0.00 ms  mismatches 0  {}
+  sequential (early exit)         34.6 ns/query  storage       156 floats  build      0.00 ms  mismatches 0  {}
+  binary search tree              41.6 ns/query  storage       217 floats  build      0.01 ms  mismatches 0  {"depth":4,"nodes":21}
+  multiway tree                   39.9 ns/query  storage       232 floats  build      0.00 ms  mismatches 0  {"height":2,"levels":2,"order":3}
+  multiway tree                   36.6 ns/query  storage       257 floats  build      0.00 ms  mismatches 0  {"height":2,"levels":3,"order":7}
+  multiway tree                   36.3 ns/query  storage       228 floats  build      0.00 ms  mismatches 0  {"height":1,"levels":4,"order":15}
+  linear machine                  32.4 ns/query  storage       189 floats  build      0.08 ms  mismatches 0  {"centers_correct":11,"certified":true,"max_vertex_violation":2.6645352591003757e-15,"min_center_margin":0.1248836118670491}
+  descriptor function             41.9 ns/query  storage       233 floats  build      0.00 ms  mismatches 0  {"compared_facets":20,"explicit_rows":32}
+  hash table                      31.9 ns/query  storage       209 floats  build      0.02 ms  mismatches 0  {"cells":9,"max_candidates":6,"mean_candidates":4.111111111111111}
+  hash table                      26.7 ns/query  storage       327 floats  build      0.05 ms  mismatches 0  {"cells":49,"max_candidates":4,"mean_candidates":2.3469387755102042}
+  hash table                      23.1 ns/query  storage       591 floats  build      0.08 ms  mismatches 0  {"cells":169,"max_candidates":4,"mean_candidates":1.532544378698225}
+  YANN                            78.9 ns/query  storage       366 floats  build      0.01 ms  mismatches 0  {}
+== di_N8: x=8 t=2 constraints=34 (eq 0) build 0.101 ms
+  combinatorial                    11 regions     362.766 ms  (min 345.708, runs 6)  LPs 376826 (PPOPT-equivalent LPs 1050213 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_parallel           11 regions      99.211 ms  (min 88.779, runs 7)  LPs 376826 (PPOPT-equivalent LPs 1050213 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                            11 regions       0.227 ms  (min 0.218, runs 1297)  LPs 389 (PPOPT-equivalent LPs 611 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_exp                        11 regions       0.224 ms  (min 0.213, runs 1306)  LPs 389 (PPOPT-equivalent LPs 611 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_parallel                   11 regions       0.540 ms  (min 0.439, runs 473)  LPs 389 (PPOPT-equivalent LPs 611 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph              11 regions       0.318 ms  (min 0.303, runs 927)  LPs 831 (PPOPT-equivalent LPs 1005 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph_parallel     11 regions       0.479 ms  (min 0.377, runs 606)  LPs 831 (PPOPT-equivalent LPs 1005 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric                        11 regions       0.135 ms  (min 0.133, runs 2000)  LPs 216 (PPOPT-equivalent LPs 451 QPs 25)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric_parallel               11 regions       0.246 ms  (min 0.193, runs 1169)  LPs 216 (PPOPT-equivalent LPs 451 QPs 25)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+  geometry: 22 planes, 10 adjacencies, 12 domain planes, 0 facets with 2+ neighbours (0.1 ms)
+  linear machine check: centers 11/11 correct, max vertex violation 4.44e-15, min center margin 1.25e-1, certified true
+  sequential (PPOPT)              76.4 ns/query  storage       156 floats  build      0.00 ms  mismatches 0  {}
+  sequential (early exit)         36.1 ns/query  storage       156 floats  build      0.00 ms  mismatches 0  {}
+  binary search tree              43.0 ns/query  storage       217 floats  build      0.01 ms  mismatches 0  {"depth":4,"nodes":21}
+  multiway tree                   41.0 ns/query  storage       232 floats  build      0.00 ms  mismatches 0  {"height":2,"levels":2,"order":3}
+  multiway tree                   36.5 ns/query  storage       257 floats  build      0.00 ms  mismatches 0  {"height":2,"levels":3,"order":7}
+  multiway tree                   35.6 ns/query  storage       228 floats  build      0.00 ms  mismatches 0  {"height":1,"levels":4,"order":15}
+  linear machine                  32.3 ns/query  storage       189 floats  build      0.09 ms  mismatches 0  {"centers_correct":11,"certified":true,"max_vertex_violation":4.440892098500626e-15,"min_center_margin":0.12488361186705088}
+  descriptor function             41.9 ns/query  storage       233 floats  build      0.00 ms  mismatches 0  {"compared_facets":20,"explicit_rows":32}
+  hash table                      31.9 ns/query  storage       209 floats  build      0.03 ms  mismatches 0  {"cells":9,"max_candidates":6,"mean_candidates":4.111111111111111}
+  hash table                      26.5 ns/query  storage       327 floats  build      0.05 ms  mismatches 0  {"cells":49,"max_candidates":4,"mean_candidates":2.3469387755102042}
+  hash table                      22.0 ns/query  storage       591 floats  build      0.09 ms  mismatches 0  {"cells":169,"max_candidates":4,"mean_candidates":1.532544378698225}
+  YANN                            77.4 ns/query  storage       432 floats  build      0.01 ms  mismatches 0  {}
+== di_doc_N3: x=9 t=2 constraints=20 (eq 6) build 0.052 ms
+  combinatorial                     7 regions       0.276 ms  (min 0.273, runs 1071)  LPs 348 (PPOPT-equivalent LPs 629 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_parallel            7 regions       0.295 ms  (min 0.210, runs 952)  LPs 348 (PPOPT-equivalent LPs 629 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                             7 regions       0.138 ms  (min 0.133, runs 1949)  LPs 136 (PPOPT-equivalent LPs 164 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_exp                         7 regions       0.138 ms  (min 0.134, runs 1717)  LPs 139 (PPOPT-equivalent LPs 167 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_parallel                    7 regions       0.280 ms  (min 0.197, runs 1025)  LPs 139 (PPOPT-equivalent LPs 167 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph               7 regions       0.095 ms  (min 0.092, runs 2000)  LPs 193 (PPOPT-equivalent LPs 217 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph_parallel      7 regions       0.189 ms  (min 0.128, runs 1518)  LPs 193 (PPOPT-equivalent LPs 217 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric                         7 regions       0.059 ms  (min 0.058, runs 2000)  LPs 118 (PPOPT-equivalent LPs 155 QPs 15)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric_parallel                7 regions       0.143 ms  (min 0.088, runs 827)  LPs 118 (PPOPT-equivalent LPs 155 QPs 15)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+  geometry: 16 planes, 6 adjacencies, 10 domain planes, 0 facets with 2+ neighbours (0.2 ms)
+  linear machine check: centers 7/7 correct, max vertex violation 2.22e-15, min center margin 3.90e-1, certified true
+  sequential (PPOPT)              53.6 ns/query  storage       102 floats  build      0.00 ms  mismatches 0  {}
+  sequential (early exit)         29.4 ns/query  storage       102 floats  build      0.00 ms  mismatches 0  {}
+  binary search tree              33.9 ns/query  storage       139 floats  build      0.01 ms  mismatches 0  {"depth":3,"nodes":13}
+  multiway tree                   34.0 ns/query  storage       155 floats  build      0.00 ms  mismatches 0  {"height":2,"levels":2,"order":3}
+  multiway tree                   28.7 ns/query  storage       142 floats  build      0.00 ms  mismatches 0  {"height":1,"levels":3,"order":7}
+  multiway tree                   28.9 ns/query  storage       158 floats  build      0.00 ms  mismatches 0  {"height":1,"levels":4,"order":15}
+  linear machine                  27.6 ns/query  storage       123 floats  build      0.05 ms  mismatches 0  {"centers_correct":7,"certified":true,"max_vertex_violation":2.220446049250313e-15,"min_center_margin":0.38981426353094184}
+  descriptor function             36.4 ns/query  storage       155 floats  build      0.00 ms  mismatches 0  {"compared_facets":12,"explicit_rows":22}
+  hash table                      31.3 ns/query  storage       149 floats  build      0.10 ms  mismatches 0  {"cells":9,"max_candidates":5,"mean_candidates":3.4444444444444446}
+  hash table                      28.8 ns/query  storage       195 floats  build      0.28 ms  mismatches 0  {"cells":25,"max_candidates":4,"mean_candidates":2.44}
+  hash table                      22.1 ns/query  storage       405 floats  build      0.12 ms  mismatches 0  {"cells":121,"max_candidates":4,"mean_candidates":1.4462809917355373}
+  YANN                            52.5 ns/query  storage       299 floats  build      0.01 ms  mismatches 0  {}
+== masses2_N4: x=4 t=4 constraints=40 (eq 0) build 0.071 ms
+  combinatorial                   307 regions      24.981 ms  (min 24.714, runs 12)  LPs 21009 (PPOPT-equivalent LPs 32887 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_parallel          307 regions       5.444 ms  (min 4.732, runs 52)  LPs 21009 (PPOPT-equivalent LPs 32887 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           307 regions      14.766 ms  (min 14.629, runs 21)  LPs 11268 (PPOPT-equivalent LPs 15825 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_exp                       307 regions      14.672 ms  (min 14.512, runs 21)  LPs 11554 (PPOPT-equivalent LPs 16009 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_parallel                  307 regions       3.833 ms  (min 3.499, runs 74)  LPs 11470 (PPOPT-equivalent LPs 15955 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             307 regions      20.160 ms  (min 19.892, runs 15)  LPs 19843 (PPOPT-equivalent LPs 22355 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph_parallel    307 regions       5.116 ms  (min 4.770, runs 57)  LPs 19845 (PPOPT-equivalent LPs 22355 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric                       307 regions      19.385 ms  (min 19.197, runs 16)  LPs 11197 (PPOPT-equivalent LPs 16945 QPs 889)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric_parallel              307 regions       3.876 ms  (min 3.620, runs 75)  LPs 11197 (PPOPT-equivalent LPs 16945 QPs 1189)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+  geometry: 898 planes, 1024 adjacencies, 144 domain planes, 118 facets with 2+ neighbours (6.5 ms)
+  linear machine: LP infeasible (118 facets shared with 2+ neighbours: partition is not facet-to-facet, so not a regular subdivision)
+  sequential (PPOPT)            4892.8 ns/query  storage     14600 floats  build      0.16 ms  mismatches 0  {}
+  sequential (early exit)       1296.6 ns/query  storage     14600 floats  build      0.02 ms  mismatches 0  {}
+  binary search tree             188.6 ns/query  storage     57313 floats  build     93.81 ms  mismatches 0  {"depth":19,"nodes":10679}
+  multiway tree                  152.3 ns/query  storage     65297 floats  build      0.00 ms  mismatches 0  {"height":10,"levels":2,"order":3}
+  multiway tree                  135.8 ns/query  storage     74100 floats  build      0.00 ms  mismatches 0  {"height":7,"levels":3,"order":7}
+  multiway tree                  158.0 ns/query  storage     90097 floats  build      0.00 ms  mismatches 0  {"height":5,"levels":4,"order":15}
+  descriptor function           1076.0 ns/query  storage     12325 floats  build      0.06 ms  mismatches 0  {"compared_facets":1930,"explicit_rows":990}
+  hash table                     117.8 ns/query  storage     18085 floats  build      1.03 ms  mismatches 0  {"cells":256,"max_candidates":96,"mean_candidates":12.5625}
+  hash table                      79.3 ns/query  storage     23599 floats  build      3.00 ms  mismatches 0  {"cells":1296,"max_candidates":72,"mean_candidates":5.933641975308642}
+  hash table                      66.7 ns/query  storage     34647 floats  build      6.05 ms  mismatches 0  {"cells":4096,"max_candidates":57,"mean_candidates":3.89111328125}
+  YANN                          4925.1 ns/query  storage     21048 floats  build      0.39 ms  mismatches 0  {}
+== masses2_N6: x=6 t=4 constraints=60 (eq 0) build 0.131 ms
+  combinatorial                   901 regions     452.246 ms  (min 450.960, runs 5)  LPs 343040 (PPOPT-equivalent LPs 628295 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_parallel          901 regions      69.183 ms  (min 63.739, runs 7)  LPs 343040 (PPOPT-equivalent LPs 628295 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           901 regions      71.534 ms  (min 71.342, runs 7)  LPs 48908 (PPOPT-equivalent LPs 73145 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_exp                       901 regions      68.522 ms  (min 68.433, runs 7)  LPs 52966 (PPOPT-equivalent LPs 76041 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_parallel                  901 regions      17.349 ms  (min 16.405, runs 18)  LPs 51067 (PPOPT-equivalent LPs 74600 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             901 regions     151.001 ms  (min 150.329, runs 7)  LPs 157084 (PPOPT-equivalent LPs 160189 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph_parallel    901 regions      32.653 ms  (min 31.501, runs 9)  LPs 157091 (PPOPT-equivalent LPs 160189 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric                       901 regions      74.408 ms  (min 74.138, runs 7)  LPs 31465 (PPOPT-equivalent LPs 65867 QPs 2237)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric_parallel              901 regions      11.790 ms  (min 11.080, runs 25)  LPs 31465 (PPOPT-equivalent LPs 65867 QPs 3557)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+  geometry: 2826 planes, 3156 adjacencies, 272 domain planes, 286 facets with 2+ neighbours (19.6 ms)
+  linear machine: LP infeasible (286 facets shared with 2+ neighbours: partition is not facet-to-facet, so not a regular subdivision)
+  sequential (PPOPT)           14113.0 ns/query  storage     40130 floats  build      0.21 ms  mismatches 0  {}
+  sequential (early exit)       5351.2 ns/query  storage     40130 floats  build      0.04 ms  mismatches 0  {}
+  binary search tree             254.8 ns/query  storage    264747 floats  build   1117.69 ms  mismatches 0  {"depth":28,"nodes":56155}
+  multiway tree                  203.5 ns/query  storage    306173 floats  build      0.00 ms  mismatches 0  {"height":14,"levels":2,"order":3}
+  multiway tree                  178.0 ns/query  storage    349638 floats  build      0.00 ms  mismatches 0  {"height":10,"levels":3,"order":7}
+  multiway tree                  199.8 ns/query  storage    410806 floats  build      0.00 ms  mismatches 0  {"height":7,"levels":4,"order":15}
+  descriptor function           4296.3 ns/query  storage     30747 floats  build      0.15 ms  mismatches 0  {"compared_facets":5988,"explicit_rows":2038}
+  hash table                     190.8 ns/query  storage     51163 floats  build      2.93 ms  mismatches 0  {"cells":625,"max_candidates":215,"mean_candidates":16.632}
+  hash table                     107.5 ns/query  storage     71481 floats  build      9.80 ms  mismatches 0  {"cells":4096,"max_candidates":69,"mean_candidates":6.65087890625}
+  hash table                      83.0 ns/query  storage    112707 floats  build     25.19 ms  mismatches 0  {"cells":14641,"max_candidates":54,"mean_candidates":3.956218837511099}
+  YANN                         13988.6 ns/query  storage     68062 floats  build      1.07 ms  mismatches 0  {}
+== sys3x2_N3: x=6 t=3 constraints=30 (eq 0) build 0.047 ms
+  combinatorial                   211 regions      27.244 ms  (min 27.093, runs 11)  LPs 36155 (PPOPT-equivalent LPs 70191 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_parallel          211 regions       8.787 ms  (min 7.061, runs 35)  LPs 36155 (PPOPT-equivalent LPs 70191 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           211 regions       4.667 ms  (min 4.630, runs 64)  LPs 5493 (PPOPT-equivalent LPs 9021 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_exp                       211 regions       4.800 ms  (min 4.772, runs 63)  LPs 6049 (PPOPT-equivalent LPs 9531 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_parallel                  211 regions       2.528 ms  (min 2.322, runs 115)  LPs 5859 (PPOPT-equivalent LPs 9345 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             211 regions       7.606 ms  (min 7.550, runs 40)  LPs 11503 (PPOPT-equivalent LPs 14735 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph_parallel    211 regions       3.285 ms  (min 2.870, runs 89)  LPs 11503 (PPOPT-equivalent LPs 14735 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric                       211 regions       5.588 ms  (min 5.541, runs 54)  LPs 4398 (PPOPT-equivalent LPs 8353 QPs 307)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric_parallel              211 regions       2.044 ms  (min 1.844, runs 141)  LPs 4398 (PPOPT-equivalent LPs 8353 QPs 604)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+  geometry: 552 planes, 540 adjacencies, 26 domain planes, 6 facets with 2+ neighbours (0.9 ms)
+  linear machine: LP infeasible (6 facets shared with 2+ neighbours: partition is not facet-to-facet, so not a regular subdivision)
+  sequential (PPOPT)            1988.1 ns/query  storage      5456 floats  build      0.02 ms  mismatches 0  {}
+  sequential (early exit)        808.1 ns/query  storage      5456 floats  build      0.01 ms  mismatches 0  {}
+  binary search tree             126.3 ns/query  storage     18008 floats  build     21.01 ms  mismatches 0  {"depth":16,"nodes":3587}
+  multiway tree                  107.0 ns/query  storage     20659 floats  build      0.00 ms  mismatches 0  {"height":8,"levels":2,"order":3}
+  multiway tree                   98.6 ns/query  storage     23152 floats  build      0.00 ms  mismatches 0  {"height":6,"levels":3,"order":7}
+  multiway tree                   99.0 ns/query  storage     25830 floats  build      0.00 ms  mismatches 0  {"height":4,"levels":4,"order":15}
+  descriptor function            679.1 ns/query  storage      4732 floats  build      0.03 ms  mismatches 0  {"compared_facets":1074,"explicit_rows":290}
+  hash table                      50.2 ns/query  storage      7552 floats  build      0.71 ms  mismatches 0  {"cells":216,"max_candidates":56,"mean_candidates":8.657407407407407}
+  hash table                      43.5 ns/query  storage      9950 floats  build      1.40 ms  mismatches 0  {"cells":729,"max_candidates":49,"mean_candidates":5.1508916323731135}
+  hash table                      39.2 ns/query  storage     18938 floats  build      5.11 ms  mismatches 0  {"cells":3375,"max_candidates":31,"mean_candidates":2.9917037037037035}
+  YANN                          1985.0 ns/query  storage     10732 floats  build      0.16 ms  mismatches 0  {}
+== sys3x2_N5: x=10 t=3 constraints=50 (eq 0) build 0.121 ms
+  combinatorial                   973 regions   10027.627 ms  (min 10027.627, runs 1)  LPs 7579674 (PPOPT-equivalent LPs 15795503 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_parallel          973 regions    1503.825 ms  (min 1479.247, runs 2)  LPs 7579674 (PPOPT-equivalent LPs 15795503 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           973 regions     103.024 ms  (min 101.556, runs 7)  LPs 88226 (PPOPT-equivalent LPs 107479 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_exp                       973 regions     110.381 ms  (min 109.427, runs 7)  LPs 111492 (PPOPT-equivalent LPs 128549 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_parallel                  973 regions      57.937 ms  (min 55.306, runs 7)  LPs 102190 (PPOPT-equivalent LPs 119931 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             973 regions     342.301 ms  (min 341.789, runs 6)  LPs 358390 (PPOPT-equivalent LPs 370095 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph_parallel    973 regions      96.562 ms  (min 93.767, runs 7)  LPs 358390 (PPOPT-equivalent LPs 370095 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric                       973 regions      41.662 ms  (min 41.387, runs 8)  LPs 22179 (PPOPT-equivalent LPs 55277 QPs 1197)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric_parallel              973 regions       8.639 ms  (min 8.192, runs 34)  LPs 22179 (PPOPT-equivalent LPs 55277 QPs 2758)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+  geometry: 2614 planes, 2626 adjacencies, 34 domain planes, 22 facets with 2+ neighbours (3.2 ms)
+  linear machine: LP infeasible (22 facets shared with 2+ neighbours: partition is not facet-to-facet, so not a regular subdivision)
+  sequential (PPOPT)            9286.5 ns/query  storage     24072 floats  build      0.96 ms  mismatches 0  {}
+  sequential (early exit)       4487.7 ns/query  storage     24072 floats  build      0.03 ms  mismatches 0  {}
+  binary search tree             163.1 ns/query  storage    103166 floats  build    378.32 ms  mismatches 0  {"depth":20,"nodes":22599}
+  multiway tree                  137.4 ns/query  storage    120363 floats  build      0.00 ms  mismatches 0  {"height":10,"levels":2,"order":3}
+  multiway tree                  118.6 ns/query  storage    137178 floats  build      0.00 ms  mismatches 0  {"height":7,"levels":3,"order":7}
+  multiway tree                  128.4 ns/query  storage    174591 floats  build      0.00 ms  mismatches 0  {"height":5,"levels":4,"order":15}
+  descriptor function           3559.2 ns/query  storage     19104 floats  build      0.11 ms  mismatches 0  {"compared_facets":5224,"explicit_rows":794}
+  hash table                      61.1 ns/query  storage     33896 floats  build      3.03 ms  mismatches 0  {"cells":1000,"max_candidates":114,"mean_candidates":8.814}
+  hash table                      53.0 ns/query  storage     47448 floats  build      8.57 ms  mismatches 0  {"cells":4096,"max_candidates":74,"mean_candidates":4.70458984375}
+  hash table                      50.9 ns/query  storage     84650 floats  build     28.45 ms  mismatches 0  {"cells":15625,"max_candidates":51,"mean_candidates":2.876352}
+  YANN                          9212.2 ns/query  storage     63966 floats  build      0.74 ms  mismatches 0  {}

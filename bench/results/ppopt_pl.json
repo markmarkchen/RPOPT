@@ -1,0 +1,38 @@
+{
+ "di_N10/geometric": {
+  "build_s": 0.09671158299897797,
+  "solve_s": 0.11273045800044201,
+  "regions": 11,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 5722.5124997785315,
+  "pl_hit_fraction": 0.6764
+ },
+ "di_N8/geometric": {
+  "build_s": 0.10307866698713042,
+  "solve_s": 0.1408210830122698,
+  "regions": 11,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 5645.952100167051,
+  "pl_hit_fraction": 0.6764
+ },
+ "masses2_N6/geometric": {
+  "build_s": 0.12004595901817083,
+  "solve_s": 24.824948374996893,
+  "regions": 901,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 63908.81249972154,
+  "pl_hit_fraction": 0.38645
+ },
+ "sys3x2_N5/geometric": {
+  "build_s": 0.11359562500729226,
+  "solve_s": 20.706371415988542,
+  "regions": 973,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 68451.264599571,
+  "pl_hit_fraction": 0.592
+ }
+}
