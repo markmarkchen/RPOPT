@@ -63,7 +63,8 @@ pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Opti
     };
     let mut order: Vec<usize> = (0..e.rows).collect();
     let slack: Vec<f64> = (0..e.rows).map(|i| f[i] - crate::linalg::dot(e.row(i), &center)).collect();
-    order.sort_by(|&x, &y| slack[x].partial_cmp(&slack[y]).unwrap_or(Ordering::Equal));
+    // ties broken by the row index: the order of the stable sort
+    order.sort_unstable_by(|&x, &y| slack[x].partial_cmp(&slack[y]).unwrap_or(Ordering::Equal).then(x.cmp(&y)));
     let flags: Vec<bool> = match clip_flags(&e, &f, &order, &blo, &bhi) {
         Some(fl) => fl.iter().enumerate().map(|(p, &v)| if v >= 0 { v == 1 } else { crate::solver::lp::lp_feasible_from(&e, &f, &[p], &center) }).collect(),
         None => {
@@ -185,28 +186,19 @@ fn clip_n<const N: usize>(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &
         pts.push(x);
         tight.push(t);
     }
-    // rows that clear the whole box
-    let far: Vec<bool> = (0..m)
-        .map(|r| {
-            let a = e.row(r);
-            let mut mx = 0.0;
-            for k in 0..N {
-                mx += if a[k] > 0.0 { a[k] * hi[k] } else { a[k] * lo[k] };
-            }
-            f[r] - mx >= 1e-7 * (1.0 + f[r].abs())
-        })
-        .collect();
+    // one bit per distinct hyperplane: rows equal to a box face or to an earlier processed row
+    // share its bit (looked up only for the rows that reach the cutting stage)
     let mut bit: Vec<usize> = (0..m).collect();
+    let hkey = |a: &[f64], fr: f64| -> [i64; 7] {
+        let mut k = [0i64; 7];
+        for (o, v) in k.iter_mut().zip(a) {
+            *o = (v * 1e8).round() as i64;
+        }
+        k[6] = (fr * 1e8).round() as i64;
+        k
+    };
+    let mut seen: crate::fxhash::FxHashMap<[i64; 7], usize> = crate::fxhash::FxHashMap::with_capacity_and_hasher(2 * N + 16, Default::default());
     {
-        let hkey = |a: &[f64], fr: f64| -> [i64; 7] {
-            let mut k = [0i64; 7];
-            for (o, v) in k.iter_mut().zip(a) {
-                *o = (v * 1e8).round() as i64;
-            }
-            k[6] = (fr * 1e8).round() as i64;
-            k
-        };
-        let mut seen: crate::fxhash::FxHashMap<[i64; 7], usize> = crate::fxhash::FxHashMap::with_capacity_and_hasher(m + 2 * N, Default::default());
         let mut unit = [0.0; N];
         for k in 0..N {
             unit[k] = 1.0;
@@ -214,17 +206,6 @@ fn clip_n<const N: usize>(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &
             unit[k] = -1.0;
             seen.insert(hkey(&unit, -lo[k]), m + 2 * k);
             unit[k] = 0.0;
-        }
-        for r in 0..m {
-            if far[r] {
-                continue;
-            }
-            match seen.get(&hkey(e.row(r), f[r])) {
-                Some(&b) => bit[r] = b,
-                None => {
-                    seen.insert(hkey(e.row(r), f[r]), r);
-                }
-            }
         }
     }
     let mut cur_lo = [0.0; N];
@@ -237,9 +218,6 @@ fn clip_n<const N: usize>(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &
     let mut ins: Vec<usize> = vec![];
     let mut outs: Vec<usize> = vec![];
     for &r in order {
-        if far[r] {
-            continue;
-        }
         let a = e.row(r);
         let fr = f[r];
         let tol = 1e-8 * (1.0 + fr.abs());
@@ -256,6 +234,12 @@ fn clip_n<const N: usize>(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &
         val.clear();
         ins.clear();
         outs.clear();
+        match seen.get(&hkey(a, fr)) {
+            Some(&b) => bit[r] = b,
+            None => {
+                seen.insert(hkey(a, fr), r);
+            }
+        }
         let rbit = 1u128 << bit[r];
         for v in 0..nv {
             let s = dotn::<N>(a, &pts[v]) - fr;
@@ -329,10 +313,6 @@ fn clip_n<const N: usize>(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &
     }
     let mut out = Vec::with_capacity(m);
     for r in 0..m {
-        if far[r] {
-            out.push(0);
-            continue;
-        }
         let a = e.row(r);
         let fp = f[r];
         let sc = 1.0 + fp.abs();

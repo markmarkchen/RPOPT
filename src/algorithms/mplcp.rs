@@ -210,6 +210,45 @@ impl Tab {
         std::mem::swap(&mut self.row_var[r], &mut self.col_var[c]);
     }
 
+    /// The tableau after the principal pivot (r, c), written into new buffers in one pass (the
+    /// same operations as `clone` followed by `pivot`, without the copy of the untouched rows).
+    /// `self` must have no pending pivot.
+    fn pivoted(&self, r: usize, c: usize) -> Tab {
+        debug_assert!(self.pend.is_none());
+        let (n, nc, w) = (self.n, self.nc, self.w);
+        let p = self.t[r * nc + c];
+        let inv = 1.0 / p;
+        let fcol: Vec<f64> = (0..n).map(|i| self.t[i * nc + c]).collect();
+        let trow: Vec<f64> = (0..nc).map(|k| if k == c { inv } else { -self.t[r * nc + k] * inv }).collect();
+        let rrow: Vec<f64> = (0..w).map(|k| self.rho[r * w + k] * -inv).collect();
+        let tc = trow[c];
+        let mut t = Vec::with_capacity(n * nc);
+        let mut rho = Vec::with_capacity(n * w);
+        for i in 0..n {
+            let si = &self.t[i * nc..(i + 1) * nc];
+            let sr = &self.rho[i * w..(i + 1) * w];
+            if i == r {
+                t.extend_from_slice(&trow);
+                rho.extend_from_slice(&rrow);
+                continue;
+            }
+            let f = fcol[i];
+            if f == 0.0 {
+                t.extend_from_slice(si);
+                rho.extend_from_slice(sr);
+                continue;
+            }
+            let start = t.len();
+            t.extend(si.iter().zip(trow.iter()).map(|(o, s)| o + f * s));
+            t[start + c] = f * tc;
+            rho.extend(sr.iter().zip(rrow.iter()).map(|(o, s)| o + f * s));
+        }
+        let mut row_var = self.row_var.clone();
+        let mut col_var = self.col_var.clone();
+        std::mem::swap(&mut row_var[r], &mut col_var[c]);
+        Tab { n, nc, w, t, rho, row_var, col_var, pend: None }
+    }
+
     /// Applies the pending pivot to the values.
     fn flush(&mut self) {
         let Some(p) = self.pend.take() else { return };
@@ -521,7 +560,7 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
     // work tableau: n x (n+1) with the α column last
     let nc = n + 1;
     // the buffers of the previous work tableau are reused (every entry is overwritten)
-    let mut work = ws.take().unwrap_or_else(|| Tab { n, nc, w, t: vec![0.0; n * nc], rho: vec![0.0; n * w], row_var: vec![0; n], col_var: vec![0; nc], pend: None });
+    let mut work = ws.take().filter(|t| t.n == n && t.nc == nc && t.w == w).unwrap_or_else(|| Tab { n, nc, w, t: vec![0.0; n * nc], rho: vec![0.0; n * w], row_var: vec![0; n], col_var: vec![0; nc], pend: None });
     for i in 0..n {
         work.t[i * nc..i * nc + n].copy_from_slice(&tab.t[i * n..(i + 1) * n]);
         let rr = &tab.rho[i * tab.w..(i + 1) * tab.w];
@@ -739,8 +778,13 @@ fn pivot_solve_inner(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<Critica
             let (ntab, nd) = match piv {
                 Some((v, kk)) => {
                     let t0 = std::time::Instant::now();
-                    let mut t = if i + 1 == np { tab.take().unwrap() } else { tab.as_ref().unwrap().clone() };
-                    t.pivot(v, kk);
+                    let t = if i + 1 == np {
+                        let mut t = tab.take().unwrap();
+                        t.pivot(v, kk);
+                        t
+                    } else {
+                        tab.as_ref().unwrap().pivoted(v, kk)
+                    };
                     pt(6, t0);
                     (Some(t), depth + 1)
                 }
@@ -817,9 +861,7 @@ fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalR
             let (cr, center) = build_cand(program, c)?;
             let (ntab, nd) = match c.piv {
                 Some((v, kk)) => {
-                    let mut t = (**tab).clone();
-                    t.pivot(v, kk);
-                    (Some(t), depth + 1)
+                    (Some(tab.pivoted(v, kk)), depth + 1)
                 }
                 None => (None, 0),
             };
