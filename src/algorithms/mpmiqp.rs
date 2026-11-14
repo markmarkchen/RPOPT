@@ -38,6 +38,16 @@ impl MpmiProgram {
         p
     }
 
+    /// Like [`MpmiProgram::new`] but without the MILP-based constraint processing, which treats
+    /// every integer variable as binary and would drop rows that bound general integers.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_unprocessed(a: Mat, b: Vec<f64>, c: Vec<f64>, h: Mat, q: Option<Mat>, a_t: Mat, b_t: Vec<f64>, f: Mat, integer_indices: Vec<usize>, equality_indices: Vec<usize>) -> Self {
+        let base = MpProgram::new(a, b, c, h, q, a_t, b_t, f, equality_indices, false);
+        let nx = base.num_x();
+        let cont_indices = (0..nx).filter(|i| !integer_indices.contains(i)).collect();
+        MpmiProgram { base, binary_indices: integer_indices, cont_indices }
+    }
+
     /// MILP-based removal of strongly redundant inequality rows (PPOPT MPMILP `process_constraints`).
     pub fn process_constraints(&mut self) {
         let b = &mut self.base;

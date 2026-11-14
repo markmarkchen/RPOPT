@@ -6,6 +6,7 @@ pub mod common;
 pub mod dp;
 pub mod facet_completion;
 pub mod incremental;
+pub mod mpmilp_bb;
 pub mod mpmiqp;
 pub mod mplcp;
 pub mod mplp_lex;
