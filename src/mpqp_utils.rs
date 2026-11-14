@@ -159,6 +159,11 @@ pub fn lambda_rows_feasible_raw(program: &MpProgram, a_l: &Mat, b_l: &[f64]) -> 
     })
 }
 
+/// Redundancy-removal diagnostics: LP calls spent inside the row tests, and regions processed
+/// (meaningful for single-threaded runs only).
+pub static RED_LPS: crate::stats::Sharded = crate::stats::Sharded::new();
+pub static RED_REGIONS: crate::stats::Sharded = crate::stats::Sharded::new();
+
 /// `gen_cr_from_active_set` from precomputed law and rows (and a known region point if any).
 pub fn gen_cr_from_kkt(program: &MpProgram, active_set: &[usize], kkt: KktRegion, check_full_dim: bool) -> Option<CriticalRegion> {
     if program.num_t() == 1 {
@@ -234,8 +239,15 @@ pub fn gen_cr_from_kkt(program: &MpProgram, active_set: &[usize], kkt: KktRegion
     // box is below its rhs cannot be reached, and a row whose hyperplane contains a feasible point
     // (the projection of the Chebyshev center) is reached. Only the remaining rows get an LP,
     // started at the center.
-    let bbox = center.as_ref().and_then(|c| region_bbox(&e, &f, c));
+    let red_lp0 = crate::solver::lp::LP_CALLS.load();
+    // Fast path (same answers, far fewer LPs): interval-propagated parameter box plus exact
+    // vertex clipping of that box, see `row_flags`.
+    let flags: Option<Vec<bool>> = center.as_ref().map(|c| row_flags(program, &e, &f, c));
+    let bbox = if flags.is_some() { None } else { center.as_ref().and_then(|c| region_bbox(&e, &f, c)) };
     let test = |p: usize| -> bool {
+        if let Some(fl) = &flags {
+            return fl[p];
+        }
         let Some(c) = &center else { return crate::solver::lp::lp_feasible(&e, &f, &[p]) };
         let a = e.row(p);
         let fp = f[p];
@@ -276,6 +288,8 @@ pub fn gen_cr_from_kkt(program: &MpProgram, active_set: &[usize], kkt: KktRegion
             non_redundant.push(p);
         }
     }
+    RED_LPS.add(crate::solver::lp::LP_CALLS.load() - red_lp0);
+    RED_REGIONS.add(1);
     let active: Vec<usize> = active_set[neq..].to_vec();
     let relevant_lambda: Vec<usize> = kept_lambda.iter().map(|&i| active[i]).collect();
     let real_regular: Vec<usize> = kept_ineq.iter().map(|&i| inactive[i]).collect();
@@ -771,6 +785,7 @@ pub fn gen_cr_from_law_hinted(program: &MpProgram, active_set: &[usize], law: cr
     let cheb_radius = Some(s.x[nt]);
     let center: Vec<f64> = s.x[..nt].to_vec();
 
+    let red_lp0 = crate::solver::lp::LP_CALLS.load();
     crate::stats::lp(kept_rows.len() as u64);
     // rows that provably cannot touch the region (interval propagation from the parameter box)
     let (mut blo, mut bhi) = match program.theta_bbox() {
@@ -813,6 +828,8 @@ pub fn gen_cr_from_law_hinted(program: &MpProgram, active_set: &[usize], law: cr
             non_redundant.push(p);
         }
     }
+    RED_LPS.add(crate::solver::lp::LP_CALLS.load() - red_lp0);
+    RED_REGIONS.add(1);
     let active: Vec<usize> = active_set[neq..].to_vec();
     let relevant_lambda: Vec<usize> = kept_lambda.iter().map(|&i| active[i]).collect();
     let real_regular: Vec<usize> = kept_ineq.iter().map(|&i| inactive[i]).collect();
@@ -836,6 +853,32 @@ pub fn gen_cr_from_law_hinted(program: &MpProgram, active_set: &[usize], law: cr
         x_indices: None,
         cheb_radius,
     }, center))
+}
+
+/// For every row of {E θ <= f} (unit-norm rows, `center` interior): does its hyperplane touch the
+/// region? Same decision rule as `gen_cr_from_law_hinted`: interval-propagated parameter box,
+/// exact vertex clipping of that box (no LP) with LPs only for undecided rows, or the box-screened
+/// LP path when clipping does not apply.
+fn row_flags(program: &MpProgram, e: &Mat, f: &[f64], center: &[f64]) -> Vec<bool> {
+    let nt = e.cols;
+    let (mut blo, mut bhi) = match program.theta_bbox() {
+        Some((l, h)) => (l.clone(), h.clone()),
+        None => (vec![f64::NEG_INFINITY; nt], vec![f64::INFINITY; nt]),
+    };
+    propagate_box(e, f, &mut blo, &mut bhi, 6);
+    let mut order: Vec<usize> = (0..e.rows).collect();
+    let slack: Vec<f64> = (0..e.rows).map(|i| f[i] - crate::linalg::dot(e.row(i), center)).collect();
+    order.sort_by(|&x, &y| slack[x].partial_cmp(&slack[y]).unwrap_or(std::cmp::Ordering::Equal));
+    // Measured: vertex clipping saves LPs on mpQP regions (about 1.15x on masses2_N6 geometric and
+    // graph), but on the degenerate mpLP regions it costs more than the LPs it saves (0.65x on
+    // sys3x2inf_N2 graph), so mpLPs use the box-screened LP path.
+    if program.q.is_none() {
+        return lp_flags(e, f, center, &blo, &bhi);
+    }
+    match clip_flags(e, f, &order, &blo, &bhi) {
+        Some(fl) => fl.iter().enumerate().map(|(p, &v)| if v >= 0 { v == 1 } else { crate::solver::lp::lp_feasible_from(e, f, &[p], center) }).collect(),
+        None => lp_flags(e, f, center, &blo, &bhi),
+    }
 }
 
 /// Per-row "touches the region" flags by bounding-box screening and LPs (the general path).
@@ -877,4 +920,57 @@ fn lp_flags(e: &Mat, f: &[f64], center: &[f64], blo: &[f64], bhi: &[f64]) -> Vec
         crate::solver::lp::lp_feasible_from(&el, &fl, &[lp_], center)
     };
     (0..e.rows).map(test).collect()
+}
+
+#[cfg(test)]
+mod redundancy_screen_tests {
+    use super::*;
+
+    // unit square 0 <= x, y <= 1 plus the diagonal row x + y <= 3 (unit-norm form), which the
+    // square's bounding box already proves redundant
+    fn square() -> (Mat, Vec<f64>) {
+        let h = std::f64::consts::FRAC_1_SQRT_2;
+        let rows = [[-1.0, 0.0], [0.0, -1.0], [1.0, 0.0], [0.0, 1.0], [h, h]];
+        let mut e = Mat::zeros(rows.len(), 2);
+        for (i, r) in rows.iter().enumerate() {
+            e.row_mut(i).copy_from_slice(r);
+        }
+        (e, vec![0.0, 0.0, 1.0, 1.0, 3.0 * h])
+    }
+
+    #[test]
+    fn box_proves_row_redundant() {
+        let (e, f) = square();
+        let (lo, hi) = (vec![0.0, 0.0], vec![1.0, 1.0]);
+        // max over the box of the diagonal row is 1.414 < 2.12: redundant without any LP
+        assert!(box_max(e.row(4), &lo, &hi) < f[4] - 1e-7);
+        // the facet rows are reached by the box
+        assert!(box_max(e.row(2), &lo, &hi) >= f[2] - 1e-12);
+        // interval propagation recovers the box from the rows alone
+        let (mut l, mut h) = (vec![-10.0; 2], vec![10.0; 2]);
+        propagate_box(&e, &f, &mut l, &mut h, 6);
+        assert!(l.iter().all(|v| v.abs() < 1e-9) && h.iter().all(|v| (v - 1.0).abs() < 1e-9));
+    }
+
+    #[test]
+    fn clipping_certifies_rows_without_lp() {
+        let (e, f) = square();
+        let order: Vec<usize> = (0..e.rows).collect();
+        let fl = clip_flags(&e, &f, &order, &[0.0, 0.0], &[1.0, 1.0]).expect("fits");
+        // the four sides touch the region (vertices are witnesses), the diagonal does not
+        assert_eq!(fl, vec![1, 1, 1, 1, 0]);
+    }
+
+    #[test]
+    fn witness_point_certifies_row() {
+        // the projection of the interior point (0.5, 0.5) onto x <= 1 is (1, 0.5): it satisfies
+        // all other rows, so x <= 1 is irredundant with no LP
+        let (e, f) = square();
+        let c = [0.5, 0.5];
+        let p = 2;
+        let s = f[p] - crate::linalg::dot(e.row(p), &c);
+        let q: Vec<f64> = c.iter().zip(e.row(p)).map(|(ci, ai)| ci + s * ai).collect();
+        assert!((0..e.rows).all(|i| i == p || crate::linalg::dot(e.row(i), &q) <= f[i] + 1e-9));
+        assert!((crate::linalg::dot(e.row(p), &q) - f[p]).abs() < 1e-9);
+    }
 }
