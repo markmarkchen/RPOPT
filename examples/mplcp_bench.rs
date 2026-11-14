@@ -29,16 +29,6 @@ fn main() {
         let n = ser.critical_regions.len();
         let sig = region_signature(&ser.critical_regions);
         let same = if geo { region_signature(&solve_mpqp(&prog, MpqpAlgorithm::Geometric).critical_regions) == sig } else { true };
-        if std::env::var("PROF").is_ok() {
-            for a in rpopt::algorithms::mplcp::PROF.iter() { a.store(0, std::sync::atomic::Ordering::Relaxed); }
-            for _ in 0..reps { let _ = solve_mpqp(&prog, MpqpAlgorithm::Mplcp); }
-            let tot = rpopt::algorithms::mplcp::PROF[11].load(std::sync::atomic::Ordering::Relaxed) as f64;
-            println!("{} profile over {} runs, total {:.2} ms/run", name, reps, tot / 1e6 / reps as f64);
-            for (i, nme) in rpopt::algorithms::mplcp::PROF_NAMES.iter().enumerate() {
-                let v = rpopt::algorithms::mplcp::PROF[i].load(std::sync::atomic::Ordering::Relaxed) as f64;
-                if v > 0.0 { println!("   {:<18} {:>9.3} ms/run {:>5.1}%", nme, v / 1e6 / reps as f64, 100.0 * v / tot); }
-            }
-        }
         let mut ts = vec![];
         for _ in 0..reps {
             let t = Instant::now();

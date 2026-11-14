@@ -347,7 +347,6 @@ struct Facet<'a> {
 /// z-row sets of the adjacent bases.
 fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, out: &mut Vec<Vec<usize>>) {
     let n = p.n;
-    PROF[9].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let d1 = p.nt - 1;
     let alpha = 2 * n;
     let mut e = e;
@@ -421,8 +420,6 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
             continue;
         }
         // Case 2: the leaving variable depends on θ_f
-        PROF[12].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        PROF[13].fetch_add(pset.len() as u64, std::sync::atomic::Ordering::Relaxed);
         if depth > 6 {
             return;
         }
@@ -457,10 +454,8 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
                 continue;
             }
             if d1 > 0 {
-                PROF[10].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 match chebyshev_ball(&ef, &ff, &[]) {
                     Some(s) if s.x[d1] > 1e-9 => {
-                        PROF[14].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     }
                     _ => continue,
                 }
@@ -547,7 +542,6 @@ enum Nbr {
 /// Neighbouring z-row sets across the facet {e_k θ = f_k} of the region with tableau `tab`.
 fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[f64], ws: &mut Option<Tab>) -> Vec<Nbr> {
     let (n, nt) = (p.n, p.nt);
-    PROF[8].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let nrm = erow.iter().map(|v| v * v).sum::<f64>().sqrt();
     let g: Vec<f64> = erow.iter().map(|v| v / nrm).collect();
     let b = -frhs / nrm; // γ'θ + b = 0
@@ -619,9 +613,7 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         }
     }
     let mut out = vec![];
-    let t0 = std::time::Instant::now();
     pivot_facet(p, &mut work, n, Facet { ef: &ef, ff: &ff }, 0, &mut out);
-    pt(2, t0);
     *ws = Some(work);
     out.into_iter().map(Nbr::Z).collect()
 }
@@ -672,12 +664,6 @@ pub fn regions(program: &MpProgram, seed: u64, method: Method) -> Vec<CriticalRe
     }
 }
 
-pub static PROF: [std::sync::atomic::AtomicU64; 16] = [const { std::sync::atomic::AtomicU64::new(0) }; 16];
-pub const PROF_NAMES: [&str; 15] = ["tableau_for", "adjacent_total", "pivot_facet", "seen/aset", "law_dual", "gen_cr", "tab_clone_pivot", "region_clone", "cnt:facets", "cnt:adjacent", "cnt:cheb_lp", "total", "c2 entries", "c2 sum pset", "lp feasible"];
-#[inline]
-fn pt(i: usize, t0: std::time::Instant) {
-    PROF[i].fetch_add(t0.elapsed().as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
-}
 const REFACTOR: usize = 8;
 
 /// A region whose neighbours are still to be explored: its index in the result list, its Chebyshev
@@ -754,13 +740,6 @@ fn build_cand(program: &MpProgram, c: &Cand) -> Option<(CriticalRegion, Option<V
 }
 
 fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegion> {
-    let tt = std::time::Instant::now();
-    let r = pivot_solve_inner(program, plcp, seed);
-    pt(11, tt);
-    r
-}
-
-fn pivot_solve_inner(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegion> {
     let Some((initial, init_center)) = initial_region(program, seed) else { return vec![] };
     let mut seen: HashSet<Vec<usize>> = HashSet::default();
     seen.insert(initial.active_set.clone());
@@ -774,25 +753,17 @@ fn pivot_solve_inner(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<Critica
         let tab = match tab {
             Some(t) => t,
             None => {
-                let t0 = std::time::Instant::now();
                 let Some(t) = tableau_of(plcp, cur) else { continue };
-                pt(0, t0);
                 t
             }
         };
-        let t0 = std::time::Instant::now();
         let cands = expand_candidates(plcp, cur, center.as_ref(), &tab, depth, &mut ws);
-        pt(1, t0);
         for c in cands {
-            let t0 = std::time::Instant::now();
             let fresh = seen.insert(c.aset.clone());
-            pt(3, t0);
             if !fresh {
                 continue;
             }
-            let t0 = std::time::Instant::now();
             let built = build_cand(program, &c);
-            pt(5, t0);
             if let Some((cr, ce)) = built {
                 pending.push((cr, ce, c.piv));
             }
@@ -804,7 +775,6 @@ fn pivot_solve_inner(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<Critica
         for (i, (cr, ce, piv)) in pending.drain(..).enumerate() {
             let (ntab, nd) = match piv {
                 Some((v, kk)) => {
-                    let t0 = std::time::Instant::now();
                     let t = if i + 1 == np {
                         let mut t = tab.take().unwrap();
                         t.pivot(v, kk);
@@ -812,7 +782,6 @@ fn pivot_solve_inner(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<Critica
                     } else {
                         tab.as_ref().unwrap().pivoted(v, kk)
                     };
-                    pt(6, t0);
                     (Some(t), depth + 1)
                 }
                 None => (None, 0),
