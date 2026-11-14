@@ -8,12 +8,16 @@
 pub mod bst;
 pub mod descriptor;
 pub mod geometry;
+pub mod graph_traversal;
 pub mod hash_table;
 pub mod linear_machine;
 pub mod multiway;
 pub mod sequential;
+pub mod walk;
 pub mod yann;
 
+pub use graph_traversal::GraphTraversal;
+pub use walk::SubdivisionWalk;
 pub use bst::BinarySearchTree;
 pub use descriptor::DescriptorFunction;
 pub use geometry::PartitionGeometry;
