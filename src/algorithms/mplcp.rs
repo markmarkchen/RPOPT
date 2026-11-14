@@ -794,7 +794,7 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
 }
 
 /// A wave (or batch of new regions) goes to rayon only when its estimated serial time exceeds this.
-const PAR_NS: f64 = 150_000.0;
+const PAR_NS: f64 = 20_000.0;
 
 thread_local! {
     static WS: std::cell::RefCell<Option<Tab>> = const { std::cell::RefCell::new(None) };
