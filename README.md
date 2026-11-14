@@ -112,6 +112,15 @@ Implementation notes:
 - **YANN**: the five layers of the paper (step, ReLU indicator, first-active selector, big-M ReLU pairs,
   linear output), in f64; `locate` runs layers 1-3, `Yann::evaluate` all five.
 
+## Algorithms beyond PPOPT
+
+| algorithm | name | reference | notes |
+|---|---|---|---|
+| combinatorial with adjacency | `ahmadi` | Ahmadi-Moshkenani, Johansen, Olaru, IEEE TAC 63(10), 2018, doi:10.1109/TAC.2018.2791479 | exact mpQP, handles LICQ and strict-complementarity violations; PPOPT's `mpqp_ahmadi.py` is an empty stub |
+| mp-LCP pivoting | `mplcp` | Jones, Morari, CDC 2006, doi:10.1109/CDC.2006.377797 | lexicographic perturbation, no gaps or overlaps at degenerate vertices; about 1.4x faster than geometric on sys3x2 |
+| pLCP enumeration | `mplcp_enum` | Herceg, Jones, Kvasnica, Morari, Automatica 62, 2015, doi:10.1016/j.automatica.2015.09.019 | general M (mpQP and mpLP); exponential, slow on the larger problems |
+| randomized MPR | `algorithms::mpr::solve_mpqp_mpr` | Falsone, Bianchi, Prandini, Automatica 2026, doi:10.1016/j.automatica.2026.112873 | approximate with a probabilistic coverage guarantee; returns only exact regions |
+
 ## Active-set dynamic programming for explicit MPC
 
 `algorithms::dp::solve_mpc_dp` (not part of `MpqpAlgorithm::all()`, because its input is the MPC structure
