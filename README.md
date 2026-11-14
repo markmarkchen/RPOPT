@@ -98,6 +98,8 @@ region is always verified, so a near-tie at a facet cannot return a wrong region
 | descriptor function | `descriptor` | Baotić, Borrelli, Bemporad, Morari, *SIAM J. Control Optim.* 47(5):2470-2489, 2008 |
 | hash table | `hash_table` | Bayat, Johansen, Jalali, *Automatica* 47(3):571-577, 2011 |
 | YANN | `yann` | Braniff, Tian, *Computers & Chemical Engineering*, 2026 (arXiv:2505.07054) |
+| subdivision walking | `walk` | Wang, Jones, Maciejowski, ECC 2007, doi:10.23919/ECC.2007.7068623 |
+| graph traversal | `graph_traversal` | Herceg, Mariéthoz, Morari, ECC 2013, doi:10.23919/ECC.2013.6669667 |
 
 Implementation notes:
 
@@ -132,6 +134,17 @@ Implementation notes:
 | approximate mpQP | `algorithms::approx::solve_mpqp_approx` | Bemporad, Filippi, JOTA 2003, doi:10.1023/A:1023696221899 | value error within eps (Case C of the paper); fewer regions only at large eps |
 | constraint trimming | `trimming` | Hou, You, arXiv 2412.11098 | for sequences of related QPs (closed-loop MPC), not a single explicit solve |
 | low-rank storage | `lowrank::compress` | Nielsen, Axehill, CDC 2016, doi:10.1109/CDC.2016.7798819 | about 2x less memory on the larger problems, about 10x slower evaluation |
+
+The two walking methods start from the previous answer (closed-loop query sequences) and fall back to the hash table
+when a walk cannot proceed; on the benchmark problems they are exact but 2x to 5x slower than the storage-limited hash
+table even on closed-loop trajectories (`examples/pl_sequence_bench.rs`).
+
+## Python bindings
+
+`python/` holds `rpopt-py` (PyO3, maturin): a PPOPT-compatible Python API (`MPQP_Program`, `MPLP_Program`,
+`solve_mpqp` with PPOPT's algorithm names plus the extra ones, `Solution`, `CriticalRegion`, all point locators with a
+GIL-free `locate_many`). `rpopt.install_as_ppopt()` lets PPOPT scripts run with their imports unchanged. Build with
+`cd python && maturin develop --release`; see python/README.md for the coverage and differences.
 
 ## Active-set dynamic programming for explicit MPC
 
