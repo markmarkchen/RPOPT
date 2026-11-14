@@ -12,7 +12,7 @@
 //! complement of M on the equality block) and are always in the active set.
 //!
 //! Tableau form (compact, one column per nonbasic variable): x_B = ρ + T y_N, where the rows of ρ
-//! are [constant | θ coefficients | β]. Variables: w_i = i, z_i = n + i, the facet parameter α = 2n.
+//! are [constant | θ coefficients] (the perturbation block β is implied by T, see `pivot_facet`). Variables: w_i = i, z_i = n + i, the facet parameter α = 2n.
 
 use crate::critical_region::CriticalRegion;
 use crate::fxhash::FxHashSet as HashSet;
@@ -24,6 +24,9 @@ use rand::rngs::StdRng;
 use rand::SeedableRng;
 use std::cmp::Ordering;
 use std::collections::VecDeque;
+
+#[path = "mplcp_build.rs"]
+mod build;
 
 /// The reduced pLCP (equalities eliminated).
 struct Plcp {
@@ -207,6 +210,45 @@ impl Tab {
         std::mem::swap(&mut self.row_var[r], &mut self.col_var[c]);
     }
 
+    /// The tableau after the principal pivot (r, c), written into new buffers in one pass (the
+    /// same operations as `clone` followed by `pivot`, without the copy of the untouched rows).
+    /// `self` must have no pending pivot.
+    fn pivoted(&self, r: usize, c: usize) -> Tab {
+        debug_assert!(self.pend.is_none());
+        let (n, nc, w) = (self.n, self.nc, self.w);
+        let p = self.t[r * nc + c];
+        let inv = 1.0 / p;
+        let fcol: Vec<f64> = (0..n).map(|i| self.t[i * nc + c]).collect();
+        let trow: Vec<f64> = (0..nc).map(|k| if k == c { inv } else { -self.t[r * nc + k] * inv }).collect();
+        let rrow: Vec<f64> = (0..w).map(|k| self.rho[r * w + k] * -inv).collect();
+        let tc = trow[c];
+        let mut t = Vec::with_capacity(n * nc);
+        let mut rho = Vec::with_capacity(n * w);
+        for i in 0..n {
+            let si = &self.t[i * nc..(i + 1) * nc];
+            let sr = &self.rho[i * w..(i + 1) * w];
+            if i == r {
+                t.extend_from_slice(&trow);
+                rho.extend_from_slice(&rrow);
+                continue;
+            }
+            let f = fcol[i];
+            if f == 0.0 {
+                t.extend_from_slice(si);
+                rho.extend_from_slice(sr);
+                continue;
+            }
+            let start = t.len();
+            t.extend(si.iter().zip(trow.iter()).map(|(o, s)| o + f * s));
+            t[start + c] = f * tc;
+            rho.extend(sr.iter().zip(rrow.iter()).map(|(o, s)| o + f * s));
+        }
+        let mut row_var = self.row_var.clone();
+        let mut col_var = self.col_var.clone();
+        std::mem::swap(&mut row_var[r], &mut col_var[c]);
+        Tab { n, nc, w, t, rho, row_var, col_var, pend: None }
+    }
+
     /// Applies the pending pivot to the values.
     fn flush(&mut self) {
         let Some(p) = self.pend.take() else { return };
@@ -244,12 +286,11 @@ impl Tab {
 /// principal pivot per z row (nonsingular when M_zz is positive definite).
 fn tableau_for(p: &Plcp, z: &[usize]) -> Option<Tab> {
     let (n, nt) = (p.n, p.nt);
-    let w = 1 + nt + n;
+    let w = 1 + nt;
     let mut rho = vec![0.0; n * w];
     for i in 0..n {
         rho[i * w] = p.q[i];
         rho[i * w + 1..i * w + 1 + nt].copy_from_slice(&p.r[i * nt..(i + 1) * nt]);
-        rho[i * w + 1 + nt + i] = 1.0;
     }
     let mut tab = Tab { n, nc: n, w, t: p.m.clone(), rho, row_var: (0..n).collect(), col_var: (n..2 * n).collect(), pend: None };
     for &i in z {
@@ -313,6 +354,35 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
         // P: rows decreasing in the entering variable
         let a: Vec<f64> = (0..n).map(|i| -tab.tv(i, e)).collect();
         let w = tab.w;
+        // the perturbation block β = ∂x_B/∂ε of the tableau is not stored: column j of β is
+        // -T[:, c] when w_j is nonbasic in column c (its column of the pivoted system is e_j), and
+        // the unit vector of its row when w_j is basic (bitwise what the stored block would hold)
+        let mut wcol = vec![usize::MAX; n];
+        for (c, &v) in tab.col_var.iter().enumerate() {
+            if v < n {
+                wcol[v] = c;
+            }
+        }
+        let mut wrow = vec![usize::MAX; n];
+        for (r, &v) in tab.row_var.iter().enumerate() {
+            if v < n {
+                wrow[v] = r;
+            }
+        }
+        let rfull = |i: usize, k: usize| -> f64 {
+            if k < w {
+                tab.rv(i, k)
+            } else {
+                let j = k - w;
+                if wcol[j] != usize::MAX {
+                    -tab.tv(i, wcol[j])
+                } else if wrow[j] == i {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
+        };
         let rowmax = |i: usize| (0..1 + d1).fold(0.0f64, |m, k| m.max(tab.rv(i, k).abs()));
         let pset: Vec<usize> = (0..n).filter(|&i| a[i] > PTOL).collect();
         if pset.is_empty() {
@@ -331,7 +401,7 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
         }
         if !pz.is_empty() {
             // Case 1: leaving variable independent of θ_f
-            let beta = |i: usize| -> Vec<f64> { (1 + d1..w).map(|k| tab.rv(i, k)).collect() };
+            let beta = |i: usize| -> Vec<f64> { (w..w + n).map(|k| rfull(i, k)).collect() };
             let mut l = pz[0];
             for &i in &pz[1..] {
                 let u: Vec<f64> = beta(i).iter().map(|v| v / a[i]).collect();
@@ -363,7 +433,7 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
                 if j == l {
                     continue;
                 }
-                let g: Vec<f64> = (0..w).map(|k| a[l] * tab.rv(j, k) - a[j] * tab.rv(l, k)).collect();
+                let g: Vec<f64> = (0..w + n).map(|k| a[l] * rfull(j, k) - a[j] * rfull(l, k)).collect();
                 let gq_zero = g[1..1 + d1].iter().all(|v| v.abs() <= ZTOL);
                 if gq_zero {
                     let mut v = vec![g[0]];
@@ -385,7 +455,8 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
             }
             if d1 > 0 {
                 match chebyshev_ball(&ef, &ff, &[]) {
-                    Some(s) if s.x[d1] > 1e-9 => {}
+                    Some(s) if s.x[d1] > 1e-9 => {
+                    }
                     _ => continue,
                 }
             }
@@ -507,11 +578,11 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         }
     }
     let nb = null_basis(&g);
-    let w = 1 + d1 + n;
+    let w = 1 + d1;
     // work tableau: n x (n+1) with the α column last
     let nc = n + 1;
     // the buffers of the previous work tableau are reused (every entry is overwritten)
-    let mut work = ws.take().unwrap_or_else(|| Tab { n, nc, w, t: vec![0.0; n * nc], rho: vec![0.0; n * w], row_var: vec![0; n], col_var: vec![0; nc], pend: None });
+    let mut work = ws.take().filter(|t| t.n == n && t.nc == nc && t.w == w).unwrap_or_else(|| Tab { n, nc, w, t: vec![0.0; n * nc], rho: vec![0.0; n * w], row_var: vec![0; n], col_var: vec![0; nc], pend: None });
     for i in 0..n {
         work.t[i * nc..i * nc + n].copy_from_slice(&tab.t[i * n..(i + 1) * n]);
         let rr = &tab.rho[i * tab.w..(i + 1) * tab.w];
@@ -520,7 +591,6 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         for (c, v) in nb.iter().enumerate() {
             work.rho[i * w + 1 + c] = (0..nt).map(|k| rr[1 + k] * v[k]).sum();
         }
-        work.rho[i * w + 1 + d1..(i + 1) * w].copy_from_slice(&rr[1 + nt..]);
     }
     work.row_var.copy_from_slice(&tab.row_var);
     work.col_var[..n].copy_from_slice(&tab.col_var);
@@ -595,92 +665,31 @@ pub fn regions(program: &MpProgram, seed: u64, method: Method) -> Vec<CriticalRe
 }
 
 const REFACTOR: usize = 8;
-/// smallest wave (or batch of new regions) that `pivot_solve_par` hands to rayon
-const PAR_MIN: usize = 4;
 
+/// A region whose neighbours are still to be explored: its index in the result list, its Chebyshev
+/// center, and its tableau (rebuilt from the active set when `None`).
 struct Item {
-    cr: CriticalRegion,
+    idx: usize,
     center: Option<Vec<f64>>,
     tab: Option<Tab>,
     depth: usize,
 }
 
-fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegion> {
+/// The initial region of the exploration (and its center) or `None` when the program has none.
+fn initial_region(program: &MpProgram, seed: u64) -> Option<(CriticalRegion, Option<Vec<f64>>)> {
     let mut rng = StdRng::seed_from_u64(seed);
-    let Some(active_set) = program.gen_optimal_active_set(&mut rng) else { return vec![] };
-    let Some(initial) = crate::mpqp_utils::gen_cr_from_active_set(program, &active_set, false) else { return vec![] };
+    let active_set = program.gen_optimal_active_set(&mut rng)?;
+    let initial = crate::mpqp_utils::gen_cr_from_active_set(program, &active_set, false)?;
     let nt = program.num_t();
     let init_center = if nt > 1 { chebyshev_ball(&initial.e, &initial.f, &[]).map(|s| s.x[..nt].to_vec()) } else { None };
-    let mut regions = vec![initial.clone()];
-    let mut seen: HashSet<Vec<usize>> = HashSet::default();
-    seen.insert(initial.active_set.clone());
-    let mut queue: VecDeque<Item> = VecDeque::new();
-    queue.push_back(Item { cr: initial, center: init_center, tab: None, depth: 0 });
+    Some((initial, init_center))
+}
+
+/// The tableau of region `cr`, rebuilt from its active set.
+fn tableau_of(plcp: &Plcp, cr: &CriticalRegion) -> Option<Tab> {
     let neq = plcp.eq.len();
-    let mut ws: Option<Tab> = None;
-    let mut pending: Vec<(CriticalRegion, Option<Vec<f64>>, Option<(usize, usize)>)> = vec![];
-    while let Some(Item { cr: cur, center, tab, depth }) = queue.pop_front() {
-        let tab = match tab {
-            Some(t) => t,
-            None => {
-                // z rows of the region (position in the reduced LCP)
-                let z: Vec<usize> = cur.active_set[neq..].iter().map(|c| plcp.ineq.iter().position(|x| x == c).unwrap()).collect();
-                let Some(t) = tableau_for(plcp, &z) else { continue };
-                t
-            }
-        };
-        for k in 0..cur.e.rows {
-            let nbrs = adjacent(plcp, &tab, cur.e.row(k), cur.f[k], &cur.e, &cur.f, &mut ws);
-            if nbrs.is_empty() {
-                continue;
-            }
-            // a point on the facet: the region's Chebyshev center projected onto the row
-            let hint: Option<Vec<f64>> = center.as_ref().map(|c| {
-                let a = cur.e.row(k);
-                let s = cur.f[k] - a.iter().zip(c).map(|(x, y)| x * y).sum::<f64>();
-                c.iter().zip(a).map(|(ci, ai)| ci + s * ai).collect()
-            });
-            for nb in nbrs {
-                let z = match &nb {
-                    Nbr::Toggle(v, _) => z_toggle(&tab, plcp.n, *v),
-                    Nbr::Z(z) => z.clone(),
-                };
-                let aset = plcp.active_set(z.into_iter());
-                if !seen.insert(aset.clone()) {
-                    continue;
-                }
-                let built = if nt > 1 {
-                    program.optimal_control_law_dual(&aset).and_then(|law| crate::mpqp_utils::gen_cr_from_law_hinted(program, &aset, law, hint.as_deref())).map(|(cr, c)| (cr, Some(c)))
-                } else {
-                    gen_cr_from_active_set_lambda_first(program, &aset, true).map(|cr| (cr, None))
-                };
-                if let Some((cr, c)) = built {
-                    regions.push(cr.clone());
-                    let piv = match nb {
-                        Nbr::Toggle(v, kk) if depth + 1 < REFACTOR => Some((v, kk)),
-                        _ => None,
-                    };
-                    pending.push((cr, c, piv));
-                }
-            }
-        }
-        // the neighbours' tableaux are one pivot away (rebuilt from scratch every REFACTOR levels);
-        // the last one takes over this region's tableau
-        let np = pending.len();
-        let mut tab = Some(tab);
-        for (idx, (cr, c, piv)) in pending.drain(..).enumerate() {
-            let (ntab, nd) = match piv {
-                Some((v, kk)) => {
-                    let mut t = if idx + 1 == np { tab.take().unwrap() } else { tab.as_ref().unwrap().clone() };
-                    t.pivot(v, kk);
-                    (Some(t), depth + 1)
-                }
-                None => (None, 0),
-            };
-            queue.push_back(Item { cr, center: c, tab: ntab, depth: nd });
-        }
-    }
-    regions
+    let z: Vec<usize> = cr.active_set[neq..].iter().map(|c| plcp.ineq.iter().position(|x| x == c).unwrap()).collect();
+    tableau_for(plcp, &z)
 }
 
 /// A neighbour found by the facet pivoting, before its region is built.
@@ -691,62 +700,150 @@ struct Cand {
     piv: Option<(usize, usize)>,
 }
 
+/// Neighbour candidates across every facet of region `cur` (tableau `tab`).
+fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>>, tab: &Tab, depth: usize, ws: &mut Option<Tab>) -> Vec<Cand> {
+    let mut cands = vec![];
+    for k in 0..cur.e.rows {
+        let nbrs = adjacent(plcp, tab, cur.e.row(k), cur.f[k], &cur.e, &cur.f, ws);
+        if nbrs.is_empty() {
+            continue;
+        }
+        // a point on the facet: the region's Chebyshev center projected onto the row
+        let hint: Option<Vec<f64>> = center.map(|c| {
+            let a = cur.e.row(k);
+            let sft = cur.f[k] - a.iter().zip(c).map(|(x, y)| x * y).sum::<f64>();
+            c.iter().zip(a).map(|(ci, ai)| ci + sft * ai).collect()
+        });
+        for nb in nbrs {
+            let z = match &nb {
+                Nbr::Toggle(v, _) => z_toggle(tab, plcp.n, *v),
+                Nbr::Z(z) => z.clone(),
+            };
+            let piv = match nb {
+                Nbr::Toggle(v, kk) if depth + 1 < REFACTOR => Some((v, kk)),
+                _ => None,
+            };
+            cands.push(Cand { aset: plcp.active_set(z.into_iter()), hint: hint.clone(), piv });
+        }
+    }
+    cands
+}
+
+/// Region of a candidate (`None` when it is empty or lower dimensional).
+fn build_cand(program: &MpProgram, c: &Cand) -> Option<(CriticalRegion, Option<Vec<f64>>)> {
+    if program.num_t() > 1 {
+        let (cr, ce) = build::build_region(program, &c.aset, c.hint.as_deref())?;
+        Some((cr, Some(ce)))
+    } else {
+        Some((gen_cr_from_active_set_lambda_first(program, &c.aset, true)?, None))
+    }
+}
+
+fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegion> {
+    let Some((initial, init_center)) = initial_region(program, seed) else { return vec![] };
+    let mut seen: HashSet<Vec<usize>> = HashSet::default();
+    seen.insert(initial.active_set.clone());
+    let mut regions = vec![initial];
+    let mut queue: VecDeque<Item> = VecDeque::new();
+    queue.push_back(Item { idx: 0, center: init_center, tab: None, depth: 0 });
+    let mut ws: Option<Tab> = None;
+    let mut pending: Vec<(CriticalRegion, Option<Vec<f64>>, Option<(usize, usize)>)> = vec![];
+    while let Some(Item { idx, center, tab, depth }) = queue.pop_front() {
+        let cur = &regions[idx];
+        let tab = match tab {
+            Some(t) => t,
+            None => {
+                let Some(t) = tableau_of(plcp, cur) else { continue };
+                t
+            }
+        };
+        let cands = expand_candidates(plcp, cur, center.as_ref(), &tab, depth, &mut ws);
+        for c in cands {
+            let fresh = seen.insert(c.aset.clone());
+            if !fresh {
+                continue;
+            }
+            let built = build_cand(program, &c);
+            if let Some((cr, ce)) = built {
+                pending.push((cr, ce, c.piv));
+            }
+        }
+        // the neighbours' tableaux are one pivot away (rebuilt from scratch every REFACTOR levels);
+        // the last one takes over this region's tableau
+        let np = pending.len();
+        let mut tab = Some(tab);
+        for (i, (cr, ce, piv)) in pending.drain(..).enumerate() {
+            let (ntab, nd) = match piv {
+                Some((v, kk)) => {
+                    let t = if i + 1 == np {
+                        let mut t = tab.take().unwrap();
+                        t.pivot(v, kk);
+                        t
+                    } else {
+                        tab.as_ref().unwrap().pivoted(v, kk)
+                    };
+                    (Some(t), depth + 1)
+                }
+                None => (None, 0),
+            };
+            regions.push(cr);
+            queue.push_back(Item { idx: regions.len() - 1, center: ce, tab: ntab, depth: nd });
+        }
+    }
+    regions
+}
+
+/// A wave (or batch of new regions) goes to rayon only when its estimated serial time exceeds this.
+const PAR_NS: f64 = 20_000.0;
+
+thread_local! {
+    static WS: std::cell::RefCell<Option<Tab>> = const { std::cell::RefCell::new(None) };
+}
+
 /// `pivot_solve` with the regions of each breadth-first wave expanded and built in parallel. The
-/// neighbour sets are merged in the order of the sequential method, so the same regions are found.
+/// neighbour sets are merged in the order of the sequential method, so the same regions are found
+/// in the same order. A wave runs in parallel only when the measured cost per region of the
+/// earlier waves predicts more than `PAR_NS` of serial work; with one thread, or for small
+/// problems, it is the serial method.
 fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegion> {
     use rayon::prelude::*;
     use std::sync::Arc;
-    let mut rng = StdRng::seed_from_u64(seed);
-    let Some(active_set) = program.gen_optimal_active_set(&mut rng) else { return vec![] };
-    let Some(initial) = crate::mpqp_utils::gen_cr_from_active_set(program, &active_set, false) else { return vec![] };
-    let nt = program.num_t();
-    let init_center = if nt > 1 { chebyshev_ball(&initial.e, &initial.f, &[]).map(|s| s.x[..nt].to_vec()) } else { None };
-    let mut regions = vec![initial.clone()];
+    use std::time::Instant;
+    if rayon::current_num_threads() <= 1 {
+        return pivot_solve(program, plcp, seed);
+    }
+    let Some((initial, init_center)) = initial_region(program, seed) else { return vec![] };
     let mut seen: HashSet<Vec<usize>> = HashSet::default();
     seen.insert(initial.active_set.clone());
-    let neq = plcp.eq.len();
-    let mut wave: Vec<Item> = vec![Item { cr: initial, center: init_center, tab: None, depth: 0 }];
+    let mut regions = vec![initial];
+    let mut wave: Vec<Item> = vec![Item { idx: 0, center: init_center, tab: None, depth: 0 }];
+    // measured serial cost (ns) of expanding one region and of building one candidate
+    let mut ns_expand: f64 = 0.0;
+    let mut ns_build: f64 = 0.0;
     while !wave.is_empty() {
-        // facets of every region of the wave
-        let expand = |ws: &mut Option<Tab>, Item { cr: cur, center, tab, depth }: Item| -> Option<(Arc<Tab>, usize, Vec<Cand>)> {
+        let expand = |ws: &mut Option<Tab>, item: Item| -> Option<(Arc<Tab>, usize, Vec<Cand>)> {
+            let Item { idx, center, tab, depth } = item;
+            let cur = &regions[idx];
             let tab = match tab {
                 Some(t) => t,
-                None => {
-                    let z: Vec<usize> = cur.active_set[neq..].iter().map(|c| plcp.ineq.iter().position(|x| x == c).unwrap()).collect();
-                    tableau_for(plcp, &z)?
-                }
+                None => tableau_of(plcp, cur)?,
             };
-            let mut cands = vec![];
-            for k in 0..cur.e.rows {
-                let nbrs = adjacent(plcp, &tab, cur.e.row(k), cur.f[k], &cur.e, &cur.f, ws);
-                if nbrs.is_empty() {
-                    continue;
-                }
-                let hint: Option<Vec<f64>> = center.as_ref().map(|c| {
-                    let a = cur.e.row(k);
-                    let sft = cur.f[k] - a.iter().zip(c).map(|(x, y)| x * y).sum::<f64>();
-                    c.iter().zip(a).map(|(ci, ai)| ci + sft * ai).collect()
-                });
-                for nb in nbrs {
-                    let z = match &nb {
-                        Nbr::Toggle(v, _) => z_toggle(&tab, plcp.n, *v),
-                        Nbr::Z(z) => z.clone(),
-                    };
-                    let piv = match nb {
-                        Nbr::Toggle(v, kk) if depth + 1 < REFACTOR => Some((v, kk)),
-                        _ => None,
-                    };
-                    cands.push(Cand { aset: plcp.active_set(z.into_iter()), hint: hint.clone(), piv });
-                }
-            }
+            let cands = expand_candidates(plcp, cur, center.as_ref(), &tab, depth, ws);
             Some((Arc::new(tab), depth, cands))
         };
-        let expanded: Vec<Option<(Arc<Tab>, usize, Vec<Cand>)>> = if wave.len() >= PAR_MIN {
-            wave.into_par_iter().map_init(|| None::<Tab>, |ws, item| expand(ws, item)).collect()
+        let nw = wave.len();
+        let go_par = nw >= 2 && ns_expand * nw as f64 >= PAR_NS;
+        let t0 = Instant::now();
+        let expanded: Vec<Option<(Arc<Tab>, usize, Vec<Cand>)>> = if go_par {
+            wave.into_par_iter().map(|item| WS.with(|w| expand(&mut w.borrow_mut(), item))).collect()
         } else {
             let mut ws = None;
             wave.into_iter().map(|item| expand(&mut ws, item)).collect()
         };
+        if !go_par {
+            let per = t0.elapsed().as_nanos() as f64 / nw as f64;
+            ns_expand = if ns_expand == 0.0 { per } else { 0.5 * (ns_expand + per) };
+        }
         // new active sets, in sequential order
         let mut jobs: Vec<(Arc<Tab>, usize, Cand)> = vec![];
         for (tab, depth, cands) in expanded.into_iter().flatten() {
@@ -756,28 +853,28 @@ fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalR
                 }
             }
         }
-        let build = |(tab, depth, c): (Arc<Tab>, usize, Cand)| -> Option<Item> {
-            let (cr, center) = if nt > 1 {
-                let law = program.optimal_control_law_dual(&c.aset)?;
-                let (cr, ce) = crate::mpqp_utils::gen_cr_from_law_hinted(program, &c.aset, law, c.hint.as_deref())?;
-                (cr, Some(ce))
-            } else {
-                (gen_cr_from_active_set_lambda_first(program, &c.aset, true)?, None)
-                };
-                let (ntab, nd) = match c.piv {
-                    Some((v, kk)) => {
-                        let mut t = (*tab).clone();
-                        t.pivot(v, kk);
-                        (Some(t), depth + 1)
-                    }
-                    None => (None, 0),
-                };
-                Some(Item { cr, center, tab: ntab, depth: nd })
+        let build = |(tab, depth, c): &(Arc<Tab>, usize, Cand)| -> Option<(CriticalRegion, Option<Vec<f64>>, Option<Tab>, usize)> {
+            let (cr, center) = build_cand(program, c)?;
+            let (ntab, nd) = match c.piv {
+                Some((v, kk)) => {
+                    (Some(tab.pivoted(v, kk)), depth + 1)
+                }
+                None => (None, 0),
+            };
+            Some((cr, center, ntab, nd))
         };
-        let built: Vec<Option<Item>> = if jobs.len() >= PAR_MIN { jobs.into_par_iter().map(build).collect() } else { jobs.into_iter().map(build).collect() };
-        wave = built.into_iter().flatten().collect();
-        for it in &wave {
-            regions.push(it.cr.clone());
+        let nj = jobs.len();
+        let go_par = nj >= 2 && ns_build * nj as f64 >= PAR_NS;
+        let t0 = Instant::now();
+        let built: Vec<Option<(CriticalRegion, Option<Vec<f64>>, Option<Tab>, usize)>> = if go_par { jobs.par_iter().map(build).collect() } else { jobs.iter().map(build).collect() };
+        if !go_par && nj > 0 {
+            let per = t0.elapsed().as_nanos() as f64 / nj as f64;
+            ns_build = if ns_build == 0.0 { per } else { 0.5 * (ns_build + per) };
+        }
+        wave = vec![];
+        for (cr, center, tab, depth) in built.into_iter().flatten() {
+            regions.push(cr);
+            wave.push(Item { idx: regions.len() - 1, center, tab, depth });
         }
     }
     regions
