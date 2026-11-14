@@ -11,11 +11,14 @@ use crate::linalg::Mat;
 use crate::program::MpProgram;
 use std::cmp::Ordering;
 
-pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Option<&[f64]>) -> Option<(CriticalRegion, Vec<f64>)> {
+pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Option<&[f64]>, law: Option<crate::program::ControlLaw>) -> Option<(CriticalRegion, Vec<f64>)> {
     use crate::mpqp_utils::kkt_region_from_law;
     use crate::utils::{numerically_nonzero_rows, remove_duplicate_rows};
     let nt = program.num_t();
-    let law = program.optimal_control_law_dual(active_set)?;
+    let law = match law {
+        Some(l) => l,
+        None => program.optimal_control_law_dual(active_set)?,
+    };
     let neq = program.num_equality_constraints();
     let crate::mpqp_utils::KktRegion { mut law, e: e_all, f: f_all, n_lambda, inactive, point: _ } = kkt_region_from_law(program, active_set, law);
     program.complete_primal_law(active_set, &mut law);
@@ -68,8 +71,7 @@ pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Opti
     let flags: Vec<bool> = match clip_flags(&e, &f, &order, &blo, &bhi) {
         Some(fl) => fl.iter().enumerate().map(|(p, &v)| if v >= 0 { v == 1 } else { crate::solver::lp::lp_feasible_from(&e, &f, &[p], &center) }).collect(),
         None => {
-            let law = program.optimal_control_law_dual(active_set)?;
-            return crate::mpqp_utils::gen_cr_from_law_hinted(program, active_set, law, hint);
+            return crate::mpqp_utils::gen_cr_from_law_hinted(program, active_set, law.clone(), hint);
         }
     };
     let mut kept_lambda = vec![];
