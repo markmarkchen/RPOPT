@@ -196,3 +196,46 @@ Rejected:
 | dropping region rows that cannot bind inside the parameter box before the nonemptiness LP | slower |
 | rank hints for subsets of rank-deficient sets from a tracked Gram-Schmidt dependency | slower (828 -> 1020 ms on sys3x2_N5): most of those subsets were already explored |
 | LU fallback before the rank test for failed Cholesky factorizations | wasted work on rank-deficient sets; LU now only after the rank test passes |
+
+## Large suite (`problems_large/`, `run_large.sh`)
+
+A second, larger set of problems (10^2 to 10^5 regions, theta dimension 2 to 10), all timed on a shared ("busy") machine.
+Results: `results/large.json`, `results/large.md`. Run with `bench/run_large.sh [cap_seconds]` from `ppopt_rs/`.
+
+**1. Explicit MPC, longer horizons and bigger plants** (`python mpc_problems.py problems_large --large`; the nine original
+problems in `problems/` are unchanged and byte-identical). `masses2_N8/N10/N12`, `sys3x2_N7/N9`, and spring chains with
+3, 4, 5 masses (`massesK_Nn`, theta = x0 of dimension 2K, one force input on the first mass, Ts = 0.5, |x| <= 4, |u| <= 0.5,
+Q = I, R = 1, LQR terminal cost). Each has a sidecar `<name>.model.json` (A, B, Q, R, P, N, bounds, `u_index`) that
+`ppopt_bench` uses to simulate closed loops, x+ = A x + B u(x), u = first input block of the explicit law.
+
+**2. POP mpQP test set** (Oberdieck, Diangelakis, Pistikopoulos, I&ECR 2016; `test_set.mat` of the repository
+darnstrom/cdc24-mpqp on GitHub, the set of Arnstrom and Axehill, CDC 2024). `pop_convert.py convert test_set.mat problems_large`
+writes `pop_001` ... `pop_100`. The MATLAB struct fields map as follows (nx variables, nt parameters):
+
+| .mat field | meaning | RPOPT JSON |
+|---|---|---|
+| `Q` (nx x nx), `c` (nx), `Ht` (nx x nt) | min 1/2 x'Qx + (c + Ht theta)'x | `Q`, `c`, `H = Ht` (the RPOPT objective is theta'H'x + c'x) |
+| `A`, `b`, `F` | A x <= b + F theta | `A`, `b`, `F` |
+| `Xmin`, `Xmax` (all finite) | Xmin <= x <= Xmax | extra rows I x <= Xmax and -I x <= -Xmin in `A`, `b`, with `F` = 0 |
+| `CRA`, `CRb`; `Tmin`, `Tmax` | CRA theta <= CRb, Tmin <= theta <= Tmax | `A_t = CRA`, `b_t = CRb` (the box rows coincide with CRA, CRb in all 100 problems; they are added only if missing) |
+| `Qt`, `ct`, `cc` | theta-only objective terms | all zero here, ignored; `tStart` (a feasible theta) unused |
+
+Rows of the stacked [A b F] are divided by the norm of the A row (entries reach 1e7); this does not change the problem.
+**Verification** (`pop_verify.py`, `results/pop_verify.json`): 20 random theta per problem inside CRA theta <= CRb (2000 in
+total, 967 feasible), the QP solved directly from the raw .mat data with quadprog (an independent solver; the converter code
+is not used) and compared with `MpProgram::solve_theta` on the converted JSON (`examples/solve_thetas.rs`): 0 mismatches in
+feasibility, maximum relative difference 1.4e-10 in x and 2.4e-10 in the objective.
+
+**3. Random mpQPs with more parameters** (`examples/gen_random.rs`, `problem_generator`): `rand_t<theta>_x<nx>_m<m>_s<seed>`
+with theta = 6, 8, 10, nx = 5, 6, m = 15 to 24 constraints plus variable bounds, seeds 0 and 1.
+
+**Runner changes in `ppopt_bench`.** `--max-seconds S` caps the first solve of every (problem, algorithm) (the run is recorded
+as `timed_out`; the solver thread cannot be cancelled, so the process re-executes itself with `--resume`, which skips pairs
+already in the output file); `--traj N,L` (default 1000,100) and `--no-traj`; `--geom-max-regions R` (default 15000) and
+`--bst-max-regions R` (default 3000) skip the partition geometry and the BST/multiway trees on huge partitions (the geometry took
+120 s at 10k regions, the BST has 1.7M nodes at 955 regions). Active-set agreement between algorithms is checked through a hash of
+the sorted active sets stored in the output; the 2000-sample gap/overlap/wrong-law check, the 2000-theta verify and the
+point-location mismatch counts run as before. Point location is timed in two query modes: uniform theta in the parameter box, and
+closed-loop trajectories (MPC: x+ = A x + B u from uniform random feasible initial states; POP and random: a random walk with
+steps of 2% of the box width, redrawn when leaving the partition); both report ns per query. A method too slow to run 100k queries
+in a few seconds is timed on a prefix of the query list (`queries_timed` in the JSON).

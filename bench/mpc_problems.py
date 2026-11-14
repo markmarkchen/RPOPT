@@ -87,7 +87,7 @@ def lqr_admissible_set(A, B, Ru, P, x_bound, u_bound, max_iter=200):
     return Hc[keep], kc[keep]
 
 
-def condensed_mpc(A, B, Qx, Ru, N, x_bound, u_bound, terminal_lqr=True, invariant_terminal=False):
+def condensed_mpc(A, B, Qx, Ru, N, x_bound, u_bound, terminal_lqr=True, invariant_terminal=False, model_out=None):
     """
     Condensed (state-eliminated) linear MPC with box constraints on states and inputs.
 
@@ -95,9 +95,13 @@ def condensed_mpc(A, B, Qx, Ru, N, x_bound, u_bound, terminal_lqr=True, invarian
     Cost: sum_{k=1}^{N-1} x_k'Qx x_k + x_N' P x_N + sum_{k=0}^{N-1} u_k'Ru u_k (times 1/2).
     With `invariant_terminal` the box on x_N is replaced by the maximal admissible set T of the
     unconstrained LQR (the terminal set of Mitze and Moennigmann 2020).
+    If `model_out` is a dict it is filled with the model data (for closed-loop simulation).
     """
     nx, nu = B.shape
     P = solve_discrete_are(A, B, Qx, Ru) if terminal_lqr else Qx
+    if model_out is not None:
+        model_out.update(A=A, B=B, Q=Qx, R=Ru, P=P, N=N, x_bound=numpy.asarray(x_bound), u_bound=numpy.asarray(u_bound),
+                         nx=nx, nu=nu, u_index=0)
 
     # prediction matrices x_k = Phi_k x0 + Gamma_k U
     Phi = []
@@ -213,7 +217,7 @@ def double_integrator(N, invariant_terminal=False):
                          invariant_terminal=invariant_terminal)
 
 
-def oscillating_masses(N, n_masses=2, Ts=0.5):
+def oscillating_masses(N, n_masses=2, Ts=0.5, model_out=None):
     """Chain of unit masses joined by unit springs, one force input on the first mass (nx = 2*n_masses)."""
     n = n_masses
     K = 2.0 * numpy.eye(n) - numpy.eye(n, k=1) - numpy.eye(n, k=-1)
@@ -224,15 +228,15 @@ def oscillating_masses(N, n_masses=2, Ts=0.5):
     A = M[:2 * n, :2 * n]
     B = M[:2 * n, 2 * n:]
     return condensed_mpc(A, B, numpy.eye(2 * n), numpy.array([[1.0]]), N,
-                         x_bound=numpy.full(2 * n, 4.0), u_bound=numpy.array([0.5]))
+                         x_bound=numpy.full(2 * n, 4.0), u_bound=numpy.array([0.5]), model_out=model_out)
 
 
-def two_input_system(N):
+def two_input_system(N, model_out=None):
     """A 3-state, 2-input open-loop unstable plant (common textbook-style benchmark)."""
     A = numpy.array([[1.1, 0.2, 0.0], [0.0, 0.9, 0.3], [0.1, 0.0, 0.95]])
     B = numpy.array([[0.0, 0.1], [0.1, 0.0], [0.05, 0.05]])
     return condensed_mpc(A, B, numpy.eye(3), 0.1 * numpy.eye(2), N,
-                         x_bound=numpy.array([5.0, 5.0, 5.0]), u_bound=numpy.array([1.0, 1.0]))
+                         x_bound=numpy.array([5.0, 5.0, 5.0]), u_bound=numpy.array([1.0, 1.0]), model_out=model_out)
 
 
 BENCHMARKS = {
@@ -258,9 +262,52 @@ def to_json(prob):
     return out
 
 
+# Larger problems (`python mpc_problems.py <dir> --large`): longer horizons, bigger systems. Each entry also gets a
+# sidecar `<name>.model.json` (A, B, Q, R, P, N, bounds) used by ppopt_bench for closed-loop query sequences.
+LARGE = {
+    'masses2_N8': lambda m: oscillating_masses(8, model_out=m),
+    'masses2_N10': lambda m: oscillating_masses(10, model_out=m),
+    'masses2_N12': lambda m: oscillating_masses(12, model_out=m),
+    'sys3x2_N7': lambda m: two_input_system(7, model_out=m),
+    'sys3x2_N9': lambda m: two_input_system(9, model_out=m),
+    'masses3_N2': lambda m: oscillating_masses(2, n_masses=3, model_out=m),
+    'masses3_N3': lambda m: oscillating_masses(3, n_masses=3, model_out=m),
+    'masses3_N4': lambda m: oscillating_masses(4, n_masses=3, model_out=m),
+    'masses3_N5': lambda m: oscillating_masses(5, n_masses=3, model_out=m),
+    'masses4_N2': lambda m: oscillating_masses(2, n_masses=4, model_out=m),
+    'masses3_N6': lambda m: oscillating_masses(6, n_masses=3, model_out=m),
+    'masses3_N7': lambda m: oscillating_masses(7, n_masses=3, model_out=m),
+    'masses4_N3': lambda m: oscillating_masses(3, n_masses=4, model_out=m),
+    'masses4_N4': lambda m: oscillating_masses(4, n_masses=4, model_out=m),
+    'masses4_N5': lambda m: oscillating_masses(5, n_masses=4, model_out=m),
+    'masses5_N2': lambda m: oscillating_masses(2, n_masses=5, model_out=m),
+    'masses5_N3': lambda m: oscillating_masses(3, n_masses=5, model_out=m),
+    'masses5_N4': lambda m: oscillating_masses(4, n_masses=5, model_out=m),
+}
+
+
+def model_to_json(model):
+    out = {}
+    for k, v in model.items():
+        out[k] = v.tolist() if isinstance(v, numpy.ndarray) else v
+    return out
+
+
 if __name__ == '__main__':
-    out_dir = Path(sys.argv[1] if len(sys.argv) > 1 else 'problems')
+    args = [a for a in sys.argv[1:] if not a.startswith('--')]
+    large = '--large' in sys.argv
+    out_dir = Path(args[0] if args else ('problems_large' if large else 'problems'))
     out_dir.mkdir(parents=True, exist_ok=True)
+    if large:
+        for name, builder in LARGE.items():
+            model = {}
+            prob = builder(model)
+            with open(out_dir / f'{name}.json', 'w') as fh:
+                json.dump(to_json(prob), fh)
+            with open(out_dir / f'{name}.model.json', 'w') as fh:
+                json.dump(model_to_json(model), fh)
+            print(name, 'vars', prob['A'].shape[1], 'cons', prob['A'].shape[0], 'params', prob['F'].shape[1])
+        sys.exit(0)
     for name, builder in BENCHMARKS.items():
         prob = builder()
         with open(out_dir / f'{name}.json', 'w') as fh:
