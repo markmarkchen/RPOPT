@@ -222,8 +222,29 @@ fn main() {
         for mult in [1usize, 4, 16] {
             let target = (geom.num_regions * mult).max(4);
             let ht = HashTable::new(&geom, target);
-            let info = json!({"cells": ht.num_cells(), "mean_candidates": ht.mean_candidates(), "max_candidates": ht.max_candidates()});
+            let info = json!({"cells": ht.num_cells(), "mean_candidates": ht.mean_candidates(), "max_candidates": ht.max_candidates(), "mixed_cells": ht.mixed_cells(), "rows_per_mixed": ht.mean_rows_per_mixed_cell()});
             locators.push(timed(&mut || (Box::new(HashTable::new(&geom, target)), info.clone())));
+        }
+        {
+            // storage cap: 4x the storage of the original uniform 16x-regions hash table
+            let old16: usize = match name.as_str() {
+                "di_doc_N3" => 405,
+                "di_N4" => 505,
+                "di_N6" | "di_N10" | "di_N8" => 591,
+                "masses2_N4" => 34647,
+                "masses2_N6" => 112707,
+                "sys3x2_N3" => 18938,
+                "sys3x2_N5" => 84650,
+                _ => HashTable::new(&geom, (geom.num_regions * 16).max(4)).storage_floats(),
+            };
+            let mut limits: Vec<(String, usize)> = [1usize, 4, 16, 64].iter().map(|m| (format!("{m}x old16"), m * old16 * 8)).collect();
+            limits.extend([(1usize << 20, "1 MB"), (8 << 20, "8 MB"), (64 << 20, "64 MB")].iter().map(|&(b, l)| (l.to_string(), b)));
+            for (label, bytes) in limits {
+                let ht = HashTable::with_storage_limit(&geom, bytes);
+                let label: &'static str = Box::leak(format!("hash table (limit {label})").into_boxed_str());
+                let info = json!({"limit_bytes": bytes, "storage_bytes": ht.storage_bytes(), "fits": ht.storage_bytes() <= bytes, "base_cells": ht.num_cells(), "mixed_leaves": ht.mixed_cells(), "mean_candidates": ht.mean_candidates(), "rows_per_mixed": ht.mean_rows_per_mixed_cell()});
+                locators.push(timed(&mut || (Box::new(HashTable::with_storage_limit(&geom, bytes).with_name(label)), info.clone())));
+            }
         }
         locators.push(timed(&mut || (Box::new(Yann::new(&sol)), json!({}))));
 
