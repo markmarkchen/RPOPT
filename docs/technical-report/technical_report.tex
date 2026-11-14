@@ -71,48 +71,41 @@ mpLP and 1.10x on mpQP; the 1.5x target was met for mpLP and not for mpQP.
 adds further algorithms from the literature (Tables~\ref{tab:exact} to~\ref{tab:mi}), adds nine other exact point location methods, saves solutions to a bit-exact
 binary format, and exposes \ppopt{}-compatible Python bindings (\code{rpopt.install\_as\_ppopt()}).
 
-\textbf{Headline results.} Table~\ref{tab:headline} gives the main numbers. All are measured against the current
-\ppopt{} GitHub \code{main} with Gurobi 12 and quadprog, on one Apple M4 Max with no other load, unless marked
-\busy{} (see \S\ref{sec:load}).
+\textbf{Headline results.} Table~\ref{tab:solvers} gives the speedup against each of \ppopt{}'s four original solvers,
+and Table~\ref{tab:headline} the other comparisons. All are measured against the current \ppopt{} GitHub \code{main}
+with Gurobi 12 and quadprog, on one Apple M4 Max with no other load, unless marked \busy{} (see \S\ref{sec:load}).
 
 \begin{table}[!htbp]
 \centering\small
-\caption{Headline results. \ppopt{}: GitHub \code{main}, Gurobi 12 (LPs), quadprog (QPs). \rpopt{} times are the faster median of two full runs. Sources: \code{bench/results/speedup.md}, \code{mplp\_speedup.md}, \code{mplp\_same\_algorithm.md}, the two scoreboard files.}
-\label{tab:headline}
-\begin{tabularx}{\textwidth}{@{}Y L{4.8cm}@{}}
-\toprule
-comparison & result \\
-\midrule
-mpQP, every completed run, same algorithm, 1 thread (32 runs) & \textbf{389x to 2,703x}, median 1,020x; 32 of 32 at 200x or more \\
-mpQP, PPOPT's fastest algorithm against \rpopt{}'s fastest, per problem (9 problems) & \textbf{755x to 4,167x} \\
-combinatorial on \code{di\_N10} and \code{sys3x2\_N5}: PPOPT unfinished after 4 h; \rpopt{} 6.01 s and 6.53 s & $>$2,398x and $>$2,206x \\
-parallel against parallel (PPOPT process pool, \rpopt{} 16 threads), 7 finished runs & 1,286x to 5,755x, median 2,110x \\
-mpLP, \rpopt{}'s fastest against PPOPT's fastest gap-free solver, 6 problems & \textbf{836x to 18,028x} \\
-mpLP where PPOPT has no gap-free answer within 120 s, 7 problems & $>$6,400x \\
-mpLP, same algorithm, 23 pairs & median 261x (16x to 17,227x) \\
-point location, per query (hash table against PPOPT's numba \code{PointLocation}) & 5 to 68~\textmu s against 9 to 32 ns: about 590x to 3,600x \\
-release-to-release (frozen commit \code{778cdb9}), mpLP, 54 pairs & median \textbf{3.48x}, none below 0.95x \\
-release-to-release, mpQP, 60 pairs & median \textbf{1.10x}, none below 0.95x \\
-\bottomrule
-\end{tabularx}
-\end{table}
-
-Table~\ref{tab:solvers} breaks the same-algorithm speedup down by each of \ppopt{}'s four original solvers, for mpQP and for mpLP.
-
-\begin{table}[!htbp]
-\centering\small
-\caption{Speedup of \rpopt{} (one thread) over each \ppopt{} solver, same algorithm: median (range) and number of runs \ppopt{} finished. Sources: \code{bench/results/speedup.md} and \code{mplp\_same\_algorithm.md}.}
+\caption{Speedup over each \ppopt{} solver, same algorithm, one thread, runs where \ppopt{} finished with a gap-free answer: median (range).}
 \label{tab:solvers}
-\begin{tabularx}{\textwidth}{@{}L{3.3cm} Y Y@{}}
+\begin{tabular}{@{}lrr@{}}
 \toprule
 \ppopt{} solver & mpQP & mpLP \\
 \midrule
-\code{combinatorial} & 1,001x (705x to 1,665x), 5 runs; plus 4 runs \ppopt{} did not finish: $>$1,049x to $>$2,398x & 922x (780x to 1,475x), 3 runs \\
-\code{graph} & 1,065x (575x to 2,577x), 9 runs & 2,882x (1,175x to 17,227x), 5 runs \\
-\code{geometric} & 1,014x (559x to 2,257x), 9 runs & 231x (185x to 968x), 5 runs where \ppopt{}'s answer is gap-free; 16x to 351x on the 7 where \ppopt{}'s \code{geometric} leaves 0.3\% to 77\% uncovered \\
-\code{combinatorial\_graph} & 1,020x (389x to 2,703x), 9 runs & 234x (213x to 261x), 3 runs \\
+\code{combinatorial} & 1,001x (705x to 1,665x) & 922x (780x to 1,475x) \\
+\code{graph} & 1,065x (575x to 2,577x) & 1,195x (1 run) \\
+\code{geometric} & 1,014x (559x to 2,257x) & 231x (185x to 968x) \\
+\code{combinatorial\_graph} & 1,020x (389x to 2,703x) & 234x (213x to 261x) \\
 \bottomrule
-\end{tabularx}
+\end{tabular}
+
+\vspace{1.2em}
+\caption{Other comparisons. ``$>$'' marks lower bounds, where \ppopt{} stopped at its time limit.}
+\label{tab:headline}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+comparison & cases & median & range \\
+\midrule
+mpQP, \ppopt{}'s fastest solver against \rpopt{}'s fastest & 9 problems & 1,798x & 755x to 4,167x \\
+mpQP, parallel against parallel & 7 runs & 2,110x & 1,286x to 5,755x \\
+mpLP, \rpopt{}'s fastest against \ppopt{}'s fastest gap-free solver & 6 problems & 1,422x & 836x to 18,028x \\
+mpLP, no gap-free \ppopt{} answer within 120 s & 7 problems & $>$134,000x & $>$6,400x to $>$305,000x \\
+point location, per query & 9 problems & 676x & 593x to 3,603x \\
+release-to-release (commit \code{778cdb9}), mpLP & 54 pairs & 3.48x & 0.97x to 1,269x \\
+release-to-release, mpQP & 60 pairs & 1.10x & 0.98x to 1.79x \\
+\bottomrule
+\end{tabular}
 \end{table}
 
 \textbf{What did not work.} The internal target of a 1.5x speedup over the previous release was met on mpLP and not on mpQP.
