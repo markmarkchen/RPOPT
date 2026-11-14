@@ -16,22 +16,30 @@ mpLP, mpQP, mpMILP and mpMIQP solvers, plus fast exact point location.
 
 ## Speedup over PPOPT
 
-| task (explicit MPC benchmarks) | PPOPT | RPOPT | speedup |
+| | comparison | cases | median | range |
+|---|---|---:|---:|---:|
+| **mpQP** | same algorithm, 1 thread | 32 runs | **1,020x** | 389x to 2,703x |
+| | fastest algorithm against fastest algorithm | 9 problems | **1,798x** | 755x to 4,167x |
+| | parallel against parallel | 7 runs | **2,110x** | 1,286x to 5,755x |
+| **mpLP** | fastest against PPOPT's fastest gap-free algorithm | 6 problems | **1,422x** | 836x to 18,028x |
+| | no gap-free PPOPT answer within 120 s | 7 problems | **> 134,000x** | > 6,400x to > 305,000x |
+| **point location** | per query, PPOPT (numba) against the RPOPT hash table | 9 problems | **676x** | 593x to 3,603x |
+
+| example | PPOPT | RPOPT | speedup |
 |---|---:|---:|---:|
-| **mpQP, every completed run**, same algorithm, 1 thread (32 runs) | | | **389x to 2,703x**<br>median 1,020x |
-| mpQP, PPOPT's fastest algorithm vs RPOPT's fastest, per problem | | | **755x to 4,167x** |
-| combinatorial, di_N10 and sys3x2_N5 | > 4 h (unfinished) | 6.0 s, 6.5 s | **> 2,200x** |
-| geometric, sys3x2_N5 (973 regions) | 18.6 s | 17.5 ms | **1,062x** |
-| **mpLP** (degenerate MPC), RPOPT's fastest vs PPOPT's fastest gap-free algorithm (6 problems) | 0.14 to 84 s | 0.17 to 49 ms | **836x to 18,028x** |
-| mpLP where PPOPT gives no gap-free answer within 120 s (7 problems) | > 120 s | 0.4 to 19 ms | **> 6,400x** |
-| point location, per query | 5 to 68 µs | 9 to 32 ns | **590x to 3,600x** |
+| mpQP sys3x2_N5, 973 regions (PPOPT `geometric`, RPOPT `mplcp`) | 18.6 s | 9.6 ms | 1,943x |
+| mpQP di_N10, `combinatorial` | > 4 h, unfinished | 6.0 s | > 2,398x |
+| mpLP masses2one_N2, 828 regions (PPOPT `geometric`, RPOPT `mplp_lex`) | 44.6 s | 24 ms | 1,869x |
+| point location, sys3x2_N5 | 68.5 µs | 19 ns | 3,603x |
 
 <sub>Quiet-machine runs on one Apple M4 Max. PPOPT is the GitHub `main` source with Gurobi 12 and quadprog. mpQP: the
-12 MPC problems in `bench/problems`. mpLP: infinity-norm and 1-norm MPC (`bench/problems_lp`), checked at 1,000
-random parameters per problem. PPOPT's geometric leaves 50% to 77% of the feasible parameter set uncovered on five of
-them, so mpLP rows compare against PPOPT's fastest algorithm with no sampled gap. Point location uses the
-storage-limited hash table. RPOPT also runs 1.5x to 2.9x faster than `pdaqp`, the authors' own implementation of
-Arnström and Axehill (2024). Details: [Performance](#performance) and [bench/README.md](bench/README.md).</sub>
+12 MPC problems in `bench/problems`; the 32 runs are those PPOPT finished within 300 s (four combinatorial runs it
+did not finish are lower bounds of > 1,049x to > 2,398x). mpLP: infinity-norm and 1-norm MPC (`bench/problems_lp`),
+checked at 1,000 random parameters per problem. PPOPT's geometric leaves 50% to 77% of the feasible parameter set
+uncovered on five of them, so mpLP rows compare against PPOPT's fastest algorithm with no sampled gap; "> " marks
+lower bounds, where PPOPT stopped at its time limit. Point location uses the storage-limited hash table. RPOPT also
+runs 1.5x to 2.9x faster than `pdaqp`, the authors' own implementation of Arnström and Axehill (2024). Details:
+[Performance](#performance) and [bench/README.md](bench/README.md).</sub>
 
 ## Highlights
 
@@ -53,8 +61,8 @@ Arnström and Axehill (2024). Details: [Performance](#performance) and [bench/RE
 - **Exact mixed-integer comparison.** mp-MIQP solutions with quadric region boundaries (Oberdieck and
   Pistikopoulos 2015), in addition to PPOPT's overlapping enumeration.
 - **Fast online evaluation.** Point location takes 9 to 32 ns per query with a hash table built to a storage
-  budget. Nine other exact locators are included, and all of them agree on every query, including points on
-  region boundaries.
+  budget. Nine other exact locators are included. The table, trees, walking and sequential methods return the same
+  region as `Solution::get_region` on every tested query, including points on region boundaries.
 - **Drop-in Python.** PPOPT-compatible bindings: `rpopt.install_as_ppopt()` runs existing PPOPT scripts unchanged.
 - **Deployable.** Solutions and point location indexes save to a bit-exact binary format and load in about 1 ms.
 
@@ -142,7 +150,7 @@ function. Every exact method returns the same set of critical regions as PPOPT o
 |---|---|---|---|
 | `combinatorial`, `combinatorial_parallel` | Gupta, Bhartiya, Nataraj 2011 | PPOPT | exhaustive over active sets; exponential in the horizon |
 | `graph`, `graph_exp`, `graph_parallel` | Oberdieck et al. 2017, connected graph | PPOPT | `graph_exp` has no pruning list; on mpLPs, one-pivot swaps plus a facet-completion pass make the partition gap-free |
-| `geometric`, `geometric_parallel` | facet stepping (Spjøtvold et al. 2006) | PPOPT | usually the fastest serial method; fixed for degenerate problems (see below) |
+| `geometric`, `geometric_parallel` | facet stepping (Spjøtvold et al. 2006) | PPOPT | handles every program class; fixed for degenerate problems (see below); skips facets whose neighbour is already known |
 | `combinatorial_graph`, `combinatorial_graph_parallel` | Arnström, Axehill 2024, as simplified in PPOPT | PPOPT | breadth-first visit order |
 | `parametric_daqp` | Arnström, Axehill 2024, as published | paper | least-distance transformation and DAQP subproblems; 1.5x to 2.9x faster than the authors' `pdaqp` |
 | `ahmadi` | Ahmadi-Moshkenani, Johansen, Olaru 2018 | paper | handles LICQ and strict-complementarity violations (PPOPT ships an empty stub) |
@@ -185,9 +193,9 @@ function. Every exact method returns the same set of critical regions as PPOPT o
 ## Point location
 
 All locators implement `point_location::PointLocator`: `locate(theta) -> Option<region index>`. Every method is
-exact: the candidate region is always verified with the same halfspace test. All methods share one tie rule: a
-region that contains θ strictly wins over one that contains it only within the tolerance, so they return the same
-region as `Solution::get_region` even on facets. A region that holds θ only within the tolerance would extrapolate
+exact: the candidate region is always verified with the same halfspace test. All methods except the descriptor
+function and YANN share one tie rule: a region that contains θ strictly wins over one that contains it only within
+the tolerance, so they return the same region as `Solution::get_region` even on facets. A region that holds θ only within the tolerance would extrapolate
 its law past its own boundary. Region classification for the trees and the hash table is conservative: interiors
 are certified, and thin regions are kept as candidates rather than dropped.
 
