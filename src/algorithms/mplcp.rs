@@ -12,7 +12,7 @@
 //! complement of M on the equality block) and are always in the active set.
 //!
 //! Tableau form (compact, one column per nonbasic variable): x_B = ρ + T y_N, where the rows of ρ
-//! are [constant | θ coefficients | β]. Variables: w_i = i, z_i = n + i, the facet parameter α = 2n.
+//! are [constant | θ coefficients] (the perturbation block β is implied by T, see `pivot_facet`). Variables: w_i = i, z_i = n + i, the facet parameter α = 2n.
 
 use crate::critical_region::CriticalRegion;
 use crate::fxhash::FxHashSet as HashSet;
@@ -286,12 +286,11 @@ impl Tab {
 /// principal pivot per z row (nonsingular when M_zz is positive definite).
 fn tableau_for(p: &Plcp, z: &[usize]) -> Option<Tab> {
     let (n, nt) = (p.n, p.nt);
-    let w = 1 + nt + n;
+    let w = 1 + nt;
     let mut rho = vec![0.0; n * w];
     for i in 0..n {
         rho[i * w] = p.q[i];
         rho[i * w + 1..i * w + 1 + nt].copy_from_slice(&p.r[i * nt..(i + 1) * nt]);
-        rho[i * w + 1 + nt + i] = 1.0;
     }
     let mut tab = Tab { n, nc: n, w, t: p.m.clone(), rho, row_var: (0..n).collect(), col_var: (n..2 * n).collect(), pend: None };
     for &i in z {
@@ -356,6 +355,35 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
         // P: rows decreasing in the entering variable
         let a: Vec<f64> = (0..n).map(|i| -tab.tv(i, e)).collect();
         let w = tab.w;
+        // the perturbation block β = ∂x_B/∂ε of the tableau is not stored: column j of β is
+        // -T[:, c] when w_j is nonbasic in column c (its column of the pivoted system is e_j), and
+        // the unit vector of its row when w_j is basic (bitwise what the stored block would hold)
+        let mut wcol = vec![usize::MAX; n];
+        for (c, &v) in tab.col_var.iter().enumerate() {
+            if v < n {
+                wcol[v] = c;
+            }
+        }
+        let mut wrow = vec![usize::MAX; n];
+        for (r, &v) in tab.row_var.iter().enumerate() {
+            if v < n {
+                wrow[v] = r;
+            }
+        }
+        let rfull = |i: usize, k: usize| -> f64 {
+            if k < w {
+                tab.rv(i, k)
+            } else {
+                let j = k - w;
+                if wcol[j] != usize::MAX {
+                    -tab.tv(i, wcol[j])
+                } else if wrow[j] == i {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
+        };
         let rowmax = |i: usize| (0..1 + d1).fold(0.0f64, |m, k| m.max(tab.rv(i, k).abs()));
         let pset: Vec<usize> = (0..n).filter(|&i| a[i] > PTOL).collect();
         if pset.is_empty() {
@@ -374,7 +402,7 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
         }
         if !pz.is_empty() {
             // Case 1: leaving variable independent of θ_f
-            let beta = |i: usize| -> Vec<f64> { (1 + d1..w).map(|k| tab.rv(i, k)).collect() };
+            let beta = |i: usize| -> Vec<f64> { (w..w + n).map(|k| rfull(i, k)).collect() };
             let mut l = pz[0];
             for &i in &pz[1..] {
                 let u: Vec<f64> = beta(i).iter().map(|v| v / a[i]).collect();
@@ -408,7 +436,7 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
                 if j == l {
                     continue;
                 }
-                let g: Vec<f64> = (0..w).map(|k| a[l] * tab.rv(j, k) - a[j] * tab.rv(l, k)).collect();
+                let g: Vec<f64> = (0..w + n).map(|k| a[l] * rfull(j, k) - a[j] * rfull(l, k)).collect();
                 let gq_zero = g[1..1 + d1].iter().all(|v| v.abs() <= ZTOL);
                 if gq_zero {
                     let mut v = vec![g[0]];
@@ -556,7 +584,7 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         }
     }
     let nb = null_basis(&g);
-    let w = 1 + d1 + n;
+    let w = 1 + d1;
     // work tableau: n x (n+1) with the α column last
     let nc = n + 1;
     // the buffers of the previous work tableau are reused (every entry is overwritten)
@@ -569,7 +597,6 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         for (c, v) in nb.iter().enumerate() {
             work.rho[i * w + 1 + c] = (0..nt).map(|k| rr[1 + k] * v[k]).sum();
         }
-        work.rho[i * w + 1 + d1..(i + 1) * w].copy_from_slice(&rr[1 + nt..]);
     }
     work.row_var.copy_from_slice(&tab.row_var);
     work.col_var[..n].copy_from_slice(&tab.col_var);
