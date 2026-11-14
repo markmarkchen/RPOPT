@@ -118,8 +118,10 @@ pub fn solve_mpqp_with(program: &Arc<MpProgram>, algorithm: MpqpAlgorithm, opts:
         Geometric => geometric(program, opts, false),
         GeometricParallel => geometric(program, opts, true),
         Ahmadi => ahmadi::ahmadi(program),
+        Mplcp if program.q.is_none() => mplp_lex::regions(program, opts.seed),
         Mplcp => mplcp::regions(program, opts.seed, mplcp::Method::Pivot),
         MplcpEnum => mplcp::regions(program, opts.seed, mplcp::Method::Enumeration),
+        MplcpParallel if program.q.is_none() => mplp_lex::regions(program, opts.seed),
         MplcpParallel => mplcp::regions(program, opts.seed, mplcp::Method::PivotParallel),
         MplpLex => {
             if program.is_qp() {

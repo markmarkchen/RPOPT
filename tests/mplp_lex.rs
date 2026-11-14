@@ -356,3 +356,15 @@ fn random_integer_degenerate() {
         check_degenerate(&format!("random-int seed {seed}"), p, false);
     }
 }
+
+/// mplcp and mplcp_parallel on an mpLP dispatch to mplp_lex and give its regions.
+#[test]
+fn mplcp_on_mplp_dispatches_to_lex() {
+    let p = Arc::new(generate_mplp(6, 2, 20, 1));
+    let lex = region_signature(&solve_mpqp(&p, MpqpAlgorithm::MplpLex));
+    for alg in [MpqpAlgorithm::Mplcp, MpqpAlgorithm::MplcpParallel] {
+        let sol = solve_mpqp(&p, alg);
+        assert!(!sol.critical_regions.is_empty());
+        assert_eq!(region_signature(&sol), lex);
+    }
+}

@@ -49,6 +49,12 @@ use std::collections::VecDeque;
 
 const TOL: f64 = 1e-9;
 
+// TEMP PROFILE
+use std::sync::atomic::{AtomicU64, Ordering as AO};
+static T: [AtomicU64; 8] = [const { AtomicU64::new(0) }; 8];
+fn tadd(i: usize, t: std::time::Instant) { T[i].fetch_add(t.elapsed().as_nanos() as u64, AO::Relaxed); }
+fn cadd(i: usize, n: u64) { T[i].fetch_add(n, AO::Relaxed); }
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Fail {
     Infeasible,
@@ -91,132 +97,246 @@ struct Lex<'a> {
     neq: usize,
     m: usize,
     nx: usize,
-    /// width of the primal lex vectors (value, γ, ε_1..ε_m)
-    w1: usize,
-    /// width of the dual lex vectors (value, γ, δ_1..δ_n)
-    w2: usize,
 }
 
-/// Quantities of a basis: β = A_B^{-1}, the slack lex rows of the nonbasic constraints and the
-/// multiplier lex rows of the basis (rows follow the order of the basis list).
-struct State {
-    binv: Mat,
-    slack: Vec<f64>,
-    lam: Vec<f64>,
+/// Working basis: the basis list (equality rows first), β = A_B^{-1} (nx x nx) and the tableau
+/// T = A β (m x nx, row j = A_j β). The lexicographic slack row of a nonbasic constraint j is
+/// [ q0_j - A_j x0 | q1_j - A_j x1 | e_j - T_j E_B ]: its identity block is nonzero only in the
+/// columns {j} ∪ B, so it is never stored; T_j gives it.
+#[derive(Clone)]
+struct Work {
+    b: Vec<usize>,
+    binv: Vec<f64>,
+    t: Vec<f64>,
 }
+
+/// Scratch buffers of one `solve` call, reused across pivots.
+struct Scratch {
+    x0: Vec<f64>,
+    x1: Vec<f64>,
+    s0: Vec<f64>,
+    s1: Vec<f64>,
+    in_b: Vec<bool>,
+    bs: Vec<(usize, usize)>,
+    cols: Vec<(usize, Option<usize>)>,
+    lam: Vec<f64>,
+    lam2: Vec<f64>,
+}
+
+impl Scratch {
+    fn new(m: usize, nx: usize) -> Self {
+        Scratch {
+            x0: vec![0.0; nx],
+            x1: vec![0.0; nx],
+            s0: vec![0.0; m],
+            s1: vec![0.0; m],
+            in_b: vec![false; m],
+            bs: Vec::with_capacity(nx),
+            cols: Vec::with_capacity(nx + 2),
+            lam: vec![0.0; nx + 2],
+            lam2: vec![0.0; nx + 2],
+        }
+    }
+}
+
+/// Fresh factorizations are taken after this many pivots (drift control of the rank-1 updates).
+const REFRESH: usize = 25;
 
 impl<'a> Lex<'a> {
     fn new(a: &'a Mat, neq: usize) -> Self {
-        Lex { a, neq, m: a.rows, nx: a.cols, w1: 2 + a.rows, w2: 2 + a.cols }
+        Lex { a, neq, m: a.rows, nx: a.cols }
     }
 
-    /// Lex right hand side [q0 | q1 | I] (m x w1) and lex cost [d0 | d1 | I] (nx x w2).
-    fn lex_data(&self, q0: &[f64], q1: &[f64], d0: &[f64], d1: &[f64]) -> (Mat, Mat) {
-        let mut q = Mat::zeros(self.m, self.w1);
-        for j in 0..self.m {
-            q[(j, 0)] = q0[j];
-            q[(j, 1)] = q1[j];
-            q[(j, 2 + j)] = 1.0;
-        }
-        let mut d = Mat::zeros(self.nx, self.w2);
-        for k in 0..self.nx {
-            d[(k, 0)] = d0[k];
-            d[(k, 1)] = d1[k];
-            d[(k, 2 + k)] = 1.0;
-        }
-        (q, d)
-    }
-
-    fn state(&self, b: &[usize], q: &Mat, d: &Mat) -> Result<State, Fail> {
-        let (nx, m, w1, w2) = (self.nx, self.m, self.w1, self.w2);
+    /// β and T from scratch for the basis `b`.
+    fn fresh(&self, b: &[usize], w: &mut Work) -> Result<(), Fail> {
         let ab = self.a.select_rows(b);
         let lu = Lu::new(&ab).ok_or(Fail::Singular)?;
-        let binv = lu.solve_mat(&Mat::eye(nx));
-        let x = binv.matmul(&q.select_rows(b));
-        let mut in_b = vec![false; m];
-        for &i in b {
-            in_b[i] = true;
-        }
-        let mut slack = vec![0.0; m * w1];
-        for j in 0..m {
-            if in_b[j] {
-                continue;
-            }
-            let aj = self.a.row(j);
-            let out = &mut slack[j * w1..(j + 1) * w1];
-            for c in 0..w1 {
-                let mut s = q[(j, c)];
-                let mut mag = s.abs();
-                for k in 0..nx {
-                    let t = aj[k] * x[(k, c)];
-                    s -= t;
-                    mag += t.abs();
-                }
-                // cancellation noise of the numeric columns counts as an exact tie
-                if c < 2 && s.abs() < 1e-12 * mag {
-                    s = 0.0;
-                }
-                out[c] = s;
-            }
-        }
-        // multipliers  λ_B = -β' D
-        let mut lam = vec![0.0; nx * w2];
-        for p in 0..nx {
-            for c in 0..w2 {
-                let mut s = 0.0;
-                let mut mag = 0.0;
-                for k in 0..nx {
-                    let t = binv[(k, p)] * d[(k, c)];
-                    s -= t;
-                    mag += t.abs();
-                }
-                if c < 2 && s.abs() < 1e-12 * mag {
-                    s = 0.0;
-                }
-                lam[p * w2 + c] = s;
-            }
-        }
-        Ok(State { binv, slack, lam })
+        let binv = lu.solve_mat(&Mat::eye(self.nx));
+        let t = self.a.matmul(&binv);
+        w.b.clear();
+        w.b.extend_from_slice(b);
+        w.binv = binv.data;
+        w.t = t.data;
+        Ok(())
     }
 
-    /// Lexicographic simplex from the basis `b` (equality rows in the first `neq` positions) for
-    /// the lex data (q, d). Phase 1 (dual simplex with the artificial multipliers `cp`, which
-    /// keeps the dual feasible and removes lex-infeasible slack rows) gives a lex-feasible basis,
-    /// phase 2 (primal simplex with the lexicographic ratio test (7)) the lex-optimal one.
-    fn solve(&self, q: &Mat, d: &Mat, mut b: Vec<usize>, cp: &[f64]) -> Result<Vec<usize>, Fail> {
-        let (nx, m, w1, w2) = (self.nx, self.m, self.w1, self.w2);
-        let cap = 200 + 20 * (m + nx);
-        for _ in 0..cap {
-            let st = self.state(&b, q, d)?;
-            let mut in_b = vec![false; m];
-            for &i in &b {
-                in_b[i] = true;
+    /// Row j enters the basis at position p (rank-1 update of β and T).
+    fn pivot(&self, w: &mut Work, p: usize, j: usize) {
+        let nx = self.nx;
+        let u: Vec<f64> = w.t[j * nx..(j + 1) * nx].to_vec();
+        let up = u[p];
+        let ratio: Vec<f64> = u.iter().map(|v| v / up).collect();
+        for k in 0..nx {
+            let row = &mut w.binv[k * nx..(k + 1) * nx];
+            let cp = row[p];
+            for q in 0..nx {
+                row[q] -= cp * ratio[q];
             }
+            row[p] = cp / up;
+        }
+        for i in 0..self.m {
+            let row = &mut w.t[i * nx..(i + 1) * nx];
+            let cp = row[p];
+            for q in 0..nx {
+                row[q] -= cp * ratio[q];
+            }
+            row[p] = cp / up;
+        }
+        w.b[p] = j;
+    }
+
+    /// Value of the lexicographic slack row j (divided by `div`) in the identity column c, where
+    /// `pos` is the basis position of c if c is basic.
+    #[inline]
+    fn eps_val(&self, w: &Work, j: usize, div: f64, c: usize, pos: Option<usize>) -> f64 {
+        let mut v = if c == j { 1.0 } else { 0.0 };
+        if let Some(p) = pos {
+            v -= w.t[j * self.nx + p];
+        }
+        v / div
+    }
+
+    /// Lexicographic sign of the slack row j.
+    #[inline]
+    fn slack_sign(&self, w: &Work, sc: &Scratch, j: usize) -> i32 {
+        let (a, b) = (sc.s0[j], sc.s1[j]);
+        if a > TOL {
+            return 1;
+        }
+        if a < -TOL {
+            return -1;
+        }
+        if b > TOL {
+            return 1;
+        }
+        if b < -TOL {
+            return -1;
+        }
+        for &(c, p) in &sc.bs {
+            if c > j {
+                break;
+            }
+            let v = -w.t[j * self.nx + p];
+            if v > TOL {
+                return 1;
+            }
+            if v < -TOL {
+                return -1;
+            }
+        }
+        1
+    }
+
+    /// Lexicographic comparison of the slack rows j / dj and k / dk.
+    fn slack_cmp(&self, w: &Work, sc: &mut Scratch, j: usize, dj: f64, k: usize, dk: f64) -> Ordering {
+        let d = sc.s0[j] / dj - sc.s0[k] / dk;
+        if d > TOL {
+            return Ordering::Greater;
+        }
+        if d < -TOL {
+            return Ordering::Less;
+        }
+        let d = sc.s1[j] / dj - sc.s1[k] / dk;
+        if d > TOL {
+            return Ordering::Greater;
+        }
+        if d < -TOL {
+            return Ordering::Less;
+        }
+        // identity block over the columns B ∪ {j, k} in increasing order
+        sc.cols.clear();
+        sc.cols.extend(sc.bs.iter().map(|&(c, p)| (c, Some(p))));
+        for x in [j, k] {
+            let at = sc.cols.partition_point(|&(c, _)| c < x);
+            sc.cols.insert(at, (x, None));
+        }
+        for &(c, p) in &sc.cols {
+            let d = self.eps_val(w, j, dj, c, p) - self.eps_val(w, k, dk, c, p);
+            if d > TOL {
+                return Ordering::Greater;
+            }
+            if d < -TOL {
+                return Ordering::Less;
+            }
+        }
+        Ordering::Equal
+    }
+
+    /// Lexicographic simplex from the basis in `w` (equality rows in the first `neq` positions) for
+    /// the lex data (q0, q1 | d0, d1). Phase 1 (dual simplex with the artificial multipliers `cp`,
+    /// which keeps the dual feasible and removes lex-infeasible slack rows) gives a lex-feasible
+    /// basis, phase 2 (primal simplex with the lexicographic ratio test (7)) the lex-optimal one.
+    fn solve(&self, w: &mut Work, sc: &mut Scratch, q0: &[f64], q1: &[f64], d0: &[f64], d1: &[f64], cp: &[f64]) -> Result<(), Fail> {
+        let (nx, m) = (self.nx, self.m);
+        let cap = 200 + 20 * (m + nx);
+        let mut since = 0usize;
+        for _ in 0..cap {
+            if since >= REFRESH {
+                let b = w.b.clone();
+                self.fresh(&b, w)?;
+                since = 0;
+            }
+            let t0 = std::time::Instant::now();
+            // x = β q_B and the numeric slack columns
+            for k in 0..nx {
+                let row = &w.binv[k * nx..(k + 1) * nx];
+                let (mut a0, mut a1) = (0.0, 0.0);
+                for (p, &bp) in w.b.iter().enumerate() {
+                    a0 += row[p] * q0[bp];
+                    a1 += row[p] * q1[bp];
+                }
+                sc.x0[k] = a0;
+                sc.x1[k] = a1;
+            }
+            sc.in_b.iter_mut().for_each(|v| *v = false);
+            for &i in &w.b {
+                sc.in_b[i] = true;
+            }
+            for j in 0..m {
+                if sc.in_b[j] {
+                    continue;
+                }
+                let aj = self.a.row(j);
+                let (mut s0, mut m0, mut s1, mut m1) = (q0[j], q0[j].abs(), q1[j], q1[j].abs());
+                for k in 0..nx {
+                    let t = aj[k] * sc.x0[k];
+                    s0 -= t;
+                    m0 += t.abs();
+                    let t = aj[k] * sc.x1[k];
+                    s1 -= t;
+                    m1 += t.abs();
+                }
+                // cancellation noise of the numeric columns counts as an exact tie
+                sc.s0[j] = if s0.abs() < 1e-12 * m0 { 0.0 } else { s0 };
+                sc.s1[j] = if s1.abs() < 1e-12 * m1 { 0.0 } else { s1 };
+            }
+            sc.bs.clear();
+            sc.bs.extend(w.b.iter().enumerate().map(|(p, &c)| (c, p)));
+            sc.bs.sort_unstable();
+            tadd(0, t0);
+            let t0 = std::time::Instant::now();
             // phase 1: a lex-negative slack row
             let mut worst: Option<usize> = None;
             for j in self.neq..m {
-                if in_b[j] {
+                if sc.in_b[j] {
                     continue;
                 }
-                let row = &st.slack[j * w1..(j + 1) * w1];
-                if lex_sign(row) < 0 {
+                if self.slack_sign(w, sc, j) < 0 {
                     match worst {
-                        Some(w) if lex_cmp(row, &st.slack[w * w1..(w + 1) * w1]) != Ordering::Less => {}
+                        Some(wj) if self.slack_cmp(w, sc, j, 1.0, wj, 1.0) != Ordering::Less => {}
                         _ => worst = Some(j),
                     }
                 }
             }
             if let Some(j) = worst {
-                let aj = self.a.row(j);
                 let mut pick: Option<(usize, f64)> = None;
                 for p in self.neq..nx {
-                    let mut y = 0.0;
-                    let mut l = 0.0;
-                    for k in 0..nx {
-                        y += aj[k] * st.binv[(k, p)];
-                        l -= st.binv[(k, p)] * cp[k];
-                    }
+                    let y = w.t[j * nx + p];
                     if y > 1e-9 {
+                        let mut l = 0.0;
+                        for k in 0..nx {
+                            l -= w.binv[k * nx + p] * cp[k];
+                        }
                         let r = l / y;
                         if pick.map_or(true, |(_, br)| r < br) {
                             pick = Some((p, r));
@@ -224,40 +344,64 @@ impl<'a> Lex<'a> {
                     }
                 }
                 let Some((p, _)) = pick else { return Err(Fail::Infeasible) };
-                b[p] = j;
+                self.pivot(w, p, j);
+                since += 1;
+                tadd(4, t0);
                 continue;
             }
             // phase 2: a lex-negative multiplier row leaves
             let mut leave: Option<usize> = None;
             for p in self.neq..nx {
-                let row = &st.lam[p * w2..(p + 1) * w2];
-                if lex_sign(row) < 0 {
-                    match leave {
-                        Some(l) if lex_cmp(row, &st.lam[l * w2..(l + 1) * w2]) != Ordering::Less => {}
-                        _ => leave = Some(p),
+                self.lam_row(w, p, d0, d1, &mut sc.lam2);
+                if lex_sign(&sc.lam2) < 0 {
+                    let better = match leave {
+                        None => true,
+                        Some(_) => lex_cmp(&sc.lam2, &sc.lam) == Ordering::Less,
+                    };
+                    if better {
+                        leave = Some(p);
+                        std::mem::swap(&mut sc.lam, &mut sc.lam2);
                     }
                 }
             }
-            let Some(p) = leave else { return Ok(b) };
-            // edge direction  dir = -β e_p ; lexicographic ratio test over A_j dir > 0
-            let dir: Vec<f64> = (0..nx).map(|k| -st.binv[(k, p)]).collect();
-            let mut best: Option<(usize, Vec<f64>)> = None;
+            let Some(p) = leave else { return Ok(()) };
+            // edge direction  dir = -β e_p ; A_j dir = -T_jp ; lexicographic ratio test over A_j dir > 0
+            let mut best: Option<(usize, f64)> = None;
             for j in self.neq..m {
-                if in_b[j] {
+                if sc.in_b[j] {
                     continue;
                 }
-                let aj = dot(self.a.row(j), &dir);
+                let aj = -w.t[j * nx + p];
                 if aj > 1e-9 {
-                    let ratio: Vec<f64> = st.slack[j * w1..(j + 1) * w1].iter().map(|v| v / aj).collect();
-                    if best.as_ref().map_or(true, |(_, br)| lex_cmp(&ratio, br) == Ordering::Less) {
-                        best = Some((j, ratio));
+                    if best.map_or(true, |(bj, bd)| self.slack_cmp(w, sc, j, aj, bj, bd) == Ordering::Less) {
+                        best = Some((j, aj));
                     }
                 }
             }
             let Some((j, _)) = best else { return Err(Fail::Unbounded) };
-            b[p] = j;
+            self.pivot(w, p, j);
+            since += 1;
+            tadd(4, t0);
         }
         Err(Fail::Stalled)
+    }
+
+    /// Multiplier row  [ -β_p' d0 | -β_p' d1 | -β_{.,p} ]  of basis position p.
+    fn lam_row(&self, w: &Work, p: usize, d0: &[f64], d1: &[f64], out: &mut [f64]) {
+        let nx = self.nx;
+        let (mut s0, mut m0, mut s1, mut m1) = (0.0, 0.0, 0.0, 0.0);
+        for k in 0..nx {
+            let bk = w.binv[k * nx + p];
+            let t = bk * d0[k];
+            s0 -= t;
+            m0 += t.abs();
+            let t = bk * d1[k];
+            s1 -= t;
+            m1 += t.abs();
+            out[2 + k] = -bk;
+        }
+        out[0] = if s0.abs() < 1e-12 * m0 { 0.0 } else { s0 };
+        out[1] = if s1.abs() < 1e-12 * m1 { 0.0 } else { s1 };
     }
 }
 
@@ -310,6 +454,9 @@ pub fn solve(program: &MpProgram, seed: u64) -> Result<Vec<CriticalRegion>, Stri
     }
     let b0 = initial_basis(&program.a, neq).ok_or("mplp_lex: dependent equality rows")?;
     let lex = Lex::new(&program.a, neq);
+    let mut sc = Scratch::new(m, nx);
+    let zm = vec![0.0; m];
+    let zx = vec![0.0; nx];
     let mut rng = StdRng::seed_from_u64(seed);
     let artificial =|rng: &mut StdRng, b: &[usize]| -> Vec<f64> {
         // c' = -A_B' λ' with λ' > 0 random: makes the current basis dual feasible
@@ -336,10 +483,12 @@ pub fn solve(program: &MpProgram, seed: u64) -> Result<Vec<CriticalRegion>, Stri
         };
         let q0 = rhs_at(program, &th);
         let d0 = cost_at(program, &th);
-        let (q, d) = lex.lex_data(&q0, &vec![0.0; m], &d0, &vec![0.0; nx]);
         let cp = artificial(&mut rng, &b0);
-        match lex.solve(&q, &d, b0.clone(), &cp) {
-            Ok(mut basis) => {
+        let mut w = Work { b: vec![], binv: vec![], t: vec![] };
+        let res = lex.fresh(&b0, &mut w).and_then(|_| lex.solve(&mut w, &mut sc, &q0, &zm, &d0, &zx, &cp));
+        match res {
+            Ok(()) => {
+                let mut basis = w.b.clone();
                 basis.sort_unstable();
                 if let Some(cr) = gen_cr_from_active_set_lambda_first(program, &basis, true) {
                     initial = Some((cr, basis));
@@ -361,7 +510,13 @@ pub fn solve(program: &MpProgram, seed: u64) -> Result<Vec<CriticalRegion>, Stri
     let mut queue: VecDeque<(CriticalRegion, Vec<usize>)> = VecDeque::new();
     regions.push(cr0.clone());
     queue.push_back((cr0, basis0));
+    let mut parent = Work { b: vec![], binv: vec![], t: vec![] };
+    let mut wk = parent.clone();
     while let Some((cr, basis)) = queue.pop_front() {
+        // the basis is sorted: equality rows first
+        if lex.fresh(&basis, &mut parent).is_err() {
+            continue;
+        }
         let ne = cr.e.rows;
         let facets: Vec<(Vec<f64>, f64)> = (0..ne).filter_map(|k| unit(cr.e.row(k), cr.f[k])).collect();
         for k in 0..facets.len() {
@@ -381,7 +536,10 @@ pub fn solve(program: &MpProgram, seed: u64) -> Result<Vec<CriticalRegion>, Stri
                 rhs.push(*fi);
             }
             let kk = rows.iter().position(|r| r == nk).unwrap_or(0);
-            let Some(ball) = chebyshev_ball(&Mat::from_rows(&rows), &rhs, &[kk]) else { continue };
+            let t0 = std::time::Instant::now();
+            let ball = chebyshev_ball(&Mat::from_rows(&rows), &rhs, &[kk]);
+            tadd(2, t0);
+            let Some(ball) = ball else { continue };
             if ball.x[nt] <= 1e-9 {
                 continue;
             }
@@ -391,25 +549,30 @@ pub fn solve(program: &MpProgram, seed: u64) -> Result<Vec<CriticalRegion>, Stri
             let q1 = program.f.matvec(nk);
             let d0 = cost_at(program, th0);
             let d1 = program.h.matvec(nk);
-            let (q, d) = lex.lex_data(&q0, &q1, &d0, &d1);
-            let start: Vec<usize> = {
-                // basis in the order used by the lex machinery: equality rows first
-                let mut s = basis.clone();
-                s.sort_unstable();
-                s
-            };
-            let cp = artificial(&mut rng, &start);
-            let Ok(mut nb) = lex.solve(&q, &d, start, &cp) else { continue };
+            let cp = artificial(&mut rng, &basis);
+            let t0 = std::time::Instant::now();
+            wk.clone_from(&parent);
+            let r = lex.solve(&mut wk, &mut sc, &q0, &q1, &d0, &d1, &cp);
+            tadd(1, t0);
+            cadd(6, 1);
+            if r.is_err() {
+                continue;
+            }
+            let mut nb = wk.b.clone();
             nb.sort_unstable();
             if !seen.insert(nb.clone()) {
                 continue;
             }
-            if let Some(ncr) = gen_cr_from_active_set_lambda_first(program, &nb, true) {
+            let t0 = std::time::Instant::now();
+            let ncr = gen_cr_from_active_set_lambda_first(program, &nb, true);
+            tadd(3, t0); cadd(7, 1);
+            if let Some(ncr) = ncr {
                 regions.push(ncr.clone());
                 queue.push_back((ncr, nb));
             }
         }
     }
+    if std::env::var("LEX_PROF").is_ok() { let g = |i: usize| T[i].load(AO::Relaxed); eprintln!("state {:.1}ms solve_total {:.1}ms cheb {:.1}ms gencr {:.1}ms | state_calls {} neighbours {} newbases {}", g(0) as f64/1e6, g(1) as f64/1e6, g(2) as f64/1e6, g(3) as f64/1e6, g(5), g(6), g(7)); }
     Ok(regions)
 }
 
