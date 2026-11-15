@@ -1367,7 +1367,9 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
     // Row c: zero on every nonbasic z column, and mu_j on the nonbasic w_j column of every active row j.
     for (col, &cv) in tab.col_var.iter().enumerate().take(n) {
         if cv >= n && cv < 2 * n {
-            if tab.t[c * n + col].abs() > 1e-8 {
+            // after a structural zero was decided from the original rows the entries of row c on the z columns are rounding of the tableau (up to
+            // 1e-6 on masses4_N5), not a different structure
+            if tab.t[c * n + col].abs() > if forced { 1e-5 } else { 1e-8 } {
                 { crate::census_reason!(4); return None; }
             }
         }
@@ -1438,11 +1440,12 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
             let v = mu_ref.as_ref().unwrap();
             mi = v[ai];
             nu = mi.abs() / ujj;
+            // a recomputed multiplier is accurate far below MU_NONZERO: the zero cluster is at 1e-22 and below (the square of the rounding of the rows
+            // is not even involved, the residual is formed directly), real small multipliers are 1e-9 and above, so anything above REFINED_ZERO is real
             if nu > REFINED_ZERO && nu < MU_NONZERO {
                 crate::census_bump!(MuRefinedBand, 1);
                 #[cfg(feature = "lp_census")]
                 crate::census::bump_slot(crate::census::PG_BASE + 64 + ((-nu.log10()).floor().max(0.0) as usize).min(15), 1);
-                { crate::census_reason!(6); return None; }
             }
         } else if nu > MU_ZERO && nu <= MU_NONZERO {
             let Some(v) = &mu_ref else {
@@ -1465,7 +1468,7 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
                 crate::census_bump!(MuRefinedReal, 1);
             }
         }
-        if mi > 0.0 && nu > MU_NONZERO {
+        if mi > 0.0 && nu > (if all_ref { REFINED_ZERO } else { MU_NONZERO }) {
             pm.push(i);
             pm_mu.push(mi);
         } else if !all_ref && nu_tab > ZERO_GUARD_MIN && nu_tab <= MU_ZERO {
