@@ -26,7 +26,25 @@ fn main() {
             continue;
         }
         let Some(cr) = rpopt::mpqp_utils::gen_cr_from_active_set(&prog, &aset, true) else {
-            println!("{aset:?}: no full-dimensional region");
+            println!("{aset:?}: no full-dimensional region from the active set alone");
+            // the region of the solve with this active set, if any
+            let mut want = aset.clone();
+            want.sort_unstable();
+            for r in sol.critical_regions.iter().filter(|r| {
+                let mut v = r.active_set.clone();
+                v.sort_unstable();
+                v == want
+            }) {
+                let s = rpopt::utils::chebyshev_ball(&r.e, &r.f, &[]).unwrap();
+                let centre: Vec<f64> = s.x[..nt].to_vec();
+                let (tight, agrees) = tight_diagnostic(&prog, r, &centre);
+                let qp = prog.solve_theta(&centre).map(|o| {
+                    let mut v = o.active_set.clone();
+                    v.sort_unstable();
+                    v
+                });
+                println!("   in the solve: rows {} radius {:.3e} (stored {:?}) tight residual {:.2e} qp agrees {} qp active set {:?}", r.e.rows, s.x[nt], r.cheb_radius, tight, agrees, qp);
+            }
             continue;
         };
         let s = rpopt::utils::chebyshev_ball(&cr.e, &cr.f, &[]).unwrap();

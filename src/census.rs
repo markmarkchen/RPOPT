@@ -470,6 +470,8 @@ mod imp {
         /// refined multipliers used by the enumeration: band entries decided as zero, as real, or still between (call goes to the walk)
         MuRefinedZero,
         BuildColdRetry,
+        BuildThinAccepted,
+        BuildThinRejected,
         MuEmptyGuard,
         MuEmptyToWalk,
         MuRefinedReal,
