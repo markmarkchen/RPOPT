@@ -1316,8 +1316,7 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
     if pm.is_empty() && !zeroed_pos.is_empty() {
         crate::census_bump!(MuEmptyGuard, 1);
         let zj: Vec<usize> = zrows_all.iter().map(|&i| tab.row_var[i] - n).collect();
-        let exact_zero = refine
-            && refined_multipliers(p, &zj, var).map_or(false, |v| {
+        let exact_zero = refined_multipliers(p, &zj, var).map_or(false, |v| {
                 zeroed_pos.iter().all(|&ai| {
                     let j = zj[ai];
                     v[ai].abs() / (mcc / p.m[j * n + j].max(1e-300)).sqrt() <= REFINED_ZERO
