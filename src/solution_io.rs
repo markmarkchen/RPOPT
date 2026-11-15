@@ -134,6 +134,7 @@ fn read_region(rd: &mut Reader) -> Result<CriticalRegion, Error> {
         lambda_set: rd.usizes()?,
         regular_set: (rd.usizes()?, rd.usizes()?),
         y_fixation: rd.opt_f64s()?,
+        facet_single: vec![],
         y_indices: rd.opt_usizes()?,
         x_indices: rd.opt_usizes()?,
         cheb_radius: rd.opt_f64()?,

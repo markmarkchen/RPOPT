@@ -128,6 +128,13 @@ impl SeenSet {
         }
     }
 
+    /// The slot stored for entry `i` of the table (an index returned by `find`): the region index, or `u32::MAX` for a
+    /// claimed set that has no region.
+    #[inline]
+    pub(crate) fn slot_of(&self, i: usize) -> u32 {
+        self.entries[i].slot
+    }
+
     /// Is the active set `set` (canonical order, as `Plcp::active_set` returns it) in the table?
     pub(crate) fn contains_key(&self, set: &[usize]) -> bool {
         self.find(self.key_of(set), set.len(), |s| s.iter().zip(set).all(|(&a, &b)| a as usize == b)).is_some()

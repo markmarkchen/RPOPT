@@ -1153,7 +1153,7 @@ fn z_toggle(tab: &Tab, n: usize, v: usize) -> Vec<usize> {
 
 /// Is the Case-1 neighbour (the toggle of row `v`) already in Seen? Its key is the key of A with one word added or
 /// removed; a hit is verified against the stored set, which must be A + {t} (or A - {t}) of the right length.
-fn toggle_known(p: &Plcp, tab: &Tab, v: usize, sn: &Seen) -> bool {
+fn toggle_known(p: &Plcp, tab: &Tab, v: usize, sn: &Seen) -> Option<u128> {
     let n = p.n;
     let var = tab.row_var[v];
     R1_BUFS.with(|cell| {
@@ -1178,10 +1178,10 @@ fn toggle_known(p: &Plcp, tab: &Tab, v: usize, sn: &Seen) -> bool {
         let bits = &*bits;
         if var < n {
             let t = p.ineq[var];
-            sn.find(key ^ sn.z(t), alen + 1, |s: &[u32]| s.iter().all(|&x| x as usize == t || (bits[(x >> 6) as usize] >> (x & 63)) & 1 == 1)).is_some()
+            sn.find(key ^ sn.z(t), alen + 1, |s: &[u32]| s.iter().all(|&x| x as usize == t || (bits[(x >> 6) as usize] >> (x & 63)) & 1 == 1)).map(|_| key ^ sn.z(t))
         } else {
             let t = p.ineq[var - n];
-            sn.find(key ^ sn.z(t), alen - 1, |s: &[u32]| s.iter().all(|&x| x as usize != t && (bits[(x >> 6) as usize] >> (x & 63)) & 1 == 1)).is_some()
+            sn.find(key ^ sn.z(t), alen - 1, |s: &[u32]| s.iter().all(|&x| x as usize != t && (bits[(x >> 6) as usize] >> (x & 63)) & 1 == 1)).map(|_| key ^ sn.z(t))
         }
     })
 }
@@ -1878,7 +1878,9 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
             zrows.push(i);
         }
     }
+    IDX_PATH.with(|c| c.set(0));
     if zrows.is_empty() {
+        IDX_PATH.with(|c| c.set(1));
         crate::census_bump!(AdjNone, 1);
         crate::census_bump!(AdjNoneNanos, _cen_t.elapsed().as_nanos());
         return (vec![], None);
@@ -1932,7 +1934,9 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
                 crate::census_bump!(AdjFastNanos, _cen_t.elapsed().as_nanos());
                 // a neighbour that is already known would be dropped by the caller: skip building it
                 if let Some(sn) = seen {
-                    if toggle_known(p, tab, v, sn) {
+                    if let Some(k) = toggle_known(p, tab, v, sn) {
+                        IDX_PATH.with(|c| c.set(2));
+                        IDX_TOGGLE_KEY.with(|c| c.set(k));
                         return (vec![], None);
                     }
                 }
@@ -2729,6 +2733,16 @@ impl From<Option<Tab>> for TabSrc {
 }
 
 impl TabSrc {
+    /// Drops the tableau source of a region that is not expanded; a lazy source that was the last holder of its parent
+    /// releases the parent in the live count, as `resolve` does.
+    fn discard(self) {
+        if let TabSrc::Lazy(a, _, _) = self {
+            if std::sync::Arc::try_unwrap(a).is_ok() {
+                LIVE_PARENTS.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
+    }
+
     /// The tableau, rebuilt from the active set of `cr` when there is none.
     fn resolve(self, plcp: &Plcp, cr: &CriticalRegion) -> Option<Tab> {
         match self {
@@ -3147,6 +3161,106 @@ fn certify(cx: &CertCtx, cur: &CriticalRegion, k: usize) -> Option<usize> {
 }
 
 /// Neighbour candidates across every facet of region `cur` (tableau `tab`).
+/// The row of `cur` that is the entry facet (the negated hyperplane of the facet the region was entered through), if any.
+fn entry_skip_row(cur: &CriticalRegion, entry: Option<&(Vec<f64>, f64)>) -> Option<usize> {
+    entry.and_then(|(g, b)| {
+        (0..cur.e.rows).find(|&k| {
+            let r = cur.e.row(k);
+            let nrm = r.iter().map(|v| v * v).sum::<f64>().sqrt();
+            nrm > 0.0 && r.iter().zip(g).all(|(x, y)| (x / nrm + y).abs() <= 1e-9) && (cur.f[k] / nrm + b).abs() <= 1e-9 * (1.0 + b.abs())
+        })
+    })
+}
+
+/// Index-first lookup of the neighbour of a facet (mode 0 off, 1 on, 2 audit: the search runs as before and the skips it would
+/// have made are checked against it).
+///
+/// A facet from row i of E of a region R with active set A has the neighbour A xor {i}: row i of a lambda constraint j removes j,
+/// of an inactive constraint g adds g, and a Theta row has none. When the builder recorded that no other row of the unreduced
+/// system lies on the same hyperplane (`facet_single`), and A xor {i} is the active set of a built region, the facet is that
+/// Case-1 toggle (or, for a Theta row, a boundary of the feasible set) and nothing else lies across it: no tableau, no
+/// classification and no `adjacent` call are needed.
+static INDEX_FIRST: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(1);
+const IDXZ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+// facets skipped, audit checks, audit violations, regions whose tableau was skipped, regions that would be (audit)
+static INDEX_STATS: [std::sync::atomic::AtomicU64; 5] = [IDXZ; 5];
+
+pub fn set_index_first(mode: u8) {
+    INDEX_FIRST.store(mode, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Facets skipped by index, audit checks, audit violations (must be 0), regions whose tableau was skipped, regions that would be.
+pub fn index_first_stats() -> [u64; 5] {
+    let mut o = [0u64; 5];
+    for (i, c) in INDEX_STATS.iter().enumerate() {
+        o[i] = c.load(std::sync::atomic::Ordering::Relaxed);
+    }
+    o
+}
+
+thread_local! {
+    /// how the last `adjacent` call ended: 1 no vanishing row, 2 a known Case-1 toggle, 0 otherwise
+    static IDX_PATH: std::cell::Cell<u8> = const { std::cell::Cell::new(0) };
+    static IDX_TOGGLE_KEY: std::cell::Cell<u128> = const { std::cell::Cell::new(0) };
+}
+
+struct IdxCtx {
+    key_a: u128,
+    alen: usize,
+    bits: Vec<u64>,
+    nl: usize,
+    nr: usize,
+}
+
+fn idx_ctx(plcp: &Plcp, cur: &CriticalRegion, sn: &Seen) -> Option<IdxCtx> {
+    let nl = cur.lambda_set.len();
+    let nr = cur.regular_set.1.len();
+    let no = cur.omega_set.len();
+    if cur.facet_single.len() != nl + nr + no || cur.e.rows != nl + nr + no {
+        return None;
+    }
+    let words = (plcp.ineq.iter().chain(plcp.eq.iter()).copied().max().unwrap_or(0) >> 6) + 1;
+    let mut bits = vec![0u64; words];
+    for &x in cur.active_set.iter() {
+        bits[x >> 6] |= 1u64 << (x & 63);
+    }
+    Some(IdxCtx { key_a: sn.key_of(&cur.active_set), alen: cur.active_set.len(), bits, nl, nr })
+}
+
+/// Some((omega, key of A xor {i})) when facet `k` is settled by index: a Theta row (omega) or a built neighbour with that key.
+fn idx_settled(c: &IdxCtx, cur: &CriticalRegion, sn: &Seen, k: usize) -> Option<(bool, u128)> {
+    if !cur.facet_single[k] {
+        return None;
+    }
+    let bit = |x: usize| (c.bits[x >> 6] >> (x & 63)) & 1 == 1;
+    if k < c.nl {
+        let j = cur.lambda_set[k];
+        if !bit(j) {
+            return None;
+        }
+        let key = c.key_a ^ sn.z(j);
+        let i = sn.find(key, c.alen - 1, |s: &[u32]| s.iter().all(|&x| x as usize != j && bit(x as usize)))?;
+        (sn.slot_of(i) != u32::MAX).then_some((false, key))
+    } else if k < c.nl + c.nr {
+        let g = cur.regular_set.1[k - c.nl];
+        if bit(g) {
+            return None;
+        }
+        let key = c.key_a ^ sn.z(g);
+        let i = sn.find(key, c.alen + 1, |s: &[u32]| s.iter().all(|&x| x as usize == g || bit(x as usize)))?;
+        (sn.slot_of(i) != u32::MAX).then_some((false, key))
+    } else {
+        Some((true, 0))
+    }
+}
+
+/// Are all facets of `cur` settled by index (the entry facet counts as settled)?
+fn idx_region_settled(plcp: &Plcp, cur: &CriticalRegion, entry: Option<&(Vec<f64>, f64)>, sn: &Seen) -> bool {
+    let Some(c) = idx_ctx(plcp, cur, sn) else { return false };
+    let skip = entry_skip_row(cur, entry);
+    (0..cur.e.rows).all(|k| skip == Some(k) || idx_settled(&c, cur, sn, k).is_some())
+}
+
 fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>>, tab: &Tab, depth: usize, entry: Option<&(Vec<f64>, f64)>, cert: Option<&CertCtx>, seen: Option<&Seen>, program: &MpProgram, ws: &mut Option<Tab>) -> Vec<Cand> {
     let mut cands = vec![];
     // Entry facet skip. A child reached by a Case-1 Toggle pivot (principal pivot of one z row v with
@@ -3158,18 +3272,24 @@ fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>
     // entry the child's side of the facet may border several regions, so nothing is skipped then.
     // The child's row is the parent's negated (unit normal and offset), within a tolerance; only the
     // first matching row is skipped, so a duplicated row still gets its search.
-    let skip = entry.and_then(|(g, b)| {
-        (0..cur.e.rows).find(|&k| {
-            let r = cur.e.row(k);
-            let nrm = r.iter().map(|v| v * v).sum::<f64>().sqrt();
-            nrm > 0.0 && r.iter().zip(g).all(|(x, y)| (x / nrm + y).abs() <= 1e-9) && (cur.f[k] / nrm + b).abs() <= 1e-9 * (1.0 + b.abs())
-        })
-    });
+    let skip = entry_skip_row(cur, entry);
     #[cfg(feature = "lp_census")]
     let mut cens: Vec<(u32, bool)> = vec![];
+    let idx_mode = INDEX_FIRST.load(std::sync::atomic::Ordering::Relaxed);
+    let idx_ctx_v = if idx_mode != 0 { seen.and_then(|sn| idx_ctx(plcp, cur, sn)) } else { None };
     for k in 0..cur.e.rows {
         if skip == Some(k) {
             continue;
+        }
+        let mut idx_audit: Option<(bool, u128)> = None;
+        if let (Some(c), Some(sn)) = (&idx_ctx_v, seen) {
+            if let Some(r) = idx_settled(c, cur, sn, k) {
+                if idx_mode == 1 {
+                    INDEX_STATS[0].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    continue;
+                }
+                idx_audit = Some(r);
+            }
         }
         // Certificate skip (see `certify`), asked inside `adjacent` once the fast path has failed.
         let cfun = || -> Option<usize> {
@@ -3198,6 +3318,16 @@ fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>
         // facet whose neighbours are all known returns none)
         if certified.is_some() && cert.map_or(false, |c| c.audit) {
             AUDIT_CERTIFIED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        if let Some((omega, key)) = idx_audit {
+            // the search ran as before: it must have ended without a neighbour, by the no-vanishing-row exit (Theta row) or on
+            // a known Case-1 toggle with the same active set
+            INDEX_STATS[1].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let path = IDX_PATH.with(|c| c.get());
+            let ok = nbrs.is_empty() && if omega { path == 1 } else { path == 2 && IDX_TOGGLE_KEY.with(|c| c.get()) == key };
+            if !ok {
+                INDEX_STATS[2].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
         }
         if nbrs.is_empty() {
             continue;
@@ -3564,6 +3694,18 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
             wave_limit = regions.len();
         }
         let cur = &regions[idx];
+        {
+            let mode = INDEX_FIRST.load(std::sync::atomic::Ordering::Relaxed);
+            if mode != 0 && idx_region_settled(plcp, cur, entry.as_ref(), &seen) {
+                if mode == 1 {
+                    // every facet is settled: the region has no new neighbour, its tableau is never needed
+                    INDEX_STATS[3].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    tab.discard();
+                    continue;
+                }
+                INDEX_STATS[4].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
         let (tab, cands) = match crate::census_timed!(MplcpTabNanos, tab.resolve(plcp, cur)) {
             Some(tab) => {
                 let cx = CertCtx::new(cmode, verts.as_deref(), &known, &regions, plcp.nt, wave_limit);

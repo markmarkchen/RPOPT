@@ -320,6 +320,7 @@ pub fn gen_cr_from_kkt(program: &MpProgram, active_set: &[usize], kkt: KktRegion
         lambda_set: relevant_lambda,
         regular_set: (kept_ineq, real_regular),
         y_fixation: None,
+        facet_single: vec![],
         y_indices: None,
         x_indices: None,
         cheb_radius,
@@ -462,6 +463,7 @@ pub fn gen_cr_from_active_set_1d(program: &MpProgram, active_set: &[usize], chec
         lambda_set: kept_lambda.iter().map(|&i| active[i]).collect(),
         regular_set: (kept_ineq.clone(), kept_ineq.iter().map(|&i| inactive[i]).collect()),
         y_fixation: None,
+        facet_single: vec![],
         y_indices: None,
         x_indices: None,
         cheb_radius: None,
@@ -851,7 +853,8 @@ pub fn gen_cr_from_law_hinted(program: &MpProgram, active_set: &[usize], law: cr
     let cheb_radius = Some(s.x[nt]);
     let center: Vec<f64> = s.x[..nt].to_vec();
 
-    gen_cr_from_prepared(program, active_set, true, Prepared { law, n_lambda, inactive, pos, e, f, kept_rows_len: kept_rows.len(), center, cheb_radius })
+    let dropped_zero = (0..e_all.rows).any(|r| pos[r] == usize::MAX && f_all[r].abs() <= 1e-8);
+    gen_cr_from_prepared(program, active_set, true, Prepared { law, n_lambda, inactive, pos, e, f, kept_rows_len: kept_rows.len(), center, cheb_radius, dropped_zero })
 }
 
 /// Everything `gen_cr_from_law_hinted` has computed before the redundancy step: the completed
@@ -867,6 +870,8 @@ pub struct Prepared {
     pub kept_rows_len: usize,
     pub center: Vec<f64>,
     pub cheb_radius: Option<f64>,
+    /// some unreduced row was dropped as numerically zero with a right-hand side near zero (it may vanish identically)
+    pub dropped_zero: bool,
 }
 
 /// The redundancy step of `gen_cr_from_law_hinted` on prepared rows. It is also the fallback of
@@ -874,7 +879,7 @@ pub struct Prepared {
 /// Chebyshev LP). `try_clip` = false skips the vertex clipping, for a caller whose own clipping
 /// of the same rows has just failed.
 pub fn gen_cr_from_prepared(program: &MpProgram, active_set: &[usize], try_clip: bool, prep: Prepared) -> Option<(CriticalRegion, Vec<f64>)> {
-    let Prepared { law, n_lambda, inactive, pos, e, f, kept_rows_len, center, cheb_radius } = prep;
+    let Prepared { law, n_lambda, inactive, pos, e, f, kept_rows_len, center, cheb_radius, dropped_zero } = prep;
     let nt = program.num_t();
     let neq = program.num_equality_constraints();
     let n_inactive = inactive.len();
@@ -938,6 +943,7 @@ pub fn gen_cr_from_prepared(program: &MpProgram, active_set: &[usize], try_clip:
     let real_regular: Vec<usize> = kept_ineq.iter().map(|&i| inactive[i]).collect();
     let e_red = e.select_rows(&non_redundant);
     let f_red: Vec<f64> = non_redundant.iter().map(|&p| f[p]).collect();
+    let facet_single = crate::utils::unique_hyperplane_flags(&e, &f, &non_redundant, dropped_zero);
     let (e_red, f_red) = remove_duplicate_rows(&e_red, &f_red);
     crate::stats::region_built(active_set);
     crate::census_bump!(RedRowsKept, non_redundant.len());
@@ -955,6 +961,7 @@ pub fn gen_cr_from_prepared(program: &MpProgram, active_set: &[usize], try_clip:
         lambda_set: relevant_lambda,
         regular_set: (kept_ineq, real_regular),
         y_fixation: None,
+        facet_single,
         y_indices: None,
         x_indices: None,
         cheb_radius,

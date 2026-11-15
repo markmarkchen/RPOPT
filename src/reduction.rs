@@ -168,6 +168,7 @@ fn make_region(a: Mat, b: Vec<f64>, e: Mat, f: Vec<f64>) -> CriticalRegion {
         lambda_set: vec![],
         regular_set: (vec![], vec![]),
         y_fixation: None,
+        facet_single: vec![],
         y_indices: None,
         x_indices: None,
         cheb_radius: None,
