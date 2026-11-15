@@ -660,7 +660,8 @@ pub fn solve(program: &MpProgram, seed: u64, method: Method) -> Result<Vec<Criti
                 return Err("mplcp: mpLP not supported by the pivoting method (use mplcp_enum)".into());
             }
             let plcp = Plcp::new(program).ok_or("mplcp: no pLCP form (Q not positive definite or singular equality block)")?;
-            Ok(if method == Method::PivotParallel { pivot_solve_par(program, &plcp, seed) } else { pivot_solve(program, &plcp, seed) })
+            let regions = if method == Method::PivotParallel { pivot_solve_par(program, &plcp, seed) } else { pivot_solve(program, &plcp, seed) };
+            Ok(drop_lex_infeasible(program, &plcp, regions))
         }
         Method::Enumeration => enum_solve(program),
     }
@@ -692,7 +693,12 @@ struct Item {
 fn initial_region(program: &MpProgram, seed: u64) -> Option<(CriticalRegion, Option<Vec<f64>>)> {
     let mut rng = StdRng::seed_from_u64(seed);
     let active_set = program.gen_optimal_active_set(&mut rng).or_else(|| super::degenerate_start(program, &mut rng))?;
-    let initial = crate::mpqp_utils::gen_cr_from_active_set(program, &active_set, false)?;
+    let mut initial = crate::mpqp_utils::gen_cr_from_active_set(program, &active_set, false)?;
+    if dependent_rows(program, &initial) {
+        if let Some(better) = lex_feasible_start(program, &initial) {
+            initial = better;
+        }
+    }
     let nt = program.num_t();
     let init_center = if nt > 1 { chebyshev_ball(&initial.e, &initial.f, &[]).map(|s| s.x[..nt].to_vec()) } else { None };
     Some((initial, init_center))
@@ -1281,4 +1287,176 @@ fn enum_solve(program: &MpProgram) -> Result<Vec<CriticalRegion>, String> {
         }
     }
     Ok(regions)
+}
+
+/// Is the complementary basis of `tab` lexico-feasible? A basic row whose parameter part vanishes
+/// (a multiplier or slack that is identically zero: dependent active rows) is decided by the
+/// perturbation, so [constant | β row] must be lexico-nonnegative; every other row is positive on
+/// the interior of its region.
+fn lex_feasible(tab: &Tab) -> bool {
+    let (n, w) = (tab.n, tab.w);
+    let mut wcol = vec![usize::MAX; n];
+    for (c, &v) in tab.col_var.iter().enumerate() {
+        if v < n {
+            wcol[v] = c;
+        }
+    }
+    let mut wrow = vec![usize::MAX; n];
+    for (r, &v) in tab.row_var.iter().enumerate() {
+        if v < n {
+            wrow[v] = r;
+        }
+    }
+    let mut v = vec![0.0; 1 + n];
+    for i in 0..n {
+        if (1..w).any(|k| tab.rv(i, k).abs() > ZTOL) {
+            continue;
+        }
+        v[0] = tab.rv(i, 0);
+        for j in 0..n {
+            v[1 + j] = if wcol[j] != usize::MAX {
+                -tab.tv(i, wcol[j])
+            } else if wrow[j] == i {
+                1.0
+            } else {
+                0.0
+            };
+        }
+        if !lex_nonneg(&v) {
+            return false;
+        }
+    }
+    true
+}
+
+/// Cheap screen on the region's laws: does a multiplier (active row) or a slack (inactive row)
+/// vanish identically? Only such a region can have a lexico-infeasible basis.
+fn dependent_rows(program: &MpProgram, cr: &CriticalRegion) -> bool {
+    let nt = program.num_t();
+    let tiny = |c: &[f64], d: f64| d.abs() <= 1e-9 && c.iter().all(|v| v.abs() <= 1e-9);
+    for (k, &i) in cr.active_set.iter().enumerate() {
+        if !program.equality_indices.contains(&i) && k < cr.c.rows && tiny(cr.c.row(k), cr.d[k]) {
+            return true;
+        }
+    }
+    let nx = program.num_x();
+    for i in 0..program.a.rows {
+        if cr.active_set.contains(&i) {
+            continue;
+        }
+        let ai = program.a.row(i);
+        let d = program.b[i] - (0..nx).map(|j| ai[j] * cr.b[j]).sum::<f64>();
+        let c: Vec<f64> = (0..nt).map(|t| program.f[(i, t)] - (0..nx).map(|j| ai[j] * cr.a[(j, t)]).sum::<f64>()).collect();
+        if tiny(&c, d) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Drops the regions whose basis is not lexico-feasible. Such a basis describes the same
+/// parameter set as the lexico-feasible one (the two differ in which of several dependent rows is
+/// active), so keeping both would count that set twice.
+fn drop_lex_infeasible(program: &MpProgram, plcp: &Plcp, regions: Vec<CriticalRegion>) -> Vec<CriticalRegion> {
+    regions
+        .into_iter()
+        .filter(|cr| !dependent_rows(program, cr) || tableau_of(plcp, cr).map_or(true, |t| lex_feasible(&t)))
+        .collect()
+}
+
+/// Lexicographic Lemke at the parameter `th`: a complementary basis (z rows) that is
+/// lexico-feasible for  w - M z = q + R th + ε,  or `None` (iteration limit or a ray).
+/// M is positive semidefinite, so Lemke's method with the lexicographic ratio test terminates with
+/// a solution whenever the LCP is feasible; the perturbation block β starts as the identity.
+fn lex_lemke(p: &Plcp, th: &[f64]) -> Option<Vec<usize>> {
+    let n = p.n;
+    // columns: w (0..n), z (n..2n), z0 (2n); then rhs; then β (n)
+    let nc = 2 * n + 1;
+    let wd = nc + 1 + n;
+    let mut a = vec![0.0; n * wd];
+    for i in 0..n {
+        a[i * wd + i] = 1.0;
+        for j in 0..n {
+            a[i * wd + n + j] = -p.m[i * n + j];
+        }
+        a[i * wd + 2 * n] = -1.0;
+        a[i * wd + nc] = p.q[i] + (0..p.nt).map(|t| p.r[i * p.nt + t] * th[t]).sum::<f64>();
+        a[i * wd + nc + 1 + i] = 1.0;
+    }
+    let mut basis: Vec<usize> = (0..n).collect();
+    let rhs_beta = |a: &[f64], i: usize| -> Vec<f64> { a[i * wd + nc..(i + 1) * wd].to_vec() };
+    // z0 enters at the lexico-minimal row, if any row is lexico-negative
+    let mut leave = None;
+    for i in 0..n {
+        let v = rhs_beta(&a, i);
+        if !lex_nonneg(&v) && leave.map_or(true, |l| lex_cmp(&v, &rhs_beta(&a, l)) == Ordering::Less) {
+            leave = Some(i);
+        }
+    }
+    let Some(mut r) = leave else { return Some(vec![]) };
+    let mut enter = 2 * n;
+    for _ in 0..(50 * n + 200) {
+        // pivot (r, enter)
+        let piv = a[r * wd + enter];
+        if piv.abs() < 1e-11 {
+            return None;
+        }
+        for k in 0..wd {
+            a[r * wd + k] /= piv;
+        }
+        let prow: Vec<f64> = a[r * wd..(r + 1) * wd].to_vec();
+        for i in 0..n {
+            if i != r {
+                let f = a[i * wd + enter];
+                if f != 0.0 {
+                    for k in 0..wd {
+                        a[i * wd + k] -= f * prow[k];
+                    }
+                    a[i * wd + enter] = 0.0;
+                }
+            }
+        }
+        let out = basis[r];
+        basis[r] = enter;
+        if out == 2 * n {
+            return Some(basis.iter().filter(|&&v| v >= n && v < 2 * n).map(|&v| v - n).collect::<Vec<_>>()).map(|mut z| {
+                z.sort_unstable();
+                z
+            });
+        }
+        enter = comp(out, n);
+        // lexicographic ratio test
+        let mut best: Option<(usize, Vec<f64>)> = None;
+        for i in 0..n {
+            let d = a[i * wd + enter];
+            if d > 1e-11 {
+                let v: Vec<f64> = a[i * wd + nc..(i + 1) * wd].iter().map(|x| x / d).collect();
+                if best.as_ref().map_or(true, |(_, b)| lex_cmp(&v, b) == Ordering::Less) {
+                    best = Some((i, v));
+                }
+            }
+        }
+        r = best?.0;
+    }
+    None
+}
+
+/// A lexico-feasible start for a start region `init` with identically vanishing rows (dependent
+/// active rows): its basis may be lexico-infeasible, and the walk from such a basis visits both it
+/// and its lexico-feasible twin, which describe the same parameter set. The twin is found by the
+/// lexicographic Lemke method at the Chebyshev center of `init`. `None` keeps `init`.
+fn lex_feasible_start(program: &MpProgram, init: &CriticalRegion) -> Option<CriticalRegion> {
+    let plcp = Plcp::new(program)?;
+    if tableau_of(&plcp, init).map_or(true, |t| lex_feasible(&t)) {
+        return None;
+    }
+    let nt = program.num_t();
+    let th = chebyshev_ball(&init.e, &init.f, &[]).map(|s| s.x[..nt].to_vec())?;
+    let z = lex_lemke(&plcp, &th)?;
+    let aset = plcp.active_set(z.into_iter());
+    let cr = crate::mpqp_utils::gen_cr_from_active_set(program, &aset, false)?;
+    if !tableau_of(&plcp, &cr).map_or(false, |t| lex_feasible(&t)) || !cr.is_inside(&th, 1e-7) {
+        return None;
+    }
+    Some(cr)
 }

@@ -46,3 +46,58 @@ fn geometric_dependent_start() {
         check(n, MpqpAlgorithm::Geometric);
     }
 }
+
+/// `mplcp` must not return the same parameter set under two index sets (rows that bind together:
+/// a basis with an identically zero multiplier or slack is lexico-infeasible). Sampled check:
+/// no sampled parameter lies strictly inside two regions, and none lies in no region.
+fn no_overlap(name: &str) {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("bench/problems_large").join(format!("{name}.json"));
+    let prog = Arc::new(MpProgram::from_json_file(&path).unwrap());
+    let sol = solve_mpqp(&prog, MpqpAlgorithm::Mplcp);
+    let mut rng = StdRng::seed_from_u64(11);
+    let (mut feasible, mut overlaps, mut gaps) = (0, 0, 0);
+    // box around the parameter set A_t θ <= b_t
+    let nt = prog.num_t();
+    let (mut lo, mut hi) = (vec![-1.0; nt], vec![1.0; nt]);
+    for k in 0..nt {
+        let mut c = vec![0.0; nt];
+        c[k] = 1.0;
+        if let Some(s) = rpopt::solver::lp::solve_lp(Some(&c), &prog.a_t, &prog.b_t, &[]) {
+            lo[k] = s.obj;
+        }
+        c[k] = -1.0;
+        if let Some(s) = rpopt::solver::lp::solve_lp(Some(&c), &prog.a_t, &prog.b_t, &[]) {
+            hi[k] = -s.obj;
+        }
+    }
+    for _ in 0..1000 {
+        let th: Vec<f64> = (0..nt).map(|k| rng.gen_range(lo[k]..hi[k])).collect();
+        if prog.solve_theta(&th).is_none() {
+            continue;
+        }
+        feasible += 1;
+        let inside = sol.critical_regions.iter().filter(|r| r.is_inside(&th, -1e-7)).count();
+        if inside >= 2 {
+            overlaps += 1;
+        }
+        if sol.get_region(&th).is_none() {
+            gaps += 1;
+        }
+    }
+    assert!(feasible > 100, "{name}: too few feasible samples");
+    assert_eq!(overlaps, 0, "{name}: {overlaps} of {feasible} feasible samples inside two regions");
+    assert_eq!(gaps, 0, "{name}: {gaps} of {feasible} feasible samples in no region");
+}
+
+#[test]
+fn mplcp_no_overlap_dependent_rows() {
+    for n in ["pop_019", "pop_031", "pop_052", "pop_071"] {
+        no_overlap(n);
+    }
+}
+
+/// pop_001 (about 3,500 regions): a facet pivot, not the start, lands on the lexico-infeasible twin.
+#[test]
+fn mplcp_no_overlap_pop_001() {
+    no_overlap("pop_001");
+}
