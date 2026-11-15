@@ -55,7 +55,7 @@ entries) and the cases of pivot measure and multiple rows. On masses4_N3 the rem
     [37, 46] (`extra_regions`), so `base` had two overlapping slivers that `A` does not produce.
 * **Coverage** (`lexcheck 3000`, base and A, the 11 problems above): 0 lexico-infeasible regions, 0 overlaps, 0 gaps on all 22 runs
   (330 to 3,000 feasible samples each; pop_032 56).
-* **ResolveNone:** 0 on the five census problems (`TabRefuse` 0, `ResolveNone` 0 in table 3j).
+* **ResolveNone:** 0 on the five census problems (regions popped without a tableau, table 3j; `tableau_for` refusals 140 to 683 per run, all rescued by the second pivot order or refused in `candidate_law`, as on main).
 * **Paired timing** (51 problems, 4 to 5 tasks each; a task runs `base`, `A` and a copy of `base` once, shuffled; median ratio over the tasks,
   ratio above 1 means `A` is faster; A/A is `base` against its copy):
 
@@ -121,9 +121,7 @@ entries) and the cases of pivot measure and multiple rows. On masses4_N3 the rem
 | sys3x2_N6 | 3 | 1503 | 35.6 | 5 | 1.012 | 1.005 |
 | sys3x2_N7 | 3 | 2095 | 52.6 | 5 | 1.001 | 0.976 |
 
-masses6_N2 and masses8_N2 (2.1x) and masses4_N3 (1.8x, its A/A is 1.209 in this run, the second run below 1.99 with A/A 1.000) are the
-largest gains, as `mplcp-order` predicted from `RPOPT_NO_R6=1` (masses8_N2 0.47x, masses7_N2 0.75x); pop_005 1.40x, rand_t12 1.01x
-(1.49x in the second run, A/A 0.9 to 1.0).
+masses6_N2 and masses8_N2 (2.1x) and masses4_N3 (1.8x, its A/A is 1.209 in this run) are the largest gains, as `mplcp-order` predicted from `RPOPT_NO_R6=1` (masses8_N2 0.47x, masses7_N2 0.75x); pop_005 1.40x, rand_t12 1.01x.
 
 ## A wider zero band was tried and not kept
 
