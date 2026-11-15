@@ -575,7 +575,9 @@ mod imp {
     /// relative), [9..25] decade histogram of the refined nu of the band entries, [25] tableau zeros the refined value does not call zero
     pub const MU2_BASE: usize = MD_BASE + 224;
     /// slots of the time-profile counters of `census_diag` (PF_*) follow the refined-multiplier block
-    pub const NC: usize = MD_BASE + 340;
+    /// pivot-in-gap calls (exact dependency residual): [0] calls, [1] decided zero, [2] decided nonzero (left to the walk), [3..44) decade histogram of rho = squared relative residual
+    pub const PG_BASE: usize = MD_BASE + 340;
+    pub const NC: usize = PG_BASE + 48;
     pub fn bump_slot(i: usize, n: u64) {
         MINE.with(|m| m.lock().unwrap().counters[i] += n);
     }

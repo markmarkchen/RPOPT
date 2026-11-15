@@ -9,6 +9,9 @@ fn main() {
     if std::env::var("AUDIT_RANK1").map(|v| v == "0").unwrap_or(false) {
         rpopt::algorithms::mplcp::set_rank1(false);
     }
+    if let Ok(v) = std::env::var("MPLCP_PIVDD") {
+        rpopt::algorithms::mplcp::set_pivot_dd(v != "0");
+    }
     let p = Arc::new(MpProgram::from_json_file(std::path::Path::new(&a[1])).unwrap());
     let sol = solve_mpqp(&p, MpqpAlgorithm::Mplcp);
     let mut lines: Vec<String> = sol

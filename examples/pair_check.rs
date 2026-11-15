@@ -18,6 +18,9 @@ fn main() {
     if let Ok(v) = std::env::var("MPLCP_REFINE") {
         rpopt::algorithms::mplcp::set_refine_multipliers(v != "0");
     }
+    if let Ok(v) = std::env::var("MPLCP_PIVDD") {
+        rpopt::algorithms::mplcp::set_pivot_dd(v != "0");
+    }
     let prog = Arc::new(MpProgram::from_json_file(std::path::Path::new(&a[1])).unwrap());
     let sol = solve_mpqp(&prog, MpqpAlgorithm::Mplcp);
     println!("current mplcp: {} regions", sol.critical_regions.len());

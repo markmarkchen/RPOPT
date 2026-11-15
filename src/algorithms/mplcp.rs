@@ -1262,7 +1262,27 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
     let kk = tab.col_of(comp(var, n));
     // zero pivot and zero slack columns, in the scale-free measure (see `pivot_measure`)
     if pivot_part(p, tab, c, kk) > MEASURE_ZERO || pivot_measure(p, tab, c, kk) > MEASURE_ZERO {
-        { crate::census_reason!(3); return None; }
+        // a measure in the undecided band (the tableau pivot, a difference of Gram entries, only resolves 1e-9) is decided by the dependency
+        // residual of the original rows (`refined_dependency`): zero when rho is at most RHO_ZERO
+        let gap = pivot_measure(p, tab, c, kk) <= MEASURE_NONZERO && p.arows.rows > 0;
+        let mut zero = false;
+        if gap {
+            let zj: Vec<usize> = (0..n).filter(|&i| tab.row_var[i] >= n && tab.row_var[i] < 2 * n).map(|i| tab.row_var[i] - n).collect();
+            if let Some((_, rho)) = refined_dependency(p, &zj, var) {
+                zero = rho <= RHO_ZERO;
+                #[cfg(feature = "lp_census")]
+                if refine != MU_AUDIT.load(std::sync::atomic::Ordering::Relaxed) {
+                    use crate::census::{bump_slot, PG_BASE};
+                    bump_slot(PG_BASE, 1);
+                    bump_slot(PG_BASE + if zero { 1 } else { 2 }, 1);
+                    let dec = if rho > 0.0 { ((-rho.log10()).floor().max(0.0) as usize).min(40) } else { 40 };
+                    bump_slot(PG_BASE + 3 + dec, 1);
+                }
+            }
+        }
+        if !(zero && refine && PIVDD_ON.load(std::sync::atomic::Ordering::Relaxed)) {
+            { crate::census_reason!(3); return None; }
+        }
     }
     // Hypotheses of the rank-1 lemma (Lean DependentFacet): row c of the tableau is w_c = rho_c + sum_j mu_j w_j with
     // no z column, and column kk is -mu_j on the active rows and 0 elsewhere (checked above for the slack rows).
@@ -1607,6 +1627,14 @@ fn refine_probe(p: &Plcp, tab: &Tab, zrows_all: &[usize], var: usize, kk: usize,
 /// iterative refinement whose residual r = a_c - sum_j mu_j a_j is formed from the rows of A themselves and whose correction solves
 /// M_ZZ delta = (A_Z Q^-1) r. `None` with equality rows (the data is then reduced) or a singular Gram matrix.
 fn refined_multipliers(p: &Plcp, zj: &[usize], c: usize) -> Option<Vec<f64>> {
+    refined_dependency(p, zj, c).map(|(mu, _)| mu)
+}
+
+/// `refined_multipliers` together with rho = r' Q^-1 r / M_cc for the final residual r = a_c - sum_j mu_j a_j: the squared Q^-1-norm of the part of
+/// a_c outside the span of the rows `zj`, relative to a_c. It is the scale-free pivot of exchanging row c (the Schur complement over M_cc), but formed
+/// from the residual vector itself, not from a difference of Gram entries: an exact dependence gives rho of the order of the square of the rounding
+/// of the rows (1e-32), where the tableau pivot only reaches 1e-10 to 1e-9.
+fn refined_dependency(p: &Plcp, zj: &[usize], c: usize) -> Option<(Vec<f64>, f64)> {
     if p.arows.rows == 0 || zj.is_empty() {
         return None;
     }
@@ -1625,7 +1653,7 @@ fn refined_multipliers(p: &Plcp, zj: &[usize], c: usize) -> Option<Vec<f64>> {
     let mut mu: Vec<f64> = lu.solve(&rhs).iter().zip(&sc).map(|(y, s)| y / s).collect();
     let nx = p.arows.cols;
     let mut r = vec![0.0; nx];
-    for _ in 0..REFINE_STEPS {
+    let residual = |mu: &[f64], r: &mut [f64]| {
         r.copy_from_slice(p.arows.row(c));
         for (a, &ja) in zj.iter().enumerate() {
             let row = p.arows.row(ja);
@@ -1633,13 +1661,25 @@ fn refined_multipliers(p: &Plcp, zj: &[usize], c: usize) -> Option<Vec<f64>> {
                 *rv -= mu[a] * x;
             }
         }
+    };
+    for _ in 0..REFINE_STEPS {
+        residual(&mu, &mut r);
         let corr: Vec<f64> = zj.iter().enumerate().map(|(a, &j)| p.aqi.row(j).iter().zip(&r).map(|(x, y)| x * y).sum::<f64>() / sc[a]).collect();
         let delta = lu.solve(&corr);
         for ((m, d), s) in mu.iter_mut().zip(&delta).zip(&sc) {
             *m += d / s;
         }
     }
-    mu.iter().all(|v| v.is_finite()).then_some(mu)
+    residual(&mu, &mut r);
+    // Q^-1 r = aqi_c - sum_j mu_j aqi_j
+    let mut u = p.aqi.row(c).to_vec();
+    for (a, &ja) in zj.iter().enumerate() {
+        for (uv, x) in u.iter_mut().zip(p.aqi.row(ja)) {
+            *uv -= mu[a] * x;
+        }
+    }
+    let rho = (r.iter().zip(&u).map(|(x, y)| x * y).sum::<f64>() / p.m[c * n + c].max(1e-300)).abs();
+    (mu.iter().all(|v| v.is_finite()) && rho.is_finite()).then_some((mu, rho))
 }
 
 /// Is the set of constraints (original indices, no equality rows) linearly dependent, judged on the equilibrated Gram matrix of their
@@ -1662,6 +1702,13 @@ fn dependent_set(p: &Plcp, aset: &[usize]) -> bool {
 /// zero there, and a member basis with such a pivot would not pass the relative pivot floor of `tableau_for` anyway, so the empty-P- safeguard ignores it.
 const ZERO_GUARD_MIN: f64 = 1e-12;
 const REFINE_STEPS: usize = 2;
+/// The pivot of a gap-band exchange is zero when the dependency residual rho (`refined_dependency`) is at most this: rho = 1e-20 is a relative residual of 1e-10.
+const RHO_ZERO: f64 = 1e-20;
+static PIVDD_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+/// Switch for the exact decision of pivots in the undecided band (`MPLCP_PIVDD=0` in the examples turns it off).
+pub fn set_pivot_dd(on: bool) {
+    PIVDD_ON.store(on, std::sync::atomic::Ordering::Relaxed);
+}
 /// A refined multiplier of this size or below (in the scale of the dependency) is zero: an exact dependency comes out at rounding level 1e-15.
 const REFINED_ZERO: f64 = 1e-12;
 /// Switch for the refined classification of gap-band multipliers (on by default; `MPLCP_REFINE=0` in the examples turns it off). On the 158 problems it changes
@@ -1815,7 +1862,7 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         #[cfg(feature = "lp_census")]
         if audit {
             let reason = crate::census::reason_take();
-            if reason == 6 {
+            if reason == 6 || reason == 3 {
                 audit_alt = Some(rank1_case2(p, tab, g.as_slice(), b, &gam, &zrows, &pv, e_all, f_all, seen, region_centre, true));
                 if audit_alt.as_ref().map_or(false, |x| x.is_none()) && std::env::var("AUDIT_DBG").is_ok() {
                     eprintln!("audit alt none reason {}", crate::census::reason_take());

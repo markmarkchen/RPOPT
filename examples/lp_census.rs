@@ -50,6 +50,9 @@ fn child(path: &str, alg: &str) {
     if let Ok(v) = std::env::var("MPLCP_REFINE") {
         rpopt::algorithms::mplcp::set_refine_multipliers(v != "0");
     }
+    if let Ok(v) = std::env::var("MPLCP_PIVDD") {
+        rpopt::algorithms::mplcp::set_pivot_dd(v != "0");
+    }
     if let Ok(m) = std::env::var("RPOPT_CERT") {
         rpopt::algorithms::mplcp::set_certificate(m.parse().unwrap());
     }
@@ -728,6 +731,13 @@ fn highdim_tables(rows: &[Row], skipped: &[(String, String)]) {
     println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
     for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::AdjCase2) > 0.0) {
         println!("| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |", r.problem, c(r, Counter::MuRefinedZero), c(r, Counter::MuRefinedReal), c(r, Counter::MuRefinedBand), c(r, Counter::AuditCalls), c(r, Counter::AuditSame), c(r, Counter::AuditExplained), c(r, Counter::AuditNoPositive), c(r, Counter::AuditExtraWalk), c(r, Counter::AuditDiff), c(r, Counter::AuditSkip), c(r, Counter::AuditAltNone), c(r, Counter::MuEmptyGuard), c(r, Counter::MuEmptyToWalk), c(r, Counter::R1Fallback));
+    }
+    println!("\n### High-dimension 3v: pivots in the undecided band, decided by the dependency residual rho = r'Q^-1 r / M_cc (zero when rho <= 1e-20)\n");
+    println!("| problem | gap calls | decided zero | left to the walk | decade histogram of rho (decade: calls; 0 is rho in [0.1, 1), 40 is 1e-40 and below) |");
+    println!("|---|---:|---:|---:|---|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && r.s.counters[census::PG_BASE] > 0) {
+        let h: Vec<String> = (0..41usize).filter(|&d| r.s.counters[census::PG_BASE + 3 + d] > 0).map(|d| format!("{}: {}", d, r.s.counters[census::PG_BASE + 3 + d])).collect();
+        println!("| {} | {} | {} | {} | {} |", r.problem, r.s.counters[census::PG_BASE], r.s.counters[census::PG_BASE + 1], r.s.counters[census::PG_BASE + 2], h.join(", "));
     }
     println!("\n### High-dimension 4: vertex clipping (`clip_flags`) outcomes per call\n");
     println!("| problem | algorithm | clip calls/region | ok | nt outside 2..=6 | more than 128 hyperplanes | infinite box | more than 600 vertices | too few vertices | vertex violates a row | redundancy LPs/region |");

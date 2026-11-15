@@ -33,6 +33,9 @@ fn main() {
     if let Ok(v) = std::env::var("MPLCP_REFINE") {
         rpopt::algorithms::mplcp::set_refine_multipliers(v != "0");
     }
+    if let Ok(v) = std::env::var("MPLCP_PIVDD") {
+        rpopt::algorithms::mplcp::set_pivot_dd(v != "0");
+    }
     // MPLCP_NO_DEDUPE=1: solve with the duplicated constraints (no removal)
     if std::env::var("MPLCP_NO_DEDUPE").is_ok() {
         rpopt::algorithms::mplcp::set_dedupe(false);
