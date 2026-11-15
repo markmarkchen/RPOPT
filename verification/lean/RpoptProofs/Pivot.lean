@@ -195,7 +195,8 @@ noncomputable def pivotSeq : (ι → ℝ) → Matrix ι ι ℝ → List ι → (
   | ρ, T, [] => (ρ, T)
   | ρ, T, i :: l => pivotSeq (pivVec T ρ i i) (pivT T i i) l
 
-/-- Every pivot element met along the list is nonzero (Rust: `piv.abs() < 1e-11 → None`). -/
+/-- Every pivot element met along the list is nonzero (Rust: `tableau_for` refuses a pivot below
+`pivot_floor`, `1e-11 min(M_ii, 1)`). -/
 def NonzeroPivots : Matrix ι ι ℝ → List ι → Prop
   | _, [] => True
   | T, i :: l => T i i ≠ 0 ∧ NonzeroPivots (pivT T i i) l
@@ -257,6 +258,18 @@ theorem rebuilt_eq_pivoted {M : Matrix ι ι ℝ} {r : ι → ℝ} {B : Finset �
   have h1 := tableauFor_isTableau M r hnd hpl
   rw [hl] at h1
   obtain ⟨e1, e2⟩ := tableau_unique h1 (pivot_isTableau h hp)
+  exact Prod.ext e1 e2
+
+/-- **The pivot order of a rebuild does not matter** (`tableau_for`: the given order, and the retry
+with the largest relative pivot first). Two orders of the same pairs, each with nonzero pivot
+elements, give the same tableau. -/
+theorem pivotSeq_perm {M : Matrix ι ι ℝ} {r : ι → ℝ} {l₁ l₂ : List ι} (h₁ : l₁.Nodup)
+    (h₂ : l₂.Nodup) (hp₁ : NonzeroPivots M l₁) (hp₂ : NonzeroPivots M l₂)
+    (hl : l₁.toFinset = l₂.toFinset) : pivotSeq r M l₁ = pivotSeq r M l₂ := by
+  have a := tableauFor_isTableau M r h₁ hp₁
+  have b := tableauFor_isTableau M r h₂ hp₂
+  rw [hl] at a
+  obtain ⟨e1, e2⟩ := tableau_unique a b
   exact Prod.ext e1 e2
 
 end Principal

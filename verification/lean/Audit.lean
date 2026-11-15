@@ -144,3 +144,7 @@ import RpoptProofs
 #print axioms Rpopt.farkas_box
 #print axioms Rpopt.farkas_box_signed
 #print axioms Rpopt.facet_coord_le
+-- Round 13: pivot order of a rebuild, DAQP filter with the box radius (ddf0aa8)
+#print axioms Rpopt.pivotSeq_perm
+#print axioms Rpopt.box_sq_le
+#print axioms Rpopt.daqp_box_certificate
