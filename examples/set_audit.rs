@@ -107,7 +107,11 @@ fn main() {
             diffs.push(Diff { set: set.clone(), side, full_dim: false, radius: 0.0, centre: vec![], lex: None, tight: f64::NAN, qp_agrees: false, qp_set: None, inside: Default::default() });
             continue;
         };
-        let s = rpopt::utils::chebyshev_ball(&cr.e, &cr.f, &[]).unwrap();
+        let Some(s) = rpopt::utils::chebyshev_ball(&cr.e, &cr.f, &[]) else {
+            // the rebuilt region's Chebyshev LP fails (thin region): judged through the solver's own dump
+            diffs.push(Diff { set: set.clone(), side, full_dim: false, radius: 0.0, centre: vec![], lex: None, tight: f64::NAN, qp_agrees: false, qp_set: None, inside: Default::default() });
+            continue;
+        };
         let centre: Vec<f64> = s.x[..nt].to_vec();
         let lex = lex_diagnostic(&prog, &cr);
         let (tight, qp_agrees) = tight_diagnostic(&prog, &cr, &centre);
