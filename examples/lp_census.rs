@@ -31,6 +31,10 @@ fn child(path: &str, alg: &str) {
     if let Ok(m) = std::env::var("RPOPT_CERT") {
         rpopt::algorithms::mplcp::set_certificate(m.parse().unwrap());
     }
+    // MPLCP_TAB_BUDGET=<bytes>: limit on live parent tableaux (default 256 MiB, 0 = none)
+    if let Some(b) = std::env::var("MPLCP_TAB_BUDGET").ok().and_then(|v| v.parse().ok()) {
+        rpopt::algorithms::mplcp::set_tab_budget(b);
+    }
     let mut runs: Vec<(f64, usize, Stats)> = vec![];
     loop {
         census::reset();
@@ -501,6 +505,15 @@ fn highdim_tables(rows: &[Row], skipped: &[(String, String)]) {
         println!(
             "| {} | {} | {:.0} | {:.2} | {:.2} | {:.0}% | {:.2} | {:.1} |",
             r.problem, r.regions, r.solve_s * 1e3, b / n, d / n, 100.0 * b / (b + d), c(r, Counter::DqNanos) / (b + d) / 1e3, c(r, Counter::PfCheb) / n
+        );
+    }
+    println!("\n### High-dimension 3j: mplcp tableau rebuilds refused\n");
+    println!("| problem | regions | `tableau_for` refusals | of which pivot / M_ii above 1e-6 | regions popped without a tableau (neighbour search skipped) | `candidate_law`: fresh tableau refused | `candidate_law`: one-pivot step below 1e-9 |");
+    println!("|---|---:|---:|---:|---:|---:|---:|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp") {
+        println!(
+            "| {} | {} | {} | {} | {} | {} | {} |",
+            r.problem, r.regions, c(r, Counter::TabRefuse), c(r, Counter::TabRefuseRel), c(r, Counter::ResolveNone), c(r, Counter::CandLawNoTab), c(r, Counter::CandLawSmallPiv)
         );
     }
     println!("\n### High-dimension 4: vertex clipping (`clip_flags`) outcomes per call\n");

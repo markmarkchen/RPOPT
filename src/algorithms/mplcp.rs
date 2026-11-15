@@ -306,6 +306,10 @@ fn tableau_for(p: &Plcp, z: &[usize]) -> Option<Tab> {
     for &i in z {
         let piv = tab.t[i * n + i];
         if piv.abs() < 1e-11 {
+            crate::census_bump!(TabRefuse, 1);
+            if piv.abs() > 1e-6 * p.m[i * n + i].abs() {
+                crate::census_bump!(TabRefuseRel, 1);
+            }
             return None;
         }
         tab.pivot(i, i);
@@ -1595,7 +1599,13 @@ impl TabSrc {
                 }
                 Err(a) => a.pivoted(v, kk),
             }),
-            TabSrc::None => tableau_of(plcp, cr),
+            TabSrc::None => {
+                let t = tableau_of(plcp, cr);
+                if t.is_none() {
+                    crate::census_bump!(ResolveNone, 1);
+                }
+                t
+            }
         }
     }
 }
@@ -2045,6 +2055,7 @@ fn candidate_law(plcp: &Plcp, parent: &Tab, c: &Cand) -> Option<(crate::program:
         Some((r, col)) => {
             let p = parent.tv(r, col);
             if !(p.abs() > 1e-9) {
+                crate::census_bump!(CandLawSmallPiv, 1);
                 return None;
             }
             let inv = 1.0 / p;
@@ -2071,7 +2082,10 @@ fn candidate_law(plcp: &Plcp, parent: &Tab, c: &Cand) -> Option<(crate::program:
         None => {
             let neq = plcp.eq.len();
             let z: Vec<usize> = c.aset[neq..].iter().map(|&o| plcp.pos[o]).collect();
-            let tab = tableau_for(plcp, &z)?;
+            let Some(tab) = tableau_for(plcp, &z) else {
+                crate::census_bump!(CandLawNoTab, 1);
+                return None;
+            };
             let law = tableau_law(plcp, &c.aset, |k, out| {
                 let Some(i) = tab.row_var.iter().position(|&v| v == n + k) else { return false };
                 for (j, o) in out.iter_mut().enumerate() {

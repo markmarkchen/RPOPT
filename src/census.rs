@@ -333,8 +333,16 @@ mod imp {
         DqEmpty,
         DqFallback,
         DqNanos,
+        /// `tableau_for` refusals (an absolute pivot below 1e-11), and those whose pivot is not small against the
+        /// diagonal of M (pivot / M_ii above 1e-6); `resolve` returning no tableau for a region; refusals inside
+        /// `candidate_law` (fresh tableau refused, or the one-pivot step below 1e-9)
+        TabRefuse,
+        TabRefuseRel,
+        ResolveNone,
+        CandLawNoTab,
+        CandLawSmallPiv,
     }
-    pub const NC: usize = 146;
+    pub const NC: usize = 151;
 
     #[derive(Clone, Debug)]
     pub struct Stats {
