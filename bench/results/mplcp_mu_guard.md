@@ -55,7 +55,7 @@ entries) and the cases of pivot measure and multiple rows. On masses4_N3 the rem
     [37, 46] (`extra_regions`), so `base` had two overlapping slivers that `A` does not produce.
 * **Coverage** (`lexcheck 3000`, base and A, the 11 problems above): 0 lexico-infeasible regions, 0 overlaps, 0 gaps on all 22 runs
   (330 to 3,000 feasible samples each; pop_032 56).
-* **ResolveNone:** 0 on the five census problems (regions popped without a tableau, table 3j; `tableau_for` refusals 140 to 683 per run, all rescued by the second pivot order or refused in `candidate_law`, as on main).
+* **ResolveNone:** 0 on the five census problems (regions popped without a tableau, table 3j; `tableau_for` refusals 140 to 690 per run, all rescued by the second pivot order or refused in `candidate_law`, as on main).
 * **Paired timing** (51 problems, 4 to 5 tasks each; a task runs `base`, `A` and a copy of `base` once, shuffled; median ratio over the tasks,
   ratio above 1 means `A` is faster; A/A is `base` against its copy):
 
