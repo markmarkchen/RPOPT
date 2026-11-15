@@ -1411,8 +1411,8 @@ thread_local! {
 }
 
 /// Decides with the DAQP kernel whether `{x in R^d1 : e x <= f}` is nonempty with room to spare: first on the
-/// rows shifted inward by `DAQP_SHIFT` (feasible: nonempty, the minimum-norm point is the witness), then on the
-/// rows as they are (infeasible: empty). In between, or when DAQP gives up, the answer is `Undecided`.
+/// rows as they are (infeasible: empty), then, if feasible, on the rows shifted inward by `DAQP_SHIFT` (feasible:
+/// nonempty, the minimum-norm point is the witness). In between, or when DAQP gives up, the answer is `Undecided`.
 fn daqp_nonempty(e: &Mat, f: &[f64], d1: usize) -> DqOut {
     use crate::algorithms::pdaqp::daqp::{Rows, Status};
     if d1 == 0 || e.rows == 0 || !DAQP_ON.load(std::sync::atomic::Ordering::Relaxed) {
@@ -1438,21 +1438,19 @@ fn daqp_nonempty(e: &Mat, f: &[f64], d1: usize) -> DqOut {
             }
             rhs[i] = f[i] / nrm;
         }
+        // most tests find an empty polytope, which the rows as they are decide in one solve
+        let rows = Rows { cols: &cols[..], stride: n, b: &rhs[..], n, dim: d1 };
+        match dq.solve(&rows, 0) {
+            Status::Infeasible => return DqOut::Empty,
+            Status::Unknown => return DqOut::Undecided,
+            Status::Feasible => {}
+        }
         for v in rhs.iter_mut() {
             *v -= DAQP_SHIFT;
         }
         let rows = Rows { cols: &cols[..], stride: n, b: &rhs[..], n, dim: d1 };
         match dq.solve(&rows, 0) {
-            Status::Feasible => return DqOut::Inside(dq.x.clone()),
-            Status::Unknown => return DqOut::Undecided,
-            Status::Infeasible => {}
-        }
-        for v in rhs.iter_mut() {
-            *v += DAQP_SHIFT;
-        }
-        let rows = Rows { cols: &cols[..], stride: n, b: &rhs[..], n, dim: d1 };
-        match dq.solve(&rows, 0) {
-            Status::Infeasible => DqOut::Empty,
+            Status::Feasible => DqOut::Inside(dq.x.clone()),
             _ => DqOut::Undecided,
         }
     });
