@@ -9,12 +9,12 @@ Lean 4 and Mathlib proofs of the mathematics behind two RPOPT solvers:
 
 The proofs are at the model level, in exact real arithmetic. They justify the steps the Rust code
 takes, not its floating point execution. Every result listed as proved has no `sorry`, and
-`Audit.lean` prints the axioms of all 110 main theorems: each uses at most `propext`,
+`Audit.lean` prints the axioms of all 118 main theorems: each uses at most `propext`,
 `Classical.choice` and `Quot.sound` (two use none, one only `propext` and `Quot.sound`). Modelling
 assumptions are explicit hypotheses,
 never axioms.
 
-Rust line numbers refer to main at commit `76c5070` (mplcp.rs unchanged since `f234e64`).
+Rust line numbers refer to main at commit `7457656`.
 
 ## Build
 
@@ -48,6 +48,7 @@ lake env lean Audit.lean    # one line per main theorem: the axioms it depends o
 | `DependentFacet.lean` | the dependent-row facet: the neighbours across it are `T \ {j}`, `j ∈ P⁻` (direct enumeration) |
 | `Termination.lean` | no repeated state on the facet walk; what the two caps can be replaced with |
 | `Coverage.lean` | breadth-first exploration as a reachability closure, skipping rules |
+| `PivotMeasure.lean` | the off-`A` block of a tableau is positive semidefinite: sign, size and zero pattern of the pivot of a vanishing slack row |
 | `Optimizations/EntryFacetSkip.lean` | safety of the entry-facet skip (merged) |
 | `Optimizations/KnownRegionSkip.lean` | safety of the known-region skip of Case-2 facets (step 2) |
 | `MplpLex/Certificate.lean` | LP weak duality and the basis certificate |
@@ -89,6 +90,7 @@ lake env lean Audit.lean    # one line per main theorem: the axioms it depends o
 | Alg. 2 | `case2_lexmin_accepted` | **cover**: at every facet point the lexicographic minimum candidate passes all its inequalities (16), so the Case-2 sub-facets cover the facet | proved |
 | Alg. 2 | `neighbour_unique_on_ray` | the basis lexico-feasible just across a facet point is unique | proved |
 | Alg. 2 | `lcp_multipliers_dependent`, `case2_needs_dependent_rows` | two multiplier vectors at one `θ` differ in `ker Aᵀ` on the active rows: a Case-2 step that keeps α fixed needs dependent active rows | proved |
+| Pivot | `pivot_nonneg`, `pivot_cauchy_schwarz`, `tableau_diag_le`, `column_le_pivot`, `slack_column_zero_of_pivot_zero` | for a vanishing slack row `c`: `T c c ≥ 0`; `T k c ² ≤ T k k · T c c ≤ M k k · T c c`; a zero pivot forces a zero slack column | proved |
 | Dep. facet | `DepFacet.of_dependency` | `a_c = Σ_{j∈A} μ_j a_j` (row and column relations of `M`) with independent active rows gives row `c` of the tableau `w_c = ρ_c + Σ μ_j w_j` and column `c` equal to `-μ` on `A`, 0 elsewhere; so `T c c = 0` | proved |
 | Dep. facet | `identity`, `slack_side`, `needs_pos` | `w_c = -D + Σ μ_j w_j` for every solution; a basis with slacks zero on `T \ {j}` has `μ_j w_j = D`, so across `F` only `j ∈ P⁻` can work | proved |
 | Dep. facet | `no_solution_of_empty`, `qp_infeasible_of_empty` | with `P⁻` empty no parameter with `D > 0` is feasible | proved |
@@ -167,57 +169,58 @@ rather than returns.
 
 ## Correspondence with the Rust code
 
-`mplcp.rs` at `76c5070` unless noted; `build` is `mplcp_build.rs`.
+`mplcp.rs` at `7457656` unless noted; `build` is `mplcp_build.rs`.
 
 | Lean theorem | Rust function or step | What it justifies |
 |:-------------|:----------------------|:------------------|
 | `lcpM`, `lcpq`, `lcpQ`, `slack_primalOf` | `Plcp::new` (50-117) | the pLCP data `M, q, R` from the KKT cache |
-| `lcp_unique_optimizer`, `region_law_optimal` | `tableau_law` (1801), `complete_primal_law` | `x(θ) = -H⁻¹(c + Hθ + Aᵀλ(θ))` is the optimizer on the region |
-| `law_eq_kkt` | `TABLEAU_LAW` switch (1775), `tableau_law` vs `optimal_control_law_dual` | the tableau law equals the KKT-solve law |
-| `tableau_unique`, `pivotSeq_eq_of_isTableau` | `REFACTOR` (1354), `TabSrc::Lazy` and `resolve` (1371-1406), `candidate_law` (1838), `pivot_solve` (2018-2031) | a tableau reached by a chain of pivots, applied when the child is popped, equals the one rebuilt from scratch, for any period |
+| `lcp_unique_optimizer`, `region_law_optimal` | `tableau_law` (1836), `complete_primal_law` | `x(θ) = -H⁻¹(c + Hθ + Aᵀλ(θ))` is the optimizer on the region |
+| `law_eq_kkt` | `TABLEAU_LAW` switch (1810), `tableau_law` vs `optimal_control_law_dual` | the tableau law equals the KKT-solve law |
+| `tableau_unique`, `pivotSeq_eq_of_isTableau` | `REFACTOR` (1389), `TabSrc::Lazy` and `resolve` (1406-1441), `candidate_law` (1873), `pivot_solve` (2053-2066) | a tableau reached by a chain of pivots, applied when the child is popped, equals the one rebuilt from scratch, for any period |
 | `isTableau_empty`, `tableauFor_isTableau` | `tableau_for` (297-314; check `piv.abs() < 1e-11` at 308) | the region tableau rebuilt from an active set |
 | `exchange_iff`, `pivVec`, `pivT` | `Tab::defer_pivot` (202), `Tab::flush` (263), `Tab::pivoted` (226), `Tab::tv`/`rv` (157-193) | the pivot formulas |
-| `pivot_isTableau`, `toggle` | `Nbr::Toggle` (1052, used at 1759), `z_toggle` (728) | the neighbour's tableau is one principal pivot away |
-| `Case1` (fields), `Case1.facet_eq` | `adjacent` (1007): `zrows` (1015-1034), `pv` (1040), `tve` (1046), `blocked` (1048) | the exact conditions of the fast path |
-| `Case1.across`, `Case1.lex_cover` | fast path return (1052) | the toggled basis is the region across the facet |
-| `entry_facet_unique_neighbour` | entry-facet skip in `expand_candidates` (1659-1682), `Item::entry` (2030) | the skipped search could only return the parent |
+| `pivot_isTableau`, `toggle` | `Nbr::Toggle` (1087, used at 1794), `z_toggle` (728) | the neighbour's tableau is one principal pivot away |
+| `Case1` (fields), `Case1.facet_eq` | `adjacent` (1030): `zrows` (1038-1057), `pv` (1063), `tve` (1069), absolute (`tve > PTOL`) or scale-free (`nonzero_rel`, 1072-1078) acceptance (1082), `blocked` (1083) | the exact conditions of the fast path |
+| `Case1.across`, `Case1.lex_cover` | fast path return (1087) | the toggled basis is the region across the facet |
+| `pivot_nonneg`, `column_le_pivot`, `slack_column_zero_of_pivot_zero` | `pivot_measure` (1006-1018), `MEASURE_ZERO` 1e-9 and `MEASURE_NONZERO` 1e-6 (1022-1023) | the pivot of a vanishing slack row is `≥ 0`; the slack-column part of the measure squared is at most the pivot part; a zero pivot forces a zero slack column |
+| `entry_facet_unique_neighbour` | entry-facet skip in `expand_candidates` (1694-1717), `Item::entry` (2065) | the skipped search could only return the parent |
 | `LexPos`, `LexNonneg` | `lex_nonneg` (341-348), `lex_nonneg_rel` (353-356), `lex_cmp` (327-338) | lexicographic sign, without tolerance |
 | `LexPos.eventually_pos` | header (7-9): `ε = (ε0, ε0², …)` | symbolic `ε` is sound |
-| `lexRows`, `isLexTableau_of_isTableau` | `rfull` (429-442), `rowmax` (443); `lex_feasible` (2404) | the β block is `-T[:, c]` for nonbasic `w_j`, a unit vector for basic `w_j` |
-| `lex_ratio_pivot_on`, `zero_row_beats_positive_row`, `lexmin_zero_row` | `in_z` (445, relative through `Facet::sc`, 1020-1027), Case 1 (465-499): lexmin over `P ∩ Z` on β | the Case-1 pivot keeps the non-α rows lexico-positive |
+| `lexRows`, `isLexTableau_of_isTableau` | `rfull` (429-442), `rowmax` (443); `lex_feasible` (2439) | the β block is `-T[:, c]` for nonbasic `w_j`, a unit vector for basic `w_j` |
+| `lex_ratio_pivot_on`, `zero_row_beats_positive_row`, `lexmin_zero_row` | `in_z` (445, relative through `Facet::sc`, 1043-1050), Case 1 (465-499): lexmin over `P ∩ Z` on β | the Case-1 pivot keeps the non-α rows lexico-positive |
 | `WalkState`, `WalkStep` | `walk_one` (375): `Tab` with `row_var`, `col_var`, entering column `e`; `e = col_of(comp(leaving))` (487, 607); `WalkKey` (646-654) | the walk of `pivot_facet` |
-| `first_step_rows`, `first_step_nonAlpha` | first call of `walk_one`, `e` = the α column of the work tableau (1085-1098) | the first pivot establishes the walk invariant |
+| `first_step_rows`, `first_step_nonAlpha` | first call of `walk_one`, `e` = the α column of the work tableau (1120-1133) | the first pivot establishes the walk invariant |
 | `pivVec_num_zero` | Case 1 (zero leaving row) and Case 2 (α's coefficient within `PTOL`) | α stays on the facet |
 | `terminal_rows`, `ray_lexFeasible`, `walk_sound` | terminal push `push_leaf(z_after(...))` (450-461), tested before the `P` empty exit (462) | the returned basis is lexico-feasible just across the facet |
 | `case2_lexmin_accepted`, `case2_accept_unique`, `gamma_scale`, `gamma_scale_nonneg` | Case 2 (500-629): scale-free Γ (517), `gq_zero` relative (518-519), `lex_nonneg_rel` (523), Chebyshev (580-592) | the sub-facets cover the facet and at most one candidate wins at each point |
 | `neighbour_unique_on_ray` | `push_leaf` (457, 708) | one neighbour per facet point |
-| `case2_needs_dependent_rows` | slow path entered with `tve ≈ 0` (1046); Case 2 (500) | Case 2 moves multipliers among dependent active rows |
+| `case2_needs_dependent_rows` | slow path entered with `tve ≈ 0` (1069); Case 2 (500) | Case 2 moves multipliers among dependent active rows |
 | `walk_repeat_returns` | exact cycle check against the state after the first pivot (488-498 in Case 1, 608-616 for Case-2 children) | any repetition returns there, so the check catches every cycle in exact arithmetic |
-| `walk_no_repeat`, `chain_length_bound` | explicit stack `pivot_facet` (672-704), `Frame` (656-664), budget `WALK_BUDGET_PER_ROW`, `WALK_BUDGET_MIN` (1365-1366, used at 1134) | the walk is finite; the budget is a cost limit, not a correctness bound |
+| `walk_no_repeat`, `chain_length_bound` | explicit stack `pivot_facet` (672-704), `Frame` (656-664), budget `WALK_BUDGET_PER_ROW`, `WALK_BUDGET_MIN` (1400-1401, used at 1169) | the walk is finite; the budget is a cost limit, not a correctness bound |
 | `reach_skip` | leaf pruning: a leaf whose active set is in `Seen` is skipped (541-546) | the caller would drop it anyway: same explored set |
-| `DepFacet` (fields) | `rank1_case2` (833-999) tests: one vanishing row `c` with `γ_c < 0` (836), a slack row (841), zero pivot `T[c,kk]` (845), column `kk` zero on the slack rows (848), row `c` zero on the `z` columns (854-860) and equal to `μ_i = -T[i,kk]` on each active `w_i` column (866) | the tableau structure of the dependent-row facet, checked directly (instead of `of_dependency`) |
-| `hinj_of_dependency` | guard against multipliers between `PTOL` and `1e-7` of the largest (872) | `T \ {j}` independent for every `j` with `μ_j ≠ 0` (hypothesis `hinj` of `unique_across`) |
-| `needs_pos`, `no_solution_of_empty`, `qp_infeasible_of_empty` | `P⁻ = {i : -T[i,kk] > PTOL}` (876); `P⁻` empty returns no neighbour (878) | only `j ∈ P⁻` can work across; with `P⁻` empty nothing is feasible across |
-| `known_region_skip`, `reach_skip` | members already in `Seen` dropped first (891) | same explored set as returning them |
-| `on_facet`, `pieces_cover`, `argmin_only_on_facet` | pieces `F ∩ {μ_k λ_j - μ_j λ_k ≤ 0}` (937-965), `facet_polytope` (803-820); tie of two ratios as affine functions returns `None` to the walk (914-921, 954) | each member borders `F` on its piece; the pieces cover `F`; at a strict-argmin point only that member is valid |
-| `across`, `unique_across`, `returned_mem_S` | piece nonempty by a witness with margin `WITNESS_MARGIN` (967-976) or a Chebyshev radius `> 1e-9` (978-993); call site in `adjacent` (1064-1068), `RANK1` (796) | the member of a full-dimensional piece is the unique neighbour just across it |
-| `known_region_unique_neighbour`, `known_region_skip`, `vertices_subset_polyhedron` | facet certificate `certify` (1587-1656), asked in `adjacent` after the fast path (1056-1061); `CERT` mode (1479, default 1 at 3 to 5 parameters) | skipping a Case-2 facet contained in a known region |
+| `DepFacet` (fields) | `rank1_case2` (833-997) tests: one vanishing row `c` with `γ_c < 0` (836), a slack row (841), zero pivot and zero slack column as `pivot_measure ≤ MEASURE_ZERO` (846), row `c` zero on the `z` columns (852-858) and equal to `μ_i = -T[i,kk]` on each active `w_i` column (864) | the tableau structure of the dependent-row facet, checked directly (instead of `of_dependency`) |
+| `hinj_of_dependency` | guard against multipliers between `PTOL` and `1e-7` of the largest (870) | `T \ {j}` independent for every `j` with `μ_j ≠ 0` (hypothesis `hinj` of `unique_across`) |
+| `needs_pos`, `no_solution_of_empty`, `qp_infeasible_of_empty` | `P⁻ = {i : -T[i,kk] > PTOL}` (874); `P⁻` empty returns no neighbour (876) | only `j ∈ P⁻` can work across; with `P⁻` empty nothing is feasible across |
+| `known_region_skip`, `reach_skip` | members already in `Seen` dropped first (889) | same explored set as returning them |
+| `on_facet`, `pieces_cover`, `argmin_only_on_facet` | pieces `F ∩ {μ_k λ_j - μ_j λ_k ≤ 0}` (935-963), `facet_polytope` (803-820); tie of two ratios as affine functions returns `None` to the walk (912-919, 952) | each member borders `F` on its piece; the pieces cover `F`; at a strict-argmin point only that member is valid |
+| `across`, `unique_across`, `returned_mem_S` | piece nonempty by a witness with margin `WITNESS_MARGIN` (965-974) or a Chebyshev radius `> 1e-9` (976-991); call site in `adjacent` (1099-1103), `RANK1` (796) | the member of a full-dimensional piece is the unique neighbour just across it |
+| `known_region_unique_neighbour`, `known_region_skip`, `vertices_subset_polyhedron` | facet certificate `certify` (1622-1691), asked in `adjacent` after the fast path (1091-1096); `CERT` mode (1514, default 1 at 3 to 5 parameters) | skipping a Case-2 facet contained in a known region |
 | `cr_interiors_disjoint` | stray overlapping regions (pop_005, pop_007, pop_011) | which hypothesis an overlap breaks |
-| `basic_solves`, `slack_primalOf`, `lcp_unique_optimizer` | tightness guard: `TIGHT_TOL` (1888), `qp_agrees` (1905), `tight_residual` (1921), used in `build_cand` (1953-1963) | an exact tableau makes its active rows tight under its law (residual 0); the QP optimizer at a point is unique |
-| `relint_of_strict` | mplp_lex.rs facet point: foot of the region's Chebyshev centre (627-647), else the facet's Chebyshev LP (648-677) | the point used for the lexicographic neighbour is in the facet's relative interior |
+| `basic_solves`, `slack_primalOf`, `lcp_unique_optimizer` | tightness guard: `TIGHT_TOL` (1923), `qp_agrees` (1940), `tight_residual` (1956), used in `build_cand` (1988-1998) | an exact tableau makes its active rows tight under its law (residual 0); the QP optimizer at a point is unique |
+| `relint_of_strict` | mplp_lex.rs facet point: foot of the region's Chebyshev centre (628-648), else the facet's Chebyshev LP (649-678) | the point used for the lexicographic neighbour is in the facet's relative interior |
 | `chebyshev_ball_feasible` | program.rs `ball_points` (1227), `feasible_space_chebychev_ball` (1075) with the Clarabel fallback (1242); used by `gen_optimal_active_set` and `degenerate_start` | sampled start parameters are feasible (inequality rows) |
-| `reach_least` | `pivot_solve` (1970), `pivot_solve_par` (2048), `seen` (1973, 1997, 2025, 2057, 2095, 2120) | the explored set does not depend on the visiting order |
-| `reach_skip` | `seen_claim` before `build_cand` (1413, 1997); mplp_lex `crossed` (mplp_lex.rs 517, 529, 560-562, 694) | skipping known neighbours is safe |
+| `reach_least` | `pivot_solve` (2005), `pivot_solve_par` (2083), `seen` (2008, 2032, 2060, 2092, 2130, 2155) | the explored set does not depend on the visiting order |
+| `reach_skip` | `seen_claim` before `build_cand` (1448, 2032); mplp_lex `crossed` (mplp_lex.rs 517, 529, 560-562, 695) | skipping known neighbours is safe |
 | `lp_certificate`, `basis_certificate` | mplp_lex.rs header (13-16), `Lex::solve` (273-386), `Ok(())` at 367 | a basis with no lexico-negative slack or multiplier row is optimal |
 | `rank1_inverse`, `rank1_tableau` | mplp_lex.rs `Lex::pivot` (168-190) | the rank-1 update of `binv` and `t` |
 | `dual_pivot`, `ratio_test` | mplp_lex.rs phase 1 (319-351), ratio `l / y` with `y > 1e-9` (333-347) | phase 1 keeps dual feasibility |
 | `primal_direction`, `lex_ratio_test` | mplp_lex.rs phase 2 (352-383), `aj = -T_jp` (374), `slack_cmp` (235-267) | phase 2 keeps primal lexico-feasibility |
 | `lexOptimal_unique` | mplp_lex.rs header (17-19), `slack_sign` (205-232), `lam_row` (389-404) | one lexico-optimal basis per `θ` |
-| `infeasible_beyond`, `row_j_combination` | mplp_lex.rs `direct_cross` (1070-1115): ratio test over inequality positions with `T_jp > 1e-9` (1076-1090); none means nothing beyond (1091-1098), and `solve` skips the facet (570, 578-581); `direct_row` (1049-1060) | the skipped facet has no neighbour; the LP path's phase 1 uses the same `y > 1e-9` rule (336) and ends in `Fail::Infeasible` |
-| `reach_congr`, `lexOptimal_unique` | the success-rate gate `s_avg`, `q_avg` (524, 542, 615-619), no longer fed by these skips (31a12ae) | the gate only chooses between the direct crossing and the LP path, which return the same neighbour |
-| `EnumBasis.dual`, `LexOpt` | mplp_lex.rs `dual_lex_feasible_bases` (786-899), test `lex_sign(&lam_out) <= 0` (868); `enumeration_applies` (773-782) requires H = 0 | (D) is a property of the basis alone |
-| `EnumBasis.ZCond`, `primalLex_iff_of_interior` | mplp_lex.rs `candidate_ok` (906-988): zero test (942-957), ε-row sign over `B ∪ {j}` (964-984) | (Z) on the identically zero slacks |
-| `fullDim_iff`, `enum_interiors_disjoint` | mplp_lex.rs `enumerate_regions` (992-998), dispatch in `solve` (454-455), `use_enumeration` cost model (758-770) | the enumerated regions are the full-dimensional lexicographic regions, without overlaps |
+| `infeasible_beyond`, `row_j_combination` | mplp_lex.rs `direct_cross` (1071-1116): ratio test over inequality positions with `T_jp > 1e-9` (1077-1091); none means nothing beyond (1092-1099), and `solve` skips the facet (570, 578-582); `direct_row` (1050-1061) | the skipped facet has no neighbour; the LP path's phase 1 uses the same `y > 1e-9` rule (336) and ends in `Fail::Infeasible` |
+| `reach_congr`, `lexOptimal_unique` | the success-rate gate `s_avg`, `q_avg` (524, 542, 616-620), no longer fed by these skips (31a12ae) | the gate only chooses between the direct crossing and the LP path, which return the same neighbour |
+| `EnumBasis.dual`, `LexOpt` | mplp_lex.rs `dual_lex_feasible_bases` (787-900), test `lex_sign(&lam_out) <= 0` (869); `enumeration_applies` (774-783) requires H = 0 | (D) is a property of the basis alone |
+| `EnumBasis.ZCond`, `primalLex_iff_of_interior` | mplp_lex.rs `candidate_ok` (907-989): zero test (943-958), ε-row sign over `B ∪ {j}` (965-985) | (Z) on the identically zero slacks |
+| `fullDim_iff`, `enum_interiors_disjoint` | mplp_lex.rs `enumerate_regions` (993-999), dispatch in `solve` (454-455), `use_enumeration` cost model (759-771) | the enumerated regions are the full-dimensional lexicographic regions, without overlaps |
 
 ## Modelling assumptions
 
@@ -256,7 +259,7 @@ All of these appear as explicit hypotheses of the theorems that need them.
   through the facets that get searched.
 - Tableau refactoring and drift (`REFACTOR`, `mplp_lex` `REFRESH`), beyond the exact statement
   `tableau_unique`.
-- Start-region selection (`initial_region` 1437, `degenerate_start`, `lex_feasible_start` 2546,
+- Start-region selection (`initial_region` 1472, `degenerate_start`, `lex_feasible_start` 2581,
   `mplp_lex` initial basis; `drop_lex_infeasible` was removed in 52f3103). Only the feasibility of the sampled points is
   covered (`chebyshev_ball_feasible`). Past bugs of this kind, such as the zero-region
   start from dependent active rows fixed in `668403e`, live at this level.
@@ -498,8 +501,44 @@ All of these appear as explicit hypotheses of the theorems that need them.
       - a true `T_jp` in `(0, 1e-9]` counts as `≤ 0`. In exact arithmetic the program is then feasible beyond
         the facet, though only far from the basic point (the slack of row `b p` must grow like
         `|s_j| / T_jp`). Both paths make the same call, so they still agree with each other;
-      - the comment at 579 ("counts as a success of the attempt") is out of date since 31a12ae, which
-        removed the update.
+      - the comment at 579 ("counts as a success of the attempt") was out of date after 31a12ae; fixed in
+        7457656.
+16. **Scale-free pivot test (7457656).** Proved in `PivotMeasure.lean`. With `M` symmetric positive
+    semidefinite, the block of the tableau on the slack rows and the `z` columns outside `A` (the Schur
+    complement of `M_AA`) is symmetric positive semidefinite (`tableau_off_psd`, `tableau_off_symm`). For a
+    vanishing slack row `c` this gives three facts:
+    - `pivot_nonneg`: `T c c ≥ 0`;
+    - `column_le_pivot`: `T k c ² ≤ M k k · T c c`, that is, the slack-column part of the measure squared is
+      at most the pivot part;
+    - `slack_column_zero_of_pivot_zero`: a zero pivot forces a zero slack column.
+    - *Case 1 (fast path).* The new acceptance (`nonzero_rel`, 1072-1078) meets `Case1` as follows:
+      - single leaving candidate: `pv.len() == 1` gives `gam_v` and `gam_others`; with `zrows.len() == 1`,
+        `not_blocked` is vacuous;
+      - nonzero pivot: the measure `> 1e-6` makes `T v v ≠ 0` a robust decision. Through `column_le_pivot`,
+        even a measure carried by a slack-column entry certifies a pivot of at least `1e-12` relative;
+      - sign: `tve > 0` gives `T v v > 0` (with `γ_v < 0`), which is `piv_pos`, and it is α rising (`tve` is
+        α's coefficient after the first pivot). `pivot_nonneg` shows that this sign holds automatically in
+        exact arithmetic for a slack row, so the test only guards rounding.
+    - *Rank-1 entry.* `measure ≤ 1e-9` (846) stands for `T c c = 0` and a zero slack column, the `row_c` (at
+      `c`) and `col_c` (off `A`) hypotheses of `DepFacet`. By `slack_column_zero_of_pivot_zero`, in exact
+      arithmetic the pivot alone forces the column, so the combined test is exactly the zero-pivot
+      condition. The separate structure checks of round 8 (852-864) still hold row `c` to `μ`.
+    - *Departure (a): a true pivot of measure in `(0, 1e-9]` is treated as zero.* The model predicts that
+      the true neighbour across `F` is the Case-1 toggle, whose region is a sliver across `F`: its new
+      multiplier `ρ'_c` grows like `D / T c c`, so a member `j ∈ P⁻` hits zero within `D ≈ λ_j T c c / μ_j`.
+      Beyond the sliver lies `T \ {j*}`. The rank-1 path returns `T \ {j*}` and skips the sliver, which has
+      relative width about `1e-9`, below the builder's Chebyshev radius `1e-9`. So the sliver is lost, as
+      the builder would drop it anyway.
+    - *Departure (b): a true dependence whose rounding gives measure above `1e-6` would be treated as Case 1.*
+      The model predicts that the toggle `A ∪ {c}` is singular (no exact tableau, `NonzeroPivots` fails) and
+      that the neighbours are the members `T \ {j}` (`unique_across`). The code would pivot on noise. The
+      tightness guard (`TIGHT_TOL`) then flags the garbage law and the QP decides, so the true members are
+      not produced through this facet unless they are reached elsewhere. The measured gap (dependences below
+      `4e-10`, others at least `1.7e-5`) makes this unlikely.
+    - *Mismatch:* the measure gates only the new branch (`tve ≤ PTOL`). When `tve > PTOL` (absolute) the
+      toggle is still accepted without the measure (1082), so a dependence whose rounding makes
+      `tve > PTOL` (large-scale rows) is taken as Case 1, which is departure (b). Applying
+      "measure `≤ MEASURE_ZERO` means not Case 1" to both branches would close it.
 
 The measurements in findings 3 to 5 come from an uncommitted debug build run on the laptop (runs of 4
 to 30 s). They are diagnostics, not timings.

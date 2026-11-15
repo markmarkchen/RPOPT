@@ -11,6 +11,7 @@ import RpoptProofs.Algorithm2
 import RpoptProofs.Termination
 import RpoptProofs.FacetWalk
 import RpoptProofs.DependentFacet
+import RpoptProofs.PivotMeasure
 import RpoptProofs.Coverage
 import RpoptProofs.Optimizations.EntryFacetSkip
 import RpoptProofs.Optimizations.KnownRegionSkip

@@ -108,3 +108,23 @@ Everything within 0.96 to 1.01 of base except the problems that gain (random mpL
 `mplp_lex` is fastest on all five, by 2 to 20% (randlp_t16_x4: 0.995 against `combinatorial_graph`, a tie within 0.5%), and on masses7one_N1 it is the only
 solver that finishes. With the earlier tables: `mplp_lex` is now the fastest valid exact solver on every mpLP of the benchmark: the 30 of
 `bench/problems_lp`, and the 23 of `bench/problems_lp_highdim` (6 to 16 parameters).
+
+## masses8one_N1 (16 parameters, 1-norm): the last problem
+
+`masses8one_N1` is added to `bench/problems_lp_highdim`. One solve per exact solver, 1 CPU each (array 45895732; the `mplp_lex`
+and `combinatorial` re-runs 45896950 and 45897947; binary of build 45893737, 2 h limit). Memory is above the 2,010 MB per CPU:
+`--cpus-per-task` was raised only to hold it (3 CPUs for 6,000 MB, 6 CPUs for 12,000 MB); the solvers are single-threaded. The 1.5x of the
+masses7one_N1 peak (1.5 GB) that was planned was not enough: the memory grows with the region count (131k regions for masses7one_N1, 523k here).
+
+| solver | result |
+|---|---|
+| `mplp_lex` | 523,189 regions in 1,071 s (17.8 min), 0 gaps and 0 errors on 2,000 sampled parameters, peak 7.6 GB; a first run with 6,000 MB was killed by the memory limit after 14.6 min |
+| `combinatorial_graph` | out of memory after 7.9 min at 6,000 MB and again after 15.8 min at 12,000 MB |
+| `combinatorial` | out of memory after 21.6 min at 6,000 MB; cancelled after 22 min at 12,000 MB (still running, already longer than `mplp_lex`) |
+| `graph` | cancelled after 61 min at 6,000 MB, still running |
+| `geometric` | cancelled after 61 min at 6,000 MB, still running |
+
+`mplp_lex` is the only solver that finished. `combinatorial`, `graph` and `geometric` were stopped once they had run 1.2 to 3.4 times as long as `mplp_lex`
+needed, so none of them can be faster; `combinatorial_graph` ran out of memory at both limits. So `mplp_lex` is the fastest valid exact
+solver on every problem of `bench/problems_lp` (30) and `bench/problems_lp_highdim` (24, 6 to 16 parameters); on masses5inf_N2, masses7one_N1 and masses8one_N1
+it is the only one that finishes.
