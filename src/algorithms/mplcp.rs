@@ -347,10 +347,21 @@ fn lex_nonneg(v: &[f64]) -> bool {
     true
 }
 
+/// Is `v` lexico-nonnegative when entries are judged relative to its largest entry? Used where
+/// `v` is a difference of rows scaled by 1/a (amplified by up to 1/PTOL), so an absolute `ZTOL`
+/// would call a genuine sign noise or a genuine value zero.
+fn lex_nonneg_rel(v: &[f64]) -> bool {
+    let vm = v.iter().fold(0.0f64, |m, x| m.max(x.abs()));
+    v.iter().find(|x| x.abs() > ZTOL * vm).map_or(true, |x| *x > 0.0)
+}
+
 struct Facet<'a> {
     /// facet-space rows of the polytope F (E_f θ_f <= f_f)
     ef: &'a Mat,
     ff: &'a [f64],
+    /// per-variable magnitude of the row (set in `adjacent`, where the rows identically zero on
+    /// the facet are found with a tolerance relative to it); `in_z` uses the same tolerance
+    sc: &'a [f64],
 }
 
 /// Algorithm 2 (`pivot`): from the ACLFB `tab` (α basic or entering as column `e`) returns the
@@ -425,7 +436,7 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
         if pset.is_empty() {
             return;
         }
-        let in_z = |i: usize| rowmax(i) <= ZTOL;
+        let in_z = |i: usize| rowmax(i) <= ZTOL * fpoly.sc[tab.row_var[i]];
         let pz: Vec<usize> = pset.iter().cloned().filter(|&i| in_z(i)).collect();
         let alpha_row = tab.row_var.iter().position(|&v| v == alpha);
         if pz.is_empty() {
@@ -466,7 +477,9 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
         for &l in &pset {
             crate::census_bump!(PfBranches, 1);
             let leaving = tab.row_var[l];
-            // lexico-inequalities (16): Γ_j = a_l row_j - a_j row_l  ⪰ 0 for all j in P
+            // lexico-inequalities (16): Γ_j = a_l row_j - a_j row_l  ⪰ 0 for all j in P. Γ_j scales
+            // with a_l a_j (1e-20 for rows with a near PTOL), so the tolerances are applied to the
+            // scale-free Γ_j / (a_l a_j) = row_j / a_j - row_l / a_l instead.
             let mut ok = true;
             let mut ef = fpoly.ef.clone();
             let mut ff = fpoly.ff.to_vec();
@@ -474,12 +487,13 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
                 if j == l {
                     continue;
                 }
-                let g: Vec<f64> = (0..w + n).map(|k| a[l] * rfull(j, k) - a[j] * rfull(l, k)).collect();
-                let gq_zero = g[1..1 + d1].iter().all(|v| v.abs() <= ZTOL);
+                let g: Vec<f64> = (0..w + n).map(|k| rfull(j, k) / a[j] - rfull(l, k) / a[l]).collect();
+                let gsc = 1.0 + (0..1 + d1).fold(0.0f64, |m, k| m.max((rfull(j, k) / a[j]).abs()).max((rfull(l, k) / a[l]).abs()));
+                let gq_zero = g[1..1 + d1].iter().all(|v| v.abs() <= ZTOL * gsc);
                 if gq_zero {
                     let mut v = vec![g[0]];
                     v.extend_from_slice(&g[1 + d1..]);
-                    if !lex_nonneg(&v) {
+                    if !lex_nonneg_rel(&v) {
                         ok = false;
                         break;
                     }
@@ -525,7 +539,7 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
                     crate::census_bump!(PfRepeatBasis, 1);
                 }
             }
-            pivot_facet(p, &mut next, ne, Facet { ef: &ef, ff: &ff }, depth + 1, out);
+            pivot_facet(p, &mut next, ne, Facet { ef: &ef, ff: &ff, sc: fpoly.sc }, depth + 1, out);
         }
         return;
     }
@@ -610,6 +624,7 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
     // rows identically zero on the facet (none: boundary of Θ), and the α column γ_i = ρθ_i · g
     let mut gam = vec![0.0; n];
     let mut zrows: Vec<usize> = vec![];
+    let mut rowsc = vec![1.0f64; 2 * n + 1];
     for i in 0..n {
         let rr = &tab.rho[i * tab.w..(i + 1) * tab.w];
         let gi: f64 = (0..nt).map(|k| rr[1 + k] * g[k]).sum();
@@ -617,6 +632,7 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         // relative to the row's magnitude: rows with gradients of 1e6 carry rounding errors above
         // the absolute tolerance, and an identically-zero row would then be missed (no neighbour)
         let sc = 1.0f64.max(rr[0].abs()).max((b * gi).abs()).max((0..nt).map(|k| rr[1 + k] * rr[1 + k]).sum::<f64>().sqrt());
+        rowsc[tab.row_var[i]] = sc;
         if (rr[0] - b * gi).abs() <= ZTOL * sc && (0..nt).map(|k| (rr[1 + k] - gi * g[k]).powi(2)).sum::<f64>().sqrt() <= ZTOL * sc {
             zrows.push(i);
         }
@@ -683,7 +699,7 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
     let mut out = vec![];
     #[cfg(feature = "lp_census")]
     crate::census::basis_reset();
-    pivot_facet(p, &mut work, n, Facet { ef: &ef, ff: &ff }, 0, &mut out);
+    pivot_facet(p, &mut work, n, Facet { ef: &ef, ff: &ff, sc: &rowsc }, 0, &mut out);
     *ws = Some(work);
     crate::census_bump!(AdjCase2, 1);
     crate::census_bump!(AdjCase2Nanos, _cen_t.elapsed().as_nanos());
@@ -720,7 +736,7 @@ pub fn solve(program: &MpProgram, seed: u64, method: Method) -> Result<Vec<Criti
             }
             let plcp = Plcp::new(program).ok_or("mplcp: no pLCP form (Q not positive definite or singular equality block)")?;
             let regions = if method == Method::PivotParallel { pivot_solve_par(program, &plcp, seed) } else { pivot_solve(program, &plcp, seed) };
-            Ok(drop_lex_infeasible(program, &plcp, regions))
+            Ok(regions)
         }
         Method::Enumeration => enum_solve(program),
     }
@@ -1467,16 +1483,6 @@ fn dependent_rows(program: &MpProgram, cr: &CriticalRegion) -> bool {
     false
 }
 
-/// Drops the regions whose basis is not lexico-feasible. Such a basis describes the same
-/// parameter set as the lexico-feasible one (the two differ in which of several dependent rows is
-/// active), so keeping both would count that set twice.
-fn drop_lex_infeasible(program: &MpProgram, plcp: &Plcp, regions: Vec<CriticalRegion>) -> Vec<CriticalRegion> {
-    regions
-        .into_iter()
-        .filter(|cr| !dependent_rows(program, cr) || tableau_of(plcp, cr).map_or(true, |t| lex_feasible(&t)))
-        .collect()
-}
-
 /// Lexicographic Lemke at the parameter `th`: a complementary basis (z rows) that is
 /// lexico-feasible for  w - M z = q + R th + ε,  or `None` (iteration limit or a ray).
 /// M is positive semidefinite, so Lemke's method with the lexicographic ratio test terminates with
@@ -1572,4 +1578,31 @@ fn lex_feasible_start(program: &MpProgram, init: &CriticalRegion) -> Option<Crit
         return None;
     }
     Some(cr)
+}
+
+/// Diagnostic: number of `regions` whose basis is lexico-infeasible (0 for the output of `solve`).
+pub fn count_lex_infeasible(program: &MpProgram, regions: &[CriticalRegion]) -> usize {
+    match Plcp::new(program) {
+        Some(plcp) => regions.iter().filter(|cr| tableau_of(&plcp, cr).map_or(false, |t| !lex_feasible(&t))).count(),
+        None => 0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The Case-2 vectors row_j/a_j - row_l/a_l carry a factor 1/a with a down to PTOL, so their
+    /// sign is read relative to the largest entry, not against the absolute ZTOL.
+    #[test]
+    fn lex_nonneg_rel_is_scale_free() {
+        // 1e-10-sized entries: the absolute test calls the vector zero, the relative one reads its sign
+        assert!(lex_nonneg(&[-1e-10, 1e-10]));
+        assert!(!lex_nonneg_rel(&[-1e-10, 1e-10]));
+        assert!(lex_nonneg_rel(&[1e-10, -1e-10]));
+        // an entry below ZTOL relative to the largest is noise
+        assert!(lex_nonneg_rel(&[-1e-12, 1.0]));
+        assert!(!lex_nonneg_rel(&[0.0, -1.0, 5.0]));
+        assert!(lex_nonneg_rel(&[0.0, 0.0]));
+    }
 }
