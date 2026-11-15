@@ -512,6 +512,188 @@ pub fn reg_snap() -> [u64; 9] {
     [cur(C::AdjFastNanos), cur(C::AdjNoneNanos), cur(C::AdjCase2Nanos), r1, cur(C::AdjFast), cur(C::AdjNone), cur(C::AdjCase2), cur(C::R1Emitted), 0]
 }
 
+// ------------------------------------------------------------------ Case-2 degeneracy and connectivity (mplcp)
+
+/// `RPOPT_CONN=1`: the exploration passes no `Seen` map to the neighbour search, so that crossings to known regions are
+/// returned too (the main loop drops them as before); the regions found do not change.
+pub fn conn_on() -> bool {
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| std::env::var("RPOPT_CONN").map_or(false, |v| v == "1"))
+}
+
+#[derive(Default)]
+struct Conn {
+    uf1: Vec<usize>,
+    uf2: Vec<usize>,
+    edges: Vec<(usize, usize, u8)>,
+    cur: [u32; 5],
+    tot: [u64; 5],
+    flag_any: u64,
+    flag_subst: u64,
+    isolated: u64,
+    unclassified: u64,
+    regions: u64,
+}
+
+thread_local! {
+    static CONN: RefCell<Conn> = RefCell::new(Conn::default());
+}
+
+fn uf_find(v: &mut Vec<usize>, mut x: usize) -> usize {
+    while v[x] != x {
+        v[x] = v[v[x]];
+        x = v[x];
+    }
+    x
+}
+fn uf_union(v: &mut Vec<usize>, a: usize, b: usize) {
+    let n = a.max(b) + 1;
+    while v.len() < n {
+        let l = v.len();
+        v.push(l);
+    }
+    let (ra, rb) = (uf_find(v, a), uf_find(v, b));
+    if ra != rb {
+        v[rb] = ra;
+    }
+}
+
+pub fn conn_reset() {
+    CONN.with(|c| *c.borrow_mut() = Conn::default());
+}
+
+/// Facet classes of one region: 0 boundary (no neighbour), 1 Case 1 (also the entry facet), 2 single valid swap (rank-1, |P-| = 1),
+/// 3 several candidates (rank-1 with |P-| >= 2, walks, fallbacks), 4 other (nothing counted).
+pub fn conn_facet(class: u8) {
+    CONN.with(|c| c.borrow_mut().cur[class as usize] += 1);
+}
+
+/// Counter snapshot for classifying one `adjacent` call: [AdjNone, AdjFast, AdjCase2, R1Handled, R1Single, 0].
+pub fn facet_snap() -> [u64; 6] {
+    use crate::census::{cur, Counter as C};
+    [cur(C::AdjNone), cur(C::AdjFast), cur(C::AdjCase2), cur(C::R1Handled), cur(C::R1Single), 0]
+}
+
+pub fn facet_class(a: &[u64; 6], b: &[u64; 6]) -> u8 {
+    let d = |i: usize| b[i] - a[i];
+    if d(0) > 0 {
+        0
+    } else if d(1) > 0 {
+        1
+    } else if d(2) > 0 {
+        if d(3) > 0 && d(4) > 0 && d(5) == 0 {
+            2
+        } else {
+            3
+        }
+    } else {
+        4
+    }
+}
+
+/// A crossing of region `a` to region `b` (kind 1 = Case 1, 2 = single swap): variant 1 joins Case 1 only, variant 2 both.
+pub fn conn_union(a: usize, b: usize, kind: u8) {
+    CONN.with(|c| {
+        let c = &mut *c.borrow_mut();
+        if kind >= 2 {
+            c.edges.push((a, b, kind));
+        }
+        if kind == 1 {
+            uf_union(&mut c.uf1, a, b);
+        }
+        if kind == 1 || kind == 2 {
+            uf_union(&mut c.uf2, a, b);
+        }
+    });
+}
+
+/// The facet classes of the region just explored are folded into the totals and the flags.
+pub fn conn_region_done(idx: usize) {
+    CONN.with(|c| {
+        let c = &mut *c.borrow_mut();
+        for v in [&mut c.uf1, &mut c.uf2] {
+            while v.len() <= idx {
+                let l = v.len();
+                v.push(l);
+            }
+        }
+        c.regions += 1;
+        let k = c.cur;
+        c.cur = [0; 5];
+        if k.iter().sum::<u32>() == 0 {
+            c.unclassified += 1;
+            return;
+        }
+        for i in 0..5 {
+            c.tot[i] += k[i] as u64;
+        }
+        let interior = k[1] + k[2] + k[3];
+        if interior == 0 {
+            c.isolated += 1;
+        } else if k[1] == 0 {
+            c.flag_any += 1;
+            if k[2] == 0 {
+                c.flag_subst += 1;
+            }
+        }
+    });
+}
+
+/// (name, value) pairs for the census JSON: regions explored, facet totals by class, flagged regions, components of both variants.
+pub fn conn_report(regions: usize) -> Vec<(&'static str, f64)> {
+    CONN.with(|c| {
+        let c = &mut *c.borrow_mut();
+        let mut out = vec![("regions_explored", c.regions as f64), ("facets_boundary", c.tot[0] as f64), ("facets_case1", c.tot[1] as f64), ("facets_single_swap", c.tot[2] as f64), ("facets_several", c.tot[3] as f64), ("facets_other", c.tot[4] as f64), ("flag_any", c.flag_any as f64), ("flag_substantive", c.flag_subst as f64), ("isolated", c.isolated as f64), ("unclassified", c.unclassified as f64)];
+        let edges = c.edges.clone();
+        for (name, which) in [("v1", 1), ("v2", 2)] {
+            let v = if which == 1 { &mut c.uf1 } else { &mut c.uf2 };
+            while v.len() < regions {
+                let l = v.len();
+                v.push(l);
+            }
+            let mut size = std::collections::HashMap::new();
+            for i in 0..regions {
+                let r = uf_find(v, i);
+                *size.entry(r).or_insert(0usize) += 1;
+            }
+            let r0 = uf_find(v, 0);
+            let start = *size.get(&r0).unwrap_or(&0);
+            let mut sizes: Vec<usize> = size.values().copied().collect();
+            sizes.sort_unstable();
+            let med = if sizes.is_empty() { 0 } else { sizes[sizes.len() / 2] };
+            let singles = sizes.iter().filter(|&&s| s == 1).count();
+            // Case-2 crossings that join two different components (variant 1: single swaps and several-candidate facets;
+            // variant 2: several-candidate facets only), and the distinct pairs of components they join
+            let mut cross = 0usize;
+            let mut pairs = std::collections::HashSet::new();
+            for &(a, b, k) in &edges {
+                if which == 2 && k != 3 {
+                    continue;
+                }
+                let (ra, rb) = (uf_find(v, a), uf_find(v, b));
+                if ra != rb {
+                    cross += 1;
+                    pairs.insert((ra.min(rb), ra.max(rb)));
+                }
+            }
+            let names: [&'static str; 6] = if which == 1 { ["median_size_v1", "max_size_v1", "singletons_v1", "case2_cross_v1", "case2_pairs_v1", "x"] } else { ["median_size_v2", "max_size_v2", "singletons_v2", "case2_cross_v2", "case2_pairs_v2", "x"] };
+            out.push((names[0], med as f64));
+            out.push((names[1], *sizes.last().unwrap_or(&0) as f64));
+            out.push((names[2], singles as f64));
+            out.push((names[3], cross as f64));
+            out.push((names[4], pairs.len() as f64));
+            let (a, b, cc) = match name {
+                "v1" => ("components_v1", "start_size_v1", "outside_v1"),
+                _ => ("components_v2", "start_size_v2", "outside_v2"),
+            };
+            out.push((a, size.len() as f64));
+            out.push((b, start as f64));
+            out.push((cc, (regions - start) as f64));
+        }
+        out
+    })
+}
+
 pub fn set_parent(a: &[usize]) {
     PARENT.with(|p| *p.borrow_mut() = Some(a.to_vec()));
 }

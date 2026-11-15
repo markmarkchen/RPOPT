@@ -1421,6 +1421,9 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
             }
         }
     }
+    if pm.len() == 1 {
+        crate::census_bump!(R1Single, 1);
+    }
     crate::census_bump!(R1Handled, 1);
     crate::census_lap!(cm, R1Entry);
     if members.is_empty() {
@@ -2624,6 +2627,16 @@ fn count_one_index(plcp: &Plcp, aset: &[usize], seen: &Seen) -> usize {
     n
 }
 
+/// The `Seen` map handed to the neighbour search; census runs with `RPOPT_CONN=1` pass none (see `census_diag::conn_on`).
+#[inline]
+fn seen_arg(seen: &Seen) -> Option<&Seen> {
+    #[cfg(feature = "lp_census")]
+    if crate::census_diag::conn_on() {
+        return None;
+    }
+    Some(seen)
+}
+
 fn seen_claim(seen: &mut Seen, aset: &[usize]) -> bool {
     if seen.contains_key(aset) {
         false
@@ -2727,7 +2740,7 @@ fn across_fallback(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>>)
         let pt: Vec<f64> = on.iter().zip(&g).map(|(x, gk)| x + delta * gk).collect();
         let basis = lex_lemke(plcp, &pt).filter(|z| tableau_for(plcp, z).map_or(false, |t| lex_feasible(&t)));
         if let Some(z) = basis {
-            cands.push(Cand { aset: plcp.active_set(z.into_iter()), hint: Some(pt), piv: None, entry: None, cert: None });
+            cands.push(Cand { aset: plcp.active_set(z.into_iter()), hint: Some(pt), piv: None, entry: None, cert: None, kind: 3 });
         }
     }
     cands
@@ -2812,6 +2825,9 @@ struct Cand {
     entry: Option<(Vec<f64>, f64)>,
     /// audit mode only: the known region that the certificate said is the only one across the facet
     cert: Option<usize>,
+    /// census: how the facet was crossed (1 Case-1 toggle, 2 single valid swap, 3 several candidates or a walk)
+    #[cfg_attr(not(feature = "lp_census"), allow(dead_code))]
+    kind: u8,
 }
 
 // ---------------------------------------------------------------------------- facet certificate
@@ -3036,6 +3052,8 @@ fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>
     let mut cens: Vec<(u32, bool)> = vec![];
     for k in 0..cur.e.rows {
         if skip == Some(k) {
+            #[cfg(feature = "lp_census")]
+            crate::census_diag::conn_facet(1);
             continue;
         }
         // Certificate skip (see `certify`), asked inside `adjacent` once the fast path has failed.
@@ -3060,7 +3078,19 @@ fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>
                 c.iter().zip(a).map(|(ci, ai)| ci + sft * ai).collect()
             })
         };
+        #[cfg(feature = "lp_census")]
+        let _fs0 = crate::census_diag::facet_snap();
         let (nbrs, certified) = adjacent(plcp, tab, cur.e.row(k), cur.f[k], &cur.e, &cur.f, ws, if cert.is_some() { Some(&cfun as &dyn Fn() -> Option<usize>) } else { None }, cert.map_or(false, |c| c.audit), seen, center.map(|c| c.as_slice()));
+        #[cfg(feature = "lp_census")]
+        let _fclass = {
+            let c = crate::census_diag::facet_class(&_fs0, &crate::census_diag::facet_snap());
+            crate::census_diag::conn_facet(c);
+            c
+        };
+        #[cfg(feature = "lp_census")]
+        let facet_single = _fclass == 2 && nbrs.len() == 1;
+        #[cfg(not(feature = "lp_census"))]
+        let facet_single = false;
         // audit mode: every certified facet is counted, whether or not its search returned a candidate (a rank-1 search of a
         // facet whose neighbours are all known returns none)
         if certified.is_some() && cert.map_or(false, |c| c.audit) {
@@ -3092,7 +3122,7 @@ fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>
                 match basis {
                     Some(z) => {
                         crate::census_bump!(FallbackAcross, 1);
-                        cands.push(Cand { aset: plcp.active_set(z.into_iter()), hint: Some(pt.clone()), piv: None, entry: None, cert: None });
+                        cands.push(Cand { aset: plcp.active_set(z.into_iter()), hint: Some(pt.clone()), piv: None, entry: None, cert: None, kind: 3 });
                     }
                     None => {
                         crate::census_bump!(FallbackFail, 1);
@@ -3118,11 +3148,12 @@ fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>
                 }
                 _ => None,
             };
+            let is_toggle = matches!(nb, Nbr::Toggle(..));
             let piv = match nb {
                 Nbr::Toggle(v, kk) if depth + 1 < REFACTOR => Some((v, kk)),
                 _ => None,
             };
-            cands.push(Cand { aset: plcp.active_set(z.into_iter()), hint, piv, entry, cert: certified });
+            cands.push(Cand { aset: plcp.active_set(z.into_iter()), hint, piv, entry, cert: certified, kind: if is_toggle { 1 } else if facet_single { 2 } else { 3 } });
         }
     }
     #[cfg(feature = "lp_census")]
@@ -3451,7 +3482,7 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
                 let cx = CertCtx::new(cmode, verts.as_deref(), &known, &regions, plcp.nt, wave_limit);
                 #[cfg(feature = "lp_census")]
                 let (_snap0, _tnb) = (crate::census_diag::reg_snap(), std::time::Instant::now());
-                let cands = crate::census_timed!(MplcpNbrNanos, expand_candidates(plcp, cur, center.as_ref(), &tab, depth, entry.as_ref(), cx.as_ref(), Some(&seen), program, &mut ws));
+                let cands = crate::census_timed!(MplcpNbrNanos, expand_candidates(plcp, cur, center.as_ref(), &tab, depth, entry.as_ref(), cx.as_ref(), seen_arg(&seen), program, &mut ws));
                 #[cfg(feature = "lp_census")]
                 {
                     let nb_ns = _tnb.elapsed().as_nanos() as f64;
@@ -3476,6 +3507,8 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
         if crate::census_diag::on() {
             crate::census_diag::set_parent(&cur.active_set);
         }
+        #[cfg(feature = "lp_census")]
+        let conn_recs: Vec<(u8, Vec<usize>)> = if crate::census_diag::conn_on() { cands.iter().filter(|c| c.kind >= 1).map(|c| (c.kind, c.aset.clone())).collect() } else { vec![] };
         for c in cands {
             let fresh = seen_claim(&mut seen, &c.aset);
             #[cfg(feature = "lp_census")]
@@ -3531,6 +3564,15 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
             queue.push_back(it);
             PEAK_QUEUE_LEN.fetch_max(queue.len(), std::sync::atomic::Ordering::Relaxed);
             PEAK_QUEUE_BYTES.fetch_max(queue_bytes, std::sync::atomic::Ordering::Relaxed);
+        }
+        #[cfg(feature = "lp_census")]
+        if crate::census_diag::conn_on() {
+            for (kind, a) in &conn_recs {
+                if let Some(Slot::Built(j)) = seen.get(a) {
+                    crate::census_diag::conn_union(idx, *j, *kind);
+                }
+            }
+            crate::census_diag::conn_region_done(idx);
         }
         if lazy_children > 0 {
             let live = LIVE_PARENTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;

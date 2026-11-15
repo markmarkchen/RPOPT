@@ -60,6 +60,7 @@ fn child(path: &str, alg: &str) {
     let mut runs: Vec<(f64, usize, Stats)> = vec![];
     let lap_ns = census::calibrate();
     loop {
+        rpopt::census_diag::conn_reset();
         rpopt::census_diag::regs_reset();
         census::reset();
         rpopt::algorithms::mplcp::census_reset_local();
@@ -68,7 +69,7 @@ fn child(path: &str, alg: &str) {
         let sol = solve_mpqp_with(&prog, algo, &opts);
         let dt = t0.elapsed().as_secs_f64();
         runs.push((dt, sol.critical_regions.len(), census::snapshot()));
-        if dt > 5.0 || runs.len() == 3 {
+        if dt > 5.0 || runs.len() == 3 || std::env::var("RPOPT_ONCE").is_ok() {
             break;
         }
     }
@@ -79,7 +80,7 @@ fn child(path: &str, alg: &str) {
     let (dt, regions, s) = &runs[runs.len() / 2];
     println!(
         "{}",
-        json!({"regions": regions, "solve_s": dt, "runs": runs.len(), "calls": s.calls, "infeasible": s.infeasible, "nanos": s.nanos, "counters": s.counters.to_vec(), "profile": profile(alg, s, *dt)})
+        json!({"conn": rpopt::census_diag::conn_report(*regions).into_iter().map(|(k, v)| (k.to_string(), json!(v))).collect::<serde_json::Map<String, Value>>(), "regions": regions, "solve_s": dt, "runs": runs.len(), "calls": s.calls, "infeasible": s.infeasible, "nanos": s.nanos, "counters": s.counters.to_vec(), "profile": profile(alg, s, *dt)})
     );
 }
 

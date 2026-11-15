@@ -488,6 +488,8 @@ mod imp {
         AuditNoPositive,
         AuditSkip,
         AuditAltNone,
+        /// rank-1 calls answered with exactly one member (|P-| = 1: an ordinary basis exchange)
+        R1Single,
         /// end marker: the Case-2 component block starts here
         CounterEnd,
     }
