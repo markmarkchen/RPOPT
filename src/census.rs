@@ -469,6 +469,8 @@ mod imp {
         TabRescued,
         /// refined multipliers used by the enumeration: band entries decided as zero, as real, or still between (call goes to the walk)
         MuRefinedZero,
+        MuEmptyGuard,
+        MuEmptyToWalk,
         MuRefinedReal,
         MuRefinedBand,
         /// audit (every gap-band call run both ways): compared, same neighbour sets, different, walk incomplete or enumeration undecided

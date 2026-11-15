@@ -668,10 +668,10 @@ fn highdim_tables(rows: &[Row], skipped: &[(String, String)]) {
         );
     }
     println!("\n### High-dimension 3u: refined multipliers in the enumeration, and the audit against the walk\n");
-    println!("| problem | band entries decided zero | decided real | still between (walk) | audited calls | same neighbour sets | walk has extra sets, all linearly dependent (no region) | walk has other extra sets, no real positive multiplier (walk wandered on a noise multiplier) | walk has other extra sets, a real positive multiplier exists | enumeration has a set the walk lacks | walk incomplete | enumeration undecided (back to the walk) | walk calls left |");
-    println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+    println!("| problem | band entries decided zero | decided real | still between (walk) | audited calls | same neighbour sets | walk has extra sets, all linearly dependent (no region) | walk has other extra sets, no real positive multiplier (walk wandered on a noise multiplier) | walk has other extra sets, a real positive multiplier exists | enumeration has a set the walk lacks | walk incomplete | enumeration undecided (back to the walk) | P- empty with a positive multiplier decided zero | of those handed to the walk | walk calls left |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
     for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::AdjCase2) > 0.0) {
-        println!("| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |", r.problem, c(r, Counter::MuRefinedZero), c(r, Counter::MuRefinedReal), c(r, Counter::MuRefinedBand), c(r, Counter::AuditCalls), c(r, Counter::AuditSame), c(r, Counter::AuditExplained), c(r, Counter::AuditNoPositive), c(r, Counter::AuditExtraWalk), c(r, Counter::AuditDiff), c(r, Counter::AuditSkip), c(r, Counter::AuditAltNone), c(r, Counter::R1Fallback));
+        println!("| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |", r.problem, c(r, Counter::MuRefinedZero), c(r, Counter::MuRefinedReal), c(r, Counter::MuRefinedBand), c(r, Counter::AuditCalls), c(r, Counter::AuditSame), c(r, Counter::AuditExplained), c(r, Counter::AuditNoPositive), c(r, Counter::AuditExtraWalk), c(r, Counter::AuditDiff), c(r, Counter::AuditSkip), c(r, Counter::AuditAltNone), c(r, Counter::MuEmptyGuard), c(r, Counter::MuEmptyToWalk), c(r, Counter::R1Fallback));
     }
     println!("\n### High-dimension 4: vertex clipping (`clip_flags`) outcomes per call\n");
     println!("| problem | algorithm | clip calls/region | ok | nt outside 2..=6 | more than 128 hyperplanes | infinite box | more than 600 vertices | too few vertices | vertex violates a row | redundancy LPs/region |");

@@ -1195,7 +1195,8 @@ fn facet_polytope(nb: &[Vec<f64>], g: &[f64], b: f64, e_all: &Mat, f_all: &[f64]
 /// facet point. So the neighbours are A + {c} - {j}, one per j in P- whose piece F ∩ {lambda_j / mu_j <=
 /// lambda_k / mu_k, k in P-} of the facet is nonempty (a witness, or the Chebyshev LP); P- empty means no
 /// neighbour (boundary of the feasible set). A known set is dropped. A multiplier is zero, nonzero or undecided in the scale of the
-/// dependency (`MU_ZERO`, `MU_NONZERO`, as the pivot measure); the undecided ones (none seen) go to the walk. Returns None when the case does not apply
+/// dependency (`MU_ZERO`, `MU_NONZERO`, as the pivot measure); the undecided ones go to the walk (on the benchmark problems the band holds a few hundred to a few thousand multipliers per solve;
+/// a gap-band multiplier is recomputed from the original data first, see `refined_multipliers`). Returns None when the case does not apply
 /// (several vanishing rows, a multiplier row, a nonzero pivot or slack column, ties between two ratios as
 /// affine functions on F, nt = 1), and the walk runs instead.
 #[allow(clippy::too_many_arguments)]
@@ -1246,6 +1247,7 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
     }
     let mut pm: Vec<usize> = vec![];
     let mut pm_mu: Vec<f64> = vec![];
+    let mut zeroed_pos: Vec<usize> = vec![];
     for (ai, &i) in zrows_all.iter().enumerate() {
         let mut mi = -tab.t[i * n + kk];
         let colw = tab.col_of(tab.row_var[i] - n);
@@ -1279,11 +1281,9 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
         if (tab.t[c * n + colw] - mi).abs() > 1e-8 * (ujj + mi.abs()) {
             { crate::census_reason!(5); return None; }
         }
+        let nu_tab = nu;
         let mut nu = nu;
         if nu > MU_ZERO && nu <= MU_NONZERO {
-            if mu_ref.is_none() && refine && std::env::var("AUDIT_DBG").is_ok() {
-                eprintln!("refine failed: arows {} zj {}", p.arows.rows, zrows_all.len());
-            }
             let Some(v) = &mu_ref else {
                 // neither zero nor safely nonzero, in the scale of the dependency: the walk decides
                 #[cfg(feature = "lp_census")]
@@ -1292,9 +1292,6 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
             };
             mi = v[ai];
             nu = mi.abs() / ujj;
-            if nu > REFINED_ZERO && nu < MU_NONZERO && std::env::var("AUDIT_DBG").is_ok() {
-                eprintln!("refined band nu {:.3e}", nu);
-            }
             if nu > REFINED_ZERO && nu < MU_NONZERO {
                 crate::census_bump!(MuRefinedBand, 1);
                 { crate::census_reason!(6); return None; }
@@ -1308,6 +1305,27 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
         if mi > 0.0 && nu > MU_NONZERO {
             pm.push(i);
             pm_mu.push(mi);
+        } else if mi > 0.0 && nu_tab > 0.0 && nu_tab <= MU_ZERO {
+            // a positive tableau multiplier decided zero without a recomputation (a rounded zero, or a tiny true positive)
+            zeroed_pos.push(ai);
+        }
+    }
+    // Safeguard: when no multiplier is positive but some positive one was decided zero, "no neighbour across the facet" would be wrong if one of them is a
+    // true tiny multiplier (it would be the only member). The recomputation from the original data decides: all exactly zero (rounding level) means a
+    // boundary facet, anything else goes to the walk.
+    if pm.is_empty() && !zeroed_pos.is_empty() {
+        crate::census_bump!(MuEmptyGuard, 1);
+        let zj: Vec<usize> = zrows_all.iter().map(|&i| tab.row_var[i] - n).collect();
+        let exact_zero = refine
+            && refined_multipliers(p, &zj, var).map_or(false, |v| {
+                zeroed_pos.iter().all(|&ai| {
+                    let j = zj[ai];
+                    v[ai].abs() / (mcc / p.m[j * n + j].max(1e-300)).sqrt() <= REFINED_ZERO
+                })
+            });
+        if !exact_zero {
+            crate::census_bump!(MuEmptyToWalk, 1);
+            { crate::census_reason!(9); return None; }
         }
     }
     let mu: Vec<f64> = pm_mu;
@@ -2475,8 +2493,9 @@ pub fn set_certificate(mode: u8) {
 static AUDIT_CERTIFIED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static AUDIT_EXTRA: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
-/// Audit mode counters: candidates returned across certified facets, and those of them that built
-/// a new region (see `pivot_solve`; the regions are found anyway, the order can change).
+/// Audit mode counters: certified facets whose search ran (whether or not it returned a candidate; a rank-1 search of a facet
+/// whose neighbours are all known returns none), and the candidates across them that built a new region (see `pivot_solve`; the
+/// regions are found anyway, the order can change).
 pub fn certificate_audit() -> (usize, usize) {
     (AUDIT_CERTIFIED.load(std::sync::atomic::Ordering::Relaxed), AUDIT_EXTRA.load(std::sync::atomic::Ordering::Relaxed))
 }
