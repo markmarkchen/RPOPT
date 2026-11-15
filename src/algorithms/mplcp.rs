@@ -347,10 +347,21 @@ fn lex_nonneg(v: &[f64]) -> bool {
     true
 }
 
+/// Is `v` lexico-nonnegative when entries are judged relative to its largest entry? Used where
+/// `v` is a difference of rows scaled by 1/a (amplified by up to 1/PTOL), so an absolute `ZTOL`
+/// would call a genuine sign noise or a genuine value zero.
+fn lex_nonneg_rel(v: &[f64]) -> bool {
+    let vm = v.iter().fold(0.0f64, |m, x| m.max(x.abs()));
+    v.iter().find(|x| x.abs() > ZTOL * vm).map_or(true, |x| *x > 0.0)
+}
+
 struct Facet<'a> {
     /// facet-space rows of the polytope F (E_f θ_f <= f_f)
     ef: &'a Mat,
     ff: &'a [f64],
+    /// per-variable magnitude of the row (set in `adjacent`, where the rows identically zero on
+    /// the facet are found with a tolerance relative to it); `in_z` uses the same tolerance
+    sc: &'a [f64],
 }
 
 /// Algorithm 2 (`pivot`): from the ACLFB `tab` (α basic or entering as column `e`) returns the
@@ -425,7 +436,7 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
         if pset.is_empty() {
             return;
         }
-        let in_z = |i: usize| rowmax(i) <= ZTOL;
+        let in_z = |i: usize| rowmax(i) <= ZTOL * fpoly.sc[tab.row_var[i]];
         let pz: Vec<usize> = pset.iter().cloned().filter(|&i| in_z(i)).collect();
         let alpha_row = tab.row_var.iter().position(|&v| v == alpha);
         if pz.is_empty() {
@@ -466,7 +477,9 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
         for &l in &pset {
             crate::census_bump!(PfBranches, 1);
             let leaving = tab.row_var[l];
-            // lexico-inequalities (16): Γ_j = a_l row_j - a_j row_l  ⪰ 0 for all j in P
+            // lexico-inequalities (16): Γ_j = a_l row_j - a_j row_l  ⪰ 0 for all j in P. Γ_j scales
+            // with a_l a_j (1e-20 for rows with a near PTOL), so the tolerances are applied to the
+            // scale-free Γ_j / (a_l a_j) = row_j / a_j - row_l / a_l instead.
             let mut ok = true;
             let mut ef = fpoly.ef.clone();
             let mut ff = fpoly.ff.to_vec();
@@ -474,12 +487,13 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
                 if j == l {
                     continue;
                 }
-                let g: Vec<f64> = (0..w + n).map(|k| a[l] * rfull(j, k) - a[j] * rfull(l, k)).collect();
-                let gq_zero = g[1..1 + d1].iter().all(|v| v.abs() <= ZTOL);
+                let g: Vec<f64> = (0..w + n).map(|k| rfull(j, k) / a[j] - rfull(l, k) / a[l]).collect();
+                let gsc = 1.0 + (0..1 + d1).fold(0.0f64, |m, k| m.max((rfull(j, k) / a[j]).abs()).max((rfull(l, k) / a[l]).abs()));
+                let gq_zero = g[1..1 + d1].iter().all(|v| v.abs() <= ZTOL * gsc);
                 if gq_zero {
                     let mut v = vec![g[0]];
                     v.extend_from_slice(&g[1 + d1..]);
-                    if !lex_nonneg(&v) {
+                    if !lex_nonneg_rel(&v) {
                         ok = false;
                         break;
                     }
@@ -525,7 +539,7 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
                     crate::census_bump!(PfRepeatBasis, 1);
                 }
             }
-            pivot_facet(p, &mut next, ne, Facet { ef: &ef, ff: &ff }, depth + 1, out);
+            pivot_facet(p, &mut next, ne, Facet { ef: &ef, ff: &ff, sc: fpoly.sc }, depth + 1, out);
         }
         return;
     }
@@ -598,7 +612,11 @@ enum Nbr {
 }
 
 /// Neighbouring z-row sets across the facet {e_k θ = f_k} of the region with tableau `tab`.
-fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[f64], ws: &mut Option<Tab>) -> Vec<Nbr> {
+///
+/// `cert` is asked only when the fast path has failed, that is, when the slow path (Case 2) would
+/// run: if it names a known region R that is the only one across the facet, the search is skipped
+/// (unless `audit`, which runs it anyway). The third result is that region.
+fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[f64], ws: &mut Option<Tab>, cert: Option<&dyn Fn() -> Option<usize>>, audit: bool) -> (Vec<Nbr>, Option<usize>) {
     #[cfg(feature = "lp_census")]
     let _cen_t = std::time::Instant::now();
     crate::census_bump!(AdjCalls, 1);
@@ -610,6 +628,7 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
     // rows identically zero on the facet (none: boundary of Θ), and the α column γ_i = ρθ_i · g
     let mut gam = vec![0.0; n];
     let mut zrows: Vec<usize> = vec![];
+    let mut rowsc = vec![1.0f64; 2 * n + 1];
     for i in 0..n {
         let rr = &tab.rho[i * tab.w..(i + 1) * tab.w];
         let gi: f64 = (0..nt).map(|k| rr[1 + k] * g[k]).sum();
@@ -617,6 +636,7 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         // relative to the row's magnitude: rows with gradients of 1e6 carry rounding errors above
         // the absolute tolerance, and an identically-zero row would then be missed (no neighbour)
         let sc = 1.0f64.max(rr[0].abs()).max((b * gi).abs()).max((0..nt).map(|k| rr[1 + k] * rr[1 + k]).sum::<f64>().sqrt());
+        rowsc[tab.row_var[i]] = sc;
         if (rr[0] - b * gi).abs() <= ZTOL * sc && (0..nt).map(|k| (rr[1 + k] - gi * g[k]).powi(2)).sum::<f64>().sqrt() <= ZTOL * sc {
             zrows.push(i);
         }
@@ -624,7 +644,7 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
     if zrows.is_empty() {
         crate::census_bump!(AdjNone, 1);
         crate::census_bump!(AdjNoneNanos, _cen_t.elapsed().as_nanos());
-        return vec![];
+        return (vec![], None);
     }
     // Fast path of Algorithm 2: a single leaving candidate v in P ∩ Z (Case 1 without ties), after
     // which α is basic and the entering variable comp(v) makes P' ∩ Z' empty with α rising:
@@ -641,9 +661,15 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
             if !blocked {
                 crate::census_bump!(AdjFast, 1);
                 crate::census_bump!(AdjFastNanos, _cen_t.elapsed().as_nanos());
-                return vec![Nbr::Toggle(v, kk)];
+                return (vec![Nbr::Toggle(v, kk)], None);
             }
         }
+    }
+    let certified = cert.and_then(|f| f());
+    if certified.is_some() && !audit {
+        crate::census_bump!(AdjCertSkip, 1);
+        crate::census_bump!(AdjCertSkipNanos, _cen_t.elapsed().as_nanos());
+        return (vec![], certified);
     }
     let nb = null_basis(&g);
     let w = 1 + d1;
@@ -683,11 +709,11 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
     let mut out = vec![];
     #[cfg(feature = "lp_census")]
     crate::census::basis_reset();
-    pivot_facet(p, &mut work, n, Facet { ef: &ef, ff: &ff }, 0, &mut out);
+    pivot_facet(p, &mut work, n, Facet { ef: &ef, ff: &ff, sc: &rowsc }, 0, &mut out);
     *ws = Some(work);
     crate::census_bump!(AdjCase2, 1);
     crate::census_bump!(AdjCase2Nanos, _cen_t.elapsed().as_nanos());
-    out.into_iter().map(Nbr::Z).collect()
+    (out.into_iter().map(Nbr::Z).collect(), certified)
 }
 
 /// Which pLCP method `solve` runs.
@@ -720,7 +746,7 @@ pub fn solve(program: &MpProgram, seed: u64, method: Method) -> Result<Vec<Criti
             }
             let plcp = Plcp::new(program).ok_or("mplcp: no pLCP form (Q not positive definite or singular equality block)")?;
             let regions = if method == Method::PivotParallel { pivot_solve_par(program, &plcp, seed) } else { pivot_solve(program, &plcp, seed) };
-            Ok(drop_lex_infeasible(program, &plcp, regions))
+            Ok(regions)
         }
         Method::Enumeration => enum_solve(program),
     }
@@ -776,6 +802,28 @@ impl TabSrc {
     }
 }
 
+/// What is known about an active set that `adjacent` has returned: the index of its region in the
+/// result list, or that its region was rejected (empty, lower dimensional, or not yet built).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Slot {
+    Built(usize),
+    Rejected,
+}
+
+/// Exact map from an active set (as returned by `Plcp::active_set`) to its `Slot`; unlike the
+/// rounded hyperplane keys of `Known` it has no collisions.
+type Seen = crate::fxhash::FxHashMap<Vec<usize>, Slot>;
+
+/// Claims `aset` as seen; true when it was new (it is then marked `Rejected` until its region is built).
+fn seen_claim(seen: &mut Seen, aset: &[usize]) -> bool {
+    if seen.contains_key(aset) {
+        false
+    } else {
+        seen.insert(aset.to_vec(), Slot::Rejected);
+        true
+    }
+}
+
 /// A region whose neighbours are still to be explored: its index in the result list, its Chebyshev
 /// center, and its tableau (rebuilt from the active set when `None`).
 struct Item {
@@ -786,6 +834,8 @@ struct Item {
     /// hyperplane (unit normal, offset) of the parent's facet this region was entered through,
     /// only when it was reached by a Case-1 Toggle pivot (see `expand_candidates`)
     entry: Option<(Vec<f64>, f64)>,
+    /// vertices of the region polytope (flattened) when the fast clip builder produced them
+    verts: Option<Vec<f64>>,
 }
 
 /// The initial region of the exploration (and its center) or `None` when the program has none.
@@ -818,10 +868,179 @@ struct Cand {
     piv: Option<(usize, usize)>,
     /// the parent's facet hyperplane (unit normal, offset), set only for a Toggle neighbour
     entry: Option<(Vec<f64>, f64)>,
+    /// audit mode only: the known region that the certificate said is the only one across the facet
+    cert: Option<usize>,
+}
+
+// ---------------------------------------------------------------------------- facet certificate
+
+/// Certificate mode: 0 off, 1 on (default), 2 audit (certify, but still search, and count the new
+/// regions that the search reaches across certified facets; for the census and the tests). Modes
+/// 1 and 2 apply to 3 to 5 parameters, where the check measured faster or neutral; modes 3 (on) and
+/// 4 (audit) apply to every count the vertex clip covers (2 to 6). At 2 parameters the problems are
+/// too small to repay the bookkeeping, and at 6 the check (many vertices per facet) can cost more
+/// than the search it saves (rand_t6_x5_m20_s0: 0.74x).
+static CERT: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+/// Sets the facet-certificate mode of `Method::Pivot` and `Method::PivotParallel`: 0 off (the
+/// default: at 6 parameters it lost a real region on masses3_N4, and the stray overlapping regions of
+/// pop_005, pop_007 and pop_011 could pass as the known neighbour; it stays off until that is
+/// understood), 1 on at 3 to 5 parameters, 2 audit, 3 and 4 the same at 2 to 6.
+pub fn set_certificate(mode: u8) {
+    CERT.store(mode, std::sync::atomic::Ordering::Relaxed);
+}
+
+static AUDIT_CERTIFIED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static AUDIT_EXTRA: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Audit mode counters: candidates returned across certified facets, and those of them that built
+/// a new region (see `pivot_solve`; the regions are found anyway, the order can change).
+pub fn certificate_audit() -> (usize, usize) {
+    (AUDIT_CERTIFIED.load(std::sync::atomic::Ordering::Relaxed), AUDIT_EXTRA.load(std::sync::atomic::Ordering::Relaxed))
+}
+
+/// Does mode `mode` apply the certificate to a program with `nt` parameters?
+fn cert_active(mode: u8, nt: usize) -> bool {
+    match mode {
+        1 | 2 => (3..=5).contains(&nt),
+        3 | 4 => (2..=6).contains(&nt),
+        _ => false,
+    }
+}
+
+type HKey = [i64; 7];
+
+/// Hash key of the unit-normalised hyperplane (a·θ <= b), rounded to 1e-5. Used only to find
+/// candidate regions; a missed rounding boundary loses a skip, never soundness.
+fn hkey(a: &[f64], b: f64) -> HKey {
+    let nrm = a.iter().map(|v| v * v).sum::<f64>().sqrt();
+    let mut k = [0i64; 7];
+    for (o, v) in k.iter_mut().zip(a) {
+        *o = (v / nrm * 1e5).round() as i64;
+    }
+    k[6] = (b / nrm * 1e5).round() as i64;
+    k
+}
+
+/// The facet hyperplanes of the known regions, for 2 to 6 parameters (the range of the vertex clip).
+#[derive(Default)]
+struct Known {
+    map: crate::fxhash::FxHashMap<HKey, Vec<u32>>,
+}
+
+impl Known {
+    fn add(&mut self, idx: usize, cr: &CriticalRegion) {
+        if cr.e.cols < 2 || cr.e.cols > 6 {
+            return;
+        }
+        for k in 0..cr.e.rows {
+            self.map.entry(hkey(cr.e.row(k), cr.f[k])).or_default().push(idx as u32);
+        }
+    }
+}
+
+struct CertCtx<'a> {
+    verts: &'a [f64],
+    known: &'a Known,
+    regions: &'a [CriticalRegion],
+    nt: usize,
+    audit: bool,
+    /// only regions with an index below this count as known: the regions that exist when the
+    /// current breadth-first wave starts, the same set in the serial and the wave-parallel method
+    limit: usize,
+}
+
+impl<'a> CertCtx<'a> {
+    fn new(mode: u8, verts: Option<&'a [f64]>, known: &'a Known, regions: &'a [CriticalRegion], nt: usize, limit: usize) -> Option<CertCtx<'a>> {
+        match (mode, verts) {
+            (_, Some(v)) if cert_active(mode, nt) => Some(CertCtx { verts: v, known, regions, nt, audit: mode == 2 || mode == 4, limit }),
+            _ => None,
+        }
+    }
+}
+
+/// Is the only region across facet k of `cur` already known? Returns its index.
+///
+/// Certificate. Let F be facet k (row k of the region, hyperplane g·θ = b). If a known region R
+/// has a row on the same hyperplane with the opposite normal, and R contains F, then R is the only
+/// region across F: F is a facet (its vertices span the hyperplane), R is full dimensional and has
+/// F inside its facet on that hyperplane, so R fills the far side of every relative interior
+/// point of F, and lexico-feasible regions do not overlap (Lean `lex_unique`), so no other region
+/// reaches across F and `adjacent` could only return R. "R contains F" is checked on the vertices
+/// of F (the region's vertices tight on row k) against R's rows: F is their convex hull. Without
+/// vertices (more than 6 parameters, or the clip builder gave up) there is no certificate.
+fn certify(cx: &CertCtx, cur: &CriticalRegion, k: usize) -> Option<usize> {
+    let nt = cx.nt;
+    let row = cur.e.row(k);
+    let nrm = row.iter().map(|v| v * v).sum::<f64>().sqrt();
+    if !(nrm > 0.0) {
+        return None;
+    }
+    let g: Vec<f64> = row.iter().map(|v| v / nrm).collect();
+    let b = cur.f[k] / nrm;
+    let ng: Vec<f64> = g.iter().map(|v| -v).collect();
+    let cand = cx.known.map.get(&hkey(&ng, -b))?;
+    // vertices of F
+    let tol = 1e-9 * (1.0 + b.abs());
+    let tight: Vec<&[f64]> = cx.verts.chunks_exact(nt).filter(|v| (v.iter().zip(&g).map(|(x, y)| x * y).sum::<f64>() - b).abs() <= 10.0 * tol).collect();
+    if tight.len() < nt {
+        return None;
+    }
+    // F has dimension nt - 1: the differences to the first vertex span nt - 1 directions
+    let mut basis: Vec<Vec<f64>> = vec![];
+    for v in &tight[1..] {
+        let mut d: Vec<f64> = v.iter().zip(tight[0]).map(|(x, y)| x - y).collect();
+        let n0 = d.iter().map(|x| x * x).sum::<f64>().sqrt();
+        for u in &basis {
+            let pr: f64 = d.iter().zip(u).map(|(x, y)| x * y).sum();
+            for (x, y) in d.iter_mut().zip(u) {
+                *x -= pr * y;
+            }
+        }
+        let n1 = d.iter().map(|x| x * x).sum::<f64>().sqrt();
+        if n1 > 1e-7 && n1 > 1e-3 * n0 {
+            basis.push(d.iter().map(|x| x / n1).collect());
+            if basis.len() == nt - 1 {
+                break;
+            }
+        }
+    }
+    if basis.len() != nt - 1 {
+        return None;
+    }
+    'regions: for &j in cand {
+        if j as usize >= cx.limit {
+            continue;
+        }
+        let r = &cx.regions[j as usize];
+        // a row of R on the same hyperplane with the opposite normal
+        let has_row = (0..r.e.rows).any(|i| {
+            let ei = r.e.row(i);
+            let n = ei.iter().map(|v| v * v).sum::<f64>().sqrt();
+            n > 0.0 && ei.iter().zip(&g).all(|(x, y)| (x / n + y).abs() <= 1e-7) && (r.f[i] / n + b).abs() <= 1e-7 * (1.0 + b.abs())
+        });
+        if !has_row {
+            continue;
+        }
+        // every vertex of F satisfies every row of R
+        for i in 0..r.e.rows {
+            let ei = r.e.row(i);
+            let n = ei.iter().map(|v| v * v).sum::<f64>().sqrt();
+            let fi = r.f[i] / n;
+            for v in &tight {
+                let s: f64 = ei.iter().zip(*v).map(|(x, y)| x * y).sum::<f64>() / n;
+                if s - fi > 1e-9 * (1.0 + fi.abs()) {
+                    continue 'regions;
+                }
+            }
+        }
+        return Some(j as usize);
+    }
+    None
 }
 
 /// Neighbour candidates across every facet of region `cur` (tableau `tab`).
-fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>>, tab: &Tab, depth: usize, entry: Option<&(Vec<f64>, f64)>, ws: &mut Option<Tab>) -> Vec<Cand> {
+fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>>, tab: &Tab, depth: usize, entry: Option<&(Vec<f64>, f64)>, cert: Option<&CertCtx>, ws: &mut Option<Tab>) -> Vec<Cand> {
     let mut cands = vec![];
     // Entry facet skip. A child reached by a Case-1 Toggle pivot (principal pivot of one z row v with
     // its complement) shares with its parent the facet {parent e_k θ = f_k}. In Case 1 the neighbour
@@ -845,7 +1064,20 @@ fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>
         if skip == Some(k) {
             continue;
         }
-        let nbrs = adjacent(plcp, tab, cur.e.row(k), cur.f[k], &cur.e, &cur.f, ws);
+        // Certificate skip (see `certify`), asked inside `adjacent` once the fast path has failed.
+        let cfun = || -> Option<usize> {
+            let cx = cert?;
+            #[cfg(feature = "lp_census")]
+            let _ct = std::time::Instant::now();
+            crate::census_bump!(CertFacets, 1);
+            let r = certify(cx, cur, k);
+            crate::census_bump!(CertNanos, _ct.elapsed().as_nanos());
+            if r.is_some() {
+                crate::census_bump!(CertHit, 1);
+            }
+            r
+        };
+        let (nbrs, certified) = adjacent(plcp, tab, cur.e.row(k), cur.f[k], &cur.e, &cur.f, ws, if cert.is_some() { Some(&cfun as &dyn Fn() -> Option<usize>) } else { None }, cert.map_or(false, |c| c.audit));
         if nbrs.is_empty() {
             continue;
         }
@@ -884,7 +1116,7 @@ fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>
                 Nbr::Toggle(v, kk) if depth + 1 < REFACTOR => Some((v, kk)),
                 _ => None,
             };
-            cands.push(Cand { aset: plcp.active_set(z.into_iter()), hint: hint.clone(), piv, entry });
+            cands.push(Cand { aset: plcp.active_set(z.into_iter()), hint: hint.clone(), piv, entry, cert: certified });
         }
     }
     #[cfg(feature = "lp_census")]
@@ -1008,7 +1240,7 @@ fn candidate_law(plcp: &Plcp, parent: &Tab, c: &Cand) -> Option<(crate::program:
 
 /// Region of a candidate (`None` when it is empty or lower dimensional), plus the candidate's own
 /// tableau when it had to be formed from scratch for the law.
-fn build_cand(program: &MpProgram, plcp: &Plcp, parent: &Tab, c: &Cand) -> Option<(CriticalRegion, Option<Vec<f64>>, Option<Tab>)> {
+fn build_cand(program: &MpProgram, plcp: &Plcp, parent: &Tab, c: &Cand, want_verts: bool) -> Option<(CriticalRegion, Option<Vec<f64>>, Option<Tab>, Option<Vec<f64>>)> {
     if program.num_t() > 1 {
         let (law, own) = if TABLEAU_LAW.load(std::sync::atomic::Ordering::Relaxed) {
             match candidate_law(plcp, parent, c) {
@@ -1018,28 +1250,41 @@ fn build_cand(program: &MpProgram, plcp: &Plcp, parent: &Tab, c: &Cand) -> Optio
         } else {
             (None, None)
         };
-        let (cr, ce) = build::build_region(program, &c.aset, c.hint.as_deref(), law)?;
-        Some((cr, Some(ce), own))
+        let (cr, ce, verts) = build::build_region(program, &c.aset, c.hint.as_deref(), law, want_verts)?;
+        Some((cr, Some(ce), own, verts))
     } else {
-        Some((gen_cr_from_active_set_lambda_first(program, &c.aset, true)?, None, None))
+        Some((gen_cr_from_active_set_lambda_first(program, &c.aset, true)?, None, None, None))
     }
 }
 
 fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegion> {
     let Some((initial, init_center)) = initial_region(program, seed) else { return vec![] };
-    let mut seen: HashSet<Vec<usize>> = HashSet::default();
-    seen.insert(initial.active_set.clone());
+    let mut seen: Seen = Seen::default();
+    seen.insert(initial.active_set.clone(), Slot::Built(0));
     let mut regions = vec![initial];
+    let cmode = CERT.load(std::sync::atomic::Ordering::Relaxed);
+    let mut known = Known::default();
+    if cert_active(cmode, plcp.nt) {
+        known.add(0, &regions[0]);
+    }
     let mut queue: VecDeque<Item> = VecDeque::new();
-    queue.push_back(Item { idx: 0, center: init_center, tab: TabSrc::None, depth: 0, entry: None });
+    queue.push_back(Item { idx: 0, center: init_center, tab: TabSrc::None, depth: 0, entry: None, verts: None });
     let mut ws: Option<Tab> = None;
-    let mut pending: Vec<(CriticalRegion, Option<Vec<f64>>, Option<(usize, usize)>, Option<Tab>, Option<(Vec<f64>, f64)>)> = vec![];
-    while let Some(Item { idx, center, tab, depth, entry }) = queue.pop_front() {
+    let mut pending: Vec<(CriticalRegion, Option<Vec<f64>>, Option<(usize, usize)>, Option<Tab>, Option<(Vec<f64>, f64)>, Option<Vec<f64>>)> = vec![];
+    let mut wave_limit = 1usize;
+    while let Some(Item { idx, center, tab, depth, entry, verts }) = queue.pop_front() {
+        if idx >= wave_limit {
+            wave_limit = regions.len();
+        }
         let cur = &regions[idx];
         let Some(tab) = crate::census_timed!(MplcpTabNanos, tab.resolve(plcp, cur)) else { continue };
-        let cands = crate::census_timed!(MplcpNbrNanos, expand_candidates(plcp, cur, center.as_ref(), &tab, depth, entry.as_ref(), &mut ws));
+        let cx = CertCtx::new(cmode, verts.as_deref(), &known, &regions, plcp.nt, wave_limit);
+        let cands = crate::census_timed!(MplcpNbrNanos, expand_candidates(plcp, cur, center.as_ref(), &tab, depth, entry.as_ref(), cx.as_ref(), &mut ws));
         for c in cands {
-            let fresh = seen.insert(c.aset.clone());
+            if c.cert.is_some() {
+                AUDIT_CERTIFIED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
+            let fresh = seen_claim(&mut seen, &c.aset);
             #[cfg(feature = "lp_census")]
             crate::census::seen(fresh);
             if !fresh {
@@ -1047,21 +1292,32 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
                 continue;
             }
             crate::census_bump!(CandGen, 1);
-            let built = crate::census_timed!(MplcpBuildNanos, build_cand(program, plcp, &tab, &c));
-            if let Some((cr, ce, own)) = built {
-                pending.push((cr, ce, c.piv, own, c.entry));
+            let built = crate::census_timed!(MplcpBuildNanos, build_cand(program, plcp, &tab, &c, cert_active(cmode, plcp.nt)));
+            if let Some((cr, ce, own, vt)) = built {
+                if c.cert.is_some() {
+                    // audit: the search across a certified facet also reached a new region (it
+                    // touches the facet only in a lower dimension; it is found through another
+                    // facet when the certificate skips this one)
+                    AUDIT_EXTRA.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    crate::census_bump!(CertExtra, 1);
+                }
+                pending.push((cr, ce, c.piv, own, c.entry, vt));
             }
         }
         // the neighbours' tableaux are one pivot away (rebuilt from scratch every REFACTOR levels);
         // each pivot is done when its region is popped, and the last one popped takes over this tableau
         let tab = std::sync::Arc::new(tab);
-        for (cr, ce, piv, own, ent) in pending.drain(..) {
+        for (cr, ce, piv, own, ent, vt) in pending.drain(..) {
             let (src, nd) = match piv {
                 Some((v, kk)) => (TabSrc::Lazy(tab.clone(), v, kk), depth + 1),
                 None => (TabSrc::from(own), 0),
             };
+            seen.insert(cr.active_set.clone(), Slot::Built(regions.len()));
             regions.push(cr);
-            queue.push_back(Item { idx: regions.len() - 1, center: ce, tab: src, depth: nd, entry: ent });
+            if cert_active(cmode, plcp.nt) {
+                known.add(regions.len() - 1, regions.last().unwrap());
+            }
+            queue.push_back(Item { idx: regions.len() - 1, center: ce, tab: src, depth: nd, entry: ent, verts: vt });
         }
     }
     regions
@@ -1087,19 +1343,26 @@ fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalR
         return pivot_solve(program, plcp, seed);
     }
     let Some((initial, init_center)) = initial_region(program, seed) else { return vec![] };
-    let mut seen: HashSet<Vec<usize>> = HashSet::default();
-    seen.insert(initial.active_set.clone());
+    let mut seen: Seen = Seen::default();
+    seen.insert(initial.active_set.clone(), Slot::Built(0));
     let mut regions = vec![initial];
-    let mut wave: Vec<Item> = vec![Item { idx: 0, center: init_center, tab: TabSrc::None, depth: 0, entry: None }];
+    let cmode = CERT.load(std::sync::atomic::Ordering::Relaxed);
+    let mut known = Known::default();
+    if cert_active(cmode, plcp.nt) {
+        known.add(0, &regions[0]);
+    }
+    let mut wave: Vec<Item> = vec![Item { idx: 0, center: init_center, tab: TabSrc::None, depth: 0, entry: None, verts: None }];
     // measured serial cost (ns) of expanding one region and of building one candidate
     let mut ns_expand: f64 = 0.0;
     let mut ns_build: f64 = 0.0;
     while !wave.is_empty() {
+        let wave_limit = regions.len();
         let expand = |ws: &mut Option<Tab>, item: Item| -> Option<(Arc<Tab>, usize, Vec<Cand>)> {
-            let Item { idx, center, tab, depth, entry } = item;
+            let Item { idx, center, tab, depth, entry, verts } = item;
             let cur = &regions[idx];
             let tab = tab.resolve(plcp, cur)?;
-            let cands = expand_candidates(plcp, cur, center.as_ref(), &tab, depth, entry.as_ref(), ws);
+            let cx = CertCtx::new(cmode, verts.as_deref(), &known, &regions, plcp.nt, wave_limit);
+            let cands = expand_candidates(plcp, cur, center.as_ref(), &tab, depth, entry.as_ref(), cx.as_ref(), ws);
             Some((Arc::new(tab), depth, cands))
         };
         let nw = wave.len();
@@ -1119,33 +1382,37 @@ fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalR
         let mut jobs: Vec<(Arc<Tab>, usize, Cand)> = vec![];
         for (tab, depth, cands) in expanded.into_iter().flatten() {
             for c in cands {
-                if seen.insert(c.aset.clone()) {
+                if seen_claim(&mut seen, &c.aset) {
                     jobs.push((tab.clone(), depth, c));
                 }
             }
         }
-        let build = |(tab, depth, c): &(Arc<Tab>, usize, Cand)| -> Option<(CriticalRegion, Option<Vec<f64>>, Option<Tab>, usize, Option<(Vec<f64>, f64)>)> {
-            let (cr, center, own) = build_cand(program, plcp, tab, c)?;
+        let build = |(tab, depth, c): &(Arc<Tab>, usize, Cand)| -> Option<(CriticalRegion, Option<Vec<f64>>, Option<Tab>, usize, Option<(Vec<f64>, f64)>, Option<Vec<f64>>)> {
+            let (cr, center, own, vt) = build_cand(program, plcp, tab, c, cert_active(cmode, plcp.nt))?;
             let (ntab, nd) = match c.piv {
                 Some((v, kk)) => {
                     (Some(tab.pivoted(v, kk)), depth + 1)
                 }
                 None => (own, 0),
             };
-            Some((cr, center, ntab, nd, c.entry.clone()))
+            Some((cr, center, ntab, nd, c.entry.clone(), vt))
         };
         let nj = jobs.len();
         let go_par = nj >= 2 && ns_build * nj as f64 >= PAR_NS;
         let t0 = Instant::now();
-        let built: Vec<Option<(CriticalRegion, Option<Vec<f64>>, Option<Tab>, usize, Option<(Vec<f64>, f64)>)>> = if go_par { jobs.par_iter().map(build).collect() } else { jobs.iter().map(build).collect() };
+        let built: Vec<Option<(CriticalRegion, Option<Vec<f64>>, Option<Tab>, usize, Option<(Vec<f64>, f64)>, Option<Vec<f64>>)>> = if go_par { jobs.par_iter().map(build).collect() } else { jobs.iter().map(build).collect() };
         if !go_par && nj > 0 {
             let per = t0.elapsed().as_nanos() as f64 / nj as f64;
             ns_build = if ns_build == 0.0 { per } else { 0.5 * (ns_build + per) };
         }
         wave = vec![];
-        for (cr, center, tab, depth, entry) in built.into_iter().flatten() {
+        for (cr, center, tab, depth, entry, verts) in built.into_iter().flatten() {
+            seen.insert(cr.active_set.clone(), Slot::Built(regions.len()));
             regions.push(cr);
-            wave.push(Item { idx: regions.len() - 1, center, tab: tab.into(), depth, entry });
+            if cert_active(cmode, plcp.nt) {
+                known.add(regions.len() - 1, regions.last().unwrap());
+            }
+            wave.push(Item { idx: regions.len() - 1, center, tab: tab.into(), depth, entry, verts });
         }
     }
     regions
@@ -1485,16 +1752,6 @@ fn dependent_rows(program: &MpProgram, cr: &CriticalRegion) -> bool {
     false
 }
 
-/// Drops the regions whose basis is not lexico-feasible. Such a basis describes the same
-/// parameter set as the lexico-feasible one (the two differ in which of several dependent rows is
-/// active), so keeping both would count that set twice.
-fn drop_lex_infeasible(program: &MpProgram, plcp: &Plcp, regions: Vec<CriticalRegion>) -> Vec<CriticalRegion> {
-    regions
-        .into_iter()
-        .filter(|cr| !dependent_rows(program, cr) || tableau_of(plcp, cr).map_or(true, |t| lex_feasible(&t)))
-        .collect()
-}
-
 /// Lexicographic Lemke at the parameter `th`: a complementary basis (z rows) that is
 /// lexico-feasible for  w - M z = q + R th + ε,  or `None` (iteration limit or a ray).
 /// M is positive semidefinite, so Lemke's method with the lexicographic ratio test terminates with
@@ -1590,4 +1847,31 @@ fn lex_feasible_start(program: &MpProgram, init: &CriticalRegion) -> Option<Crit
         return None;
     }
     Some(cr)
+}
+
+/// Diagnostic: number of `regions` whose basis is lexico-infeasible (0 for the output of `solve`).
+pub fn count_lex_infeasible(program: &MpProgram, regions: &[CriticalRegion]) -> usize {
+    match Plcp::new(program) {
+        Some(plcp) => regions.iter().filter(|cr| tableau_of(&plcp, cr).map_or(false, |t| !lex_feasible(&t))).count(),
+        None => 0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The Case-2 vectors row_j/a_j - row_l/a_l carry a factor 1/a with a down to PTOL, so their
+    /// sign is read relative to the largest entry, not against the absolute ZTOL.
+    #[test]
+    fn lex_nonneg_rel_is_scale_free() {
+        // 1e-10-sized entries: the absolute test calls the vector zero, the relative one reads its sign
+        assert!(lex_nonneg(&[-1e-10, 1e-10]));
+        assert!(!lex_nonneg_rel(&[-1e-10, 1e-10]));
+        assert!(lex_nonneg_rel(&[1e-10, -1e-10]));
+        // an entry below ZTOL relative to the largest is noise
+        assert!(lex_nonneg_rel(&[-1e-12, 1.0]));
+        assert!(!lex_nonneg_rel(&[0.0, -1.0, 5.0]));
+        assert!(lex_nonneg_rel(&[0.0, 0.0]));
+    }
 }

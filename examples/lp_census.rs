@@ -27,6 +27,10 @@ fn child(path: &str, alg: &str) {
     let prog = Arc::new(MpProgram::from_json_file(std::path::Path::new(path)).unwrap());
     let algo = MpqpAlgorithm::from_name(alg).unwrap_or_else(|| panic!("unknown algorithm {alg}"));
     let opts = SolveOptions::default();
+    // RPOPT_CERT=0|1|2|3|4: mplcp facet certificate off (default), on (3 to 5 parameters), audit, on at 2 to 6, audit at 2 to 6
+    if let Ok(m) = std::env::var("RPOPT_CERT") {
+        rpopt::algorithms::mplcp::set_certificate(m.parse().unwrap());
+    }
     let mut runs: Vec<(f64, usize, Stats)> = vec![];
     loop {
         census::reset();
@@ -399,6 +403,18 @@ fn highdim_tables(rows: &[Row], skipped: &[(String, String)]) {
             "| {} | {:.1} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |",
             r.problem, c(r, Counter::PfCalls) / n, c(r, Counter::PfCase1), c(r, Counter::PfCase2), br, pct(c(r, Counter::PfLexCut), br), c(r, Counter::PfCheb),
             pct(c(r, Counter::PfChebEmpty), c(r, Counter::PfCheb)), pct(c(r, Counter::PfRepeatBasis), br), ds.join("/"), c(r, Counter::PfDepthLimit), c(r, Counter::PfIterLimit)
+        );
+    }
+    println!("\n### High-dimension 3d: mplcp facet certificate (RPOPT_CERT=1 skips, 2 audits; asked only for Case-2 facets)\n");
+    println!("| problem | regions | Case-2 facets/region | certified | search skipped | audit: search also found a new region | check us/facet | check share of solve |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::CertFacets) > 0.0) {
+        let n = r.regions.max(1) as f64;
+        let (fe, hit) = (c(r, Counter::CertFacets), c(r, Counter::CertHit));
+        println!(
+            "| {} | {} | {:.1} | {} | {} | {} | {:.2} | {} |",
+            r.problem, r.regions, fe / n, pct(hit, fe), c(r, Counter::AdjCertSkip), c(r, Counter::CertExtra),
+            c(r, Counter::CertNanos) / 1e3 / fe, pct(c(r, Counter::CertNanos), r.solve_s * 1e9)
         );
     }
     println!("\n### High-dimension 4: vertex clipping (`clip_flags`) outcomes per call\n");

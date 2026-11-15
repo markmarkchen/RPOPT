@@ -12,6 +12,7 @@ mod dp_mpc;
 mod geometric_degenerate;
 mod incremental_kkt;
 mod mplcp;
+mod mplcp_case2_scale;
 mod mplp_graph_gaps;
 mod mplp_lex;
 mod mpmilp_bb;
