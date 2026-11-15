@@ -80,8 +80,8 @@ the groups show the geometric mean of the problems' ratios. A/A median 1.000, ra
 The masses family is reported apart from the other problems. At 2 to 5 parameters masses is unchanged (ratio 1.012) and so are the
 POP, random, di, dinv and sys3x2 problems (geometric mean 1.005, no problem above 1.05 among them). The gain is on masses from 6
 parameters: geometric mean 0.754, with masses5_N3 at 0.433 (30.6 s to 13.3 s), masses4_N4 0.559 (69.8 s to 39.1 s) and masses3_N5
-0.624 (21.5 s to 13.4 s). One regression: **masses8_N2 is 1.48x** (1.65 s to 2.44 s, 3 of 3 alternations, A/A 0.998); the
-neighbours masses7_N2 (0.84) and masses6_N2 (0.96) gain. Where the 0.8 s go on masses8_N2 is in the section below.
+0.624 (21.5 s to 13.4 s). One regression in this first version (51d9c62), fixed below by 04d4ca9: **masses8_N2 is 1.48x** (1.65 s to 2.44 s, 3 of 3 alternations, A/A 0.998); the
+neighbours masses7_N2 (0.84) and masses6_N2 (0.96) gain. Where the 0.8 s went on masses8_N2, and the fix, are in the section below.
 
 All problems:
 
@@ -199,19 +199,113 @@ All problems:
 | 16 | masses8_N2 | 395 | 1649.05 | 2435.37 | 1.480 | 0.998 | 3 |
 | 16 | rand_t16_x5_m15_s0 | 1876 | 1428.98 | 1422.96 | 1.005 | 0.995 | 3 |
 
-## masses8_N2
+## masses8_N2 and the follow-up fix (04d4ca9)
 
-The census (`lp_census`, one solve each) of main and the candidate gives the same LP count (27049), the same Case-2 calls (8354),
-the same answers by the rank-1 enumeration (7606) and the same hand-offs to the walk (748). `PivotGap` is 0 (no call has a measure
-between 1e-9 and 1e-6, so the gap is clean here too) and `FastRel` is 338 (masses7_N2: 324, also 0 in the gap). So the new rule
-takes 338 facets that main took through another route, with unchanged LP and walk counts.
-Variants of the candidate on masses8_N2 (alg_time, 3 solves, 3 alternations, ms): main 1596, candidate 2343, new fast path
-switched off (rank-1 new) 1948, new rank-1 test switched off (fast path new) 2658, both switched off 1804. The fast path rule
-is the larger part (0.4 to 0.85 s); the rank-1 test adds about 0.15 s; and the candidate source with both switched off is
-still 13% slower than main, which points at code layout (the function `adjacent` grew) as well. The extra time is not in the
-LP or walk counters, and the one-shot census run of the candidate (2381 ms) is not slower than that of main (2541 ms), so
-this is not explained and is not claimed to be. The absolute cost is 0.8 s on a 1.6 s problem, 16 parameters, where `mplcp` is
-already 2.2x slower than `parametric_daqp`.
+The first version (51d9c62) made masses8_N2 1.48x slower than main (1.65 s to 2.44 s). The census run of main for this comparison was
+first built wrongly (the "main" binary carried the candidate's code), so the first reading of "identical counts" was wrong. With the
+correct builds, on masses8_N2 main against 51d9c62: Case-2 calls 6337 against 8354, adjacent calls per region 61.4 against 81.6, LPs
+23654 against 27049, regions 395 in both, QPs 1 in both. In a release build the 338 relative-pivot calls per solve are all taken
+(none blocked), so the fast path takes facets that main sent to the rank-1 enumeration, and the pivoted child tableau behind a
+sub-1e-10 pivot makes the later neighbour search more expensive. Variants (alg_time, ms): main 1596, 51d9c62 2343, fast-path rule
+off 1948, rank-1 test old 2658, both off 1804.
+
+Fix (04d4ca9): a toggle taken through the relative test returns `Nbr::Z` (the basis only), so the child is factored from its active
+set and no pivoted tableau or entry hyperplane is kept. Single-solve check, ms: masses8_N2 2350 to 1371 (main 1593), masses7_N2 945 to 910
+(main 1134), masses5_N3 13231 to 12549 (main 30756). Folded into the same commit: the Lean finding 16 gap. With a single
+vanishing slack row the measure now also demotes a fast-path call with `tve > PTOL` and measure at most 1e-9 to rank-1
+(counter `FastDemoted`). `FastDemoted` is 0 on masses8_N2, masses4_N3, masses5_N3 and masses4_N4, so the demotion does not
+fire there (the census also gives `FastRel` 270, 2835, 8744 and 19979, and `PivotGap` 0, 3, 4 and 687 for the same four).
+
+### Gate of 04d4ca9 (head of the branch before the merges of main a8d003f: 04d4ca9)
+
+Same method as above, binaries built once (bincache key `src-6c9f69dd2fe4-lock-049f3bfd-ex-1a391d25ae8a`), jobs 45899228 (build),
+hash and coverage on all 111 problems, paired timing on the masses family plus the 18 problems that changed in 51d9c62 (111 tasks)
+and on 13 control problems of 2 to 16 parameters (55 tasks). In a task the fix, 51d9c62, main and a copy of main (A/A) run once each
+in shuffled order.
+
+| group | problems | fix / main | previous (51d9c62) / main | best | worst | A/A median (range) |
+|---|---:|---:|---:|---|---|---|
+| masses, all | 21 | 0.772 | 0.833 | masses5_N3 0.378 | masses2_N10 1.043 | 1.000 (0.992 to 1.012) |
+| masses 2-5 params | 7 | 1.033 | 1.015 | masses2_N4 1.019 | masses2_N10 1.043 | 1.001 (0.996 to 1.012) |
+| masses 6+ params | 14 | 0.667 | 0.755 | masses5_N3 0.378 | masses3_N2 0.925 | 1.000 (0.992 to 1.006) |
+| changed non-masses problems (hash differs in 51d9c62) | 6 | 1.002 | 1.004 | pop_007 0.988 | rand_t6_x6_m24_s0 1.010 | 1.000 (0.997 to 1.011) |
+| 13 control problems, 2-16 params | 13 | 1.010 | 1.003 | pop_043 0.999 | di_N10 1.034 | 1.001 (0.997 to 1.006) |
+
+All timed problems:
+
+| params | problem | regions (main / fix) | main ms | 51d9c62 ms | fix ms | fix / main | 51d9c62 / main | A/A | alternations |
+|---:|---|---|---:|---:|---:|---:|---:|---:|---:|
+| 2 | di_N10 | 11 / 11 | 0.15 | 0.15 | 0.15 | 1.034 | 1.027 | 1.000 | 7 |
+| 3 | sys3x2_N5 | 973 / 973 | 22.89 | 22.89 | 23.57 | 1.027 | 0.997 | 1.001 | 7 |
+| 4 | masses2_N10 | 6381 / 6381 | 407.94 | 413.25 | 427.47 | 1.043 | 1.013 | 1.001 | 5 |
+| 4 | masses2_N12 | 12779 / 12779 | 967.51 | 977.20 | 998.91 | 1.036 | 1.010 | 0.996 | 3 |
+| 4 | masses2_N4 | 307 / 307 | 13.16 | 13.35 | 13.42 | 1.019 | 1.012 | 1.000 | 7 |
+| 4 | masses2_N5 | 493 / 493 | 22.84 | 23.05 | 23.56 | 1.028 | 1.018 | 1.001 | 7 |
+| 4 | masses2_N6 | 901 / 901 | 44.09 | 44.64 | 45.50 | 1.033 | 1.013 | 1.002 | 7 |
+| 4 | masses2_N7 | 1641 / 1641 | 85.32 | 86.30 | 88.40 | 1.043 | 1.029 | 1.012 | 5 |
+| 4 | masses2_N8 | 2837 / 2837 | 162.26 | 163.15 | 166.70 | 1.032 | 1.012 | 1.003 | 5 |
+| 4 | pop_019 | 6857 / 6857 | 2506.15 | 2494.48 | 2523.18 | 1.007 | 0.995 | 1.002 | 3 |
+| 4 | pop_043 | 899 / 899 | 38.98 | 39.04 | 39.01 | 0.999 | 0.995 | 1.000 | 7 |
+| 5 | pop_001 | 3529 / 3529 | 18789.30 | 18671.43 | 18758.16 | 1.003 | 0.999 | 0.999 | 3 |
+| 5 | pop_088 | 62318 / 62318 | 5364.04 | 5381.04 | 5406.38 | 1.008 | 1.003 | 0.997 | 3 |
+| 6 | masses3_N2 | 169 / 169 | 26.80 | 24.59 | 24.67 | 0.925 | 0.921 | 1.000 | 7 |
+| 6 | masses3_N3 | 955 / 955 | 305.82 | 230.19 | 232.23 | 0.761 | 0.754 | 1.000 | 5 |
+| 6 | masses3_N4 | 3643 / 3643 | 2390.20 | 1640.95 | 1667.54 | 0.698 | 0.685 | 1.003 | 3 |
+| 6 | masses3_N5 | 10437 / 10436 | 21527.48 | 13422.98 | 14046.39 | 0.652 | 0.624 | 1.000 | 3 |
+| 6 | masses3_N6 | 22145 / 22143 | 58639.13 | 43850.26 | 46597.03 | 0.795 | 0.748 | 1.005 | 3 |
+| 6 | masses3_N7 | 38330 / 38327 | 169813.21 | 123279.83 | 129185.85 | 0.761 | 0.729 | 0.995 | 3 |
+| 6 | pop_017 | 4142 / 4142 | 526.88 | 528.75 | 529.49 | 1.005 | 1.002 | 1.001 | 5 |
+| 6 | pop_049 | 9341 / 9341 | 1343.38 | 1352.45 | 1357.91 | 1.011 | 1.007 | 1.003 | 3 |
+| 6 | rand_t6_x6_m24_s0 | 17134 / 17134 | 2386.44 | 2410.23 | 2416.94 | 1.010 | 1.010 | 1.011 | 3 |
+| 7 | pop_005 | 10289 / 10289 | 4517.70 | 4530.21 | 4579.37 | 1.013 | 1.002 | 0.997 | 3 |
+| 7 | pop_037 | 18615 / 18615 | 3133.30 | 3123.55 | 3145.44 | 1.004 | 0.997 | 0.999 | 3 |
+| 8 | masses4_N2 | 325 / 325 | 147.91 | 128.00 | 118.67 | 0.805 | 0.867 | 1.000 | 5 |
+| 8 | masses4_N3 | 2891 / 2891 | 3875.08 | 2401.67 | 1989.42 | 0.517 | 0.621 | 1.002 | 3 |
+| 8 | masses4_N4 | 16050 / 16054 | 69887.69 | 39205.97 | 38216.32 | 0.548 | 0.562 | 1.000 | 3 |
+| 8 | pop_007 | 12235 / 12235 | 10718.86 | 10856.78 | 10678.72 | 0.988 | 1.020 | 1.003 | 3 |
+| 8 | pop_028 | 82116 / 82116 | 28008.29 | 28331.07 | 28310.81 | 1.007 | 1.006 | 0.999 | 3 |
+| 8 | pop_047 | 48144 / 48144 | 13673.94 | 13529.98 | 13653.28 | 0.998 | 0.986 | 1.000 | 3 |
+| 8 | pop_076 | 15006 / 15006 | 4266.17 | 4253.24 | 4304.40 | 1.007 | 0.995 | 1.006 | 3 |
+| 8 | rand_t8_x5_m20_s0 | 4111 / 4111 | 659.07 | 662.49 | 664.22 | 1.007 | 1.008 | 1.004 | 5 |
+| 10 | masses5_N2 | 370 / 369 | 391.46 | 301.11 | 274.01 | 0.703 | 0.771 | 0.996 | 5 |
+| 10 | masses5_N3 | 5060 / 5067 | 30896.04 | 13602.30 | 11618.18 | 0.378 | 0.438 | 0.998 | 3 |
+| 10 | rand_t10_x5_m20_s0 | 6124 / 6124 | 1673.39 | 1683.82 | 1702.23 | 1.009 | 1.006 | 1.003 | 3 |
+| 12 | masses6_N2 | 380 / 379 | 736.15 | 704.84 | 414.75 | 0.568 | 0.955 | 0.992 | 5 |
+| 14 | masses7_N2 | 390 / 389 | 1128.95 | 949.90 | 787.31 | 0.693 | 0.841 | 1.001 | 3 |
+| 14 | rand_t14_x5_m15_s0 | 2470 / 2470 | 1325.64 | 1325.69 | 1329.02 | 1.003 | 0.999 | 0.999 | 3 |
+| 16 | masses8_N2 | 395 / 395 | 1597.55 | 2334.51 | 1185.62 | 0.743 | 1.466 | 1.006 | 3 |
+| 16 | rand_t16_x5_m15_s0 | 1876 / 1876 | 1396.33 | 1403.84 | 1403.67 | 1.005 | 1.002 | 1.004 | 3 |
+
+Regions of the fix against main and against 51d9c62 (only problems whose hash differs from either):
+
+| problem | params | main regions | 51d9c62 regions | fix regions | hash vs main | hash vs 51d9c62 | fix gaps | overlaps | lex-infeasible |
+|---|---:|---:|---:|---:|---|---|---:|---:|---:|
+| pop_001 | 5 | 3529 | 3529 | 3529 | differs | differs | 0 | 0 | 0 |
+| pop_088 | 5 | 62318 | 62318 | 62318 | same | differs | 0 | 0 | 0 |
+| masses3_N3 | 6 | 955 | 955 | 955 | differs | differs | 0 | 0 | 0 |
+| masses3_N4 | 6 | 3643 | 3643 | 3643 | differs | differs | 0 | 0 | 0 |
+| masses3_N5 | 6 | 10437 | 10436 | 10436 | differs | differs | 0 | 0 | 0 |
+| masses3_N6 | 6 | 22145 | 22142 | 22143 | differs | differs | 0 | 0 | 0 |
+| masses3_N7 | 6 | 38330 | 38329 | 38327 | differs | differs | 0 | 0 | 0 |
+| rand_t6_x6_m24_s0 | 6 | 17134 | 17134 | 17134 | differs | differs | 0 | 0 | 0 |
+| masses4_N3 | 8 | 2891 | 2896 | 2891 | differs | differs | 0 | 0 | 0 |
+| masses4_N4 | 8 | 16050 | 16068 | 16054 | differs | differs | 0 | 0 | 0 |
+| pop_007 | 8 | 12235 | 12235 | 12235 | differs | same | 0 | 0 | 0 |
+| pop_028 | 8 | 82116 | 82116 | 82116 | differs | same | 0 | 0 | 0 |
+| pop_047 | 8 | 48144 | 48143 | 48144 | differs | differs | 0 | 0 | 0 |
+| masses5_N2 | 10 | 370 | 369 | 369 | differs | same | 0 | 0 | 0 |
+| masses5_N3 | 10 | 5060 | 5084 | 5067 | differs | differs | 0 | 0 | 0 |
+| masses6_N2 | 12 | 380 | 379 | 379 | differs | same | 0 | 0 | 0 |
+| masses7_N2 | 14 | 390 | 389 | 389 | differs | same | 0 | 0 | 0 |
+| masses8_N2 | 16 | 395 | 395 | 395 | differs | same | 0 | 0 | 0 |
+fix identical to main on 94 of 111, identical to 51d9c62 on 99 of 111, problems with a gap, overlap or lex-infeasible region: 0
+
+
+The fix has 0 gaps, 0 overlaps and 0 lexico-infeasible regions on all 111 problems. It is hash-identical to main on 94 problems and
+to 51d9c62 on 99. The masses2 to masses5 problems of 2 to 5 parameters cost 1.9 to 4.3 percent more than main (geometric mean 1.033,
+51d9c62 was 1.015): the extra measure evaluation on every single-row fast-path call, which the demotion check needs, is O(n) and
+measurable at these sizes. The 13 control problems are unchanged within the A/A range (geometric mean 1.010, di_N10 at 0.15 ms is the
+largest, 1.034).
 
 ## masses5_N4 and masses4_N5 against graph
 
@@ -225,8 +319,8 @@ Candidate `mplcp` and `graph`, one solve each, then 2000 coverage samples (`lexc
 | masses4_N5 | graph | 67330 | 140.0 | 0 | 0 | 0 | 0.43 GB |
 
 `mplcp` is 3.2x (masses5_N4) and 5.7x (masses4_N5) slower than `graph` on these two. The candidate cut masses5_N4 from about 1800 s
-on f234e64 to 492 s. `graph` returns 142 and 344 more regions than `mplcp` (the same kind of sliver difference), and on
-masses5_N4 `graph` has one sampled overlap.
+on f234e64 to 492 s. `graph` returns 142 and 344 more regions than `mplcp` (the same kind of sliver difference). **Finding about `graph`:** on
+masses5_N4 it has one sampled overlap (two of its regions contain the same feasible sample); not ours to fix.
 
 ## Reproduction
 

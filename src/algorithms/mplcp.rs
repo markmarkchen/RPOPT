@@ -1078,23 +1078,35 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         let kk = tab.col_of(comp(var, n));
         let pp = gam[v];
         let tve = -tab.t[v * n + kk] / pp;
-        // a pivot below the absolute PTOL is still nonzero when it is not small against the scale of M
-        // (single vanishing slack row: the neighbour is the toggle for any nonzero pivot)
-        let nonzero_rel = tve > 0.0 && tve <= PTOL && zrows.len() == 1 && var < n && {
-            let m = pivot_measure(p, tab, v, kk);
-            if m > MEASURE_ZERO && m <= MEASURE_NONZERO {
-                crate::census_bump!(PivotGap, 1);
-            }
-            m > MEASURE_NONZERO
-        };
+        // Single vanishing slack row: the scale-free measure decides in both directions. A pivot below the
+        // absolute PTOL is still nonzero when it is not small against the scale of M (`nonzero_rel`), and a
+        // pivot above PTOL is rounding of an exact dependence when the measure is at most MEASURE_ZERO: that
+        // facet is a rank-1 Case 2 and not a Case-1 toggle (`demoted`).
+        let single = zrows.len() == 1 && var < n && tve > 0.0;
+        let m = if single { pivot_measure(p, tab, v, kk) } else { f64::INFINITY };
+        if single && m > MEASURE_ZERO && m <= MEASURE_NONZERO {
+            crate::census_bump!(PivotGap, 1);
+        }
+        let nonzero_rel = single && tve <= PTOL && m > MEASURE_NONZERO;
+        let demoted = single && tve > PTOL && m <= MEASURE_ZERO;
         if nonzero_rel {
             crate::census_bump!(FastRel, 1);
         }
-        if tve > PTOL || nonzero_rel {
+        if demoted {
+            crate::census_bump!(FastDemoted, 1);
+        }
+        if (tve > PTOL && !demoted) || nonzero_rel {
             let blocked = zrows.iter().any(|&i| i != v && -(tab.t[i * n + kk] + gam[i] * tve) > PTOL);
             if !blocked {
                 crate::census_bump!(AdjFast, 1);
                 crate::census_bump!(AdjFastNanos, _cen_t.elapsed().as_nanos());
+                if nonzero_rel {
+                    // a pivot below PTOL leaves a badly scaled child tableau and an entry hyperplane that
+                    // the pivot step cannot be trusted with: hand over the basis only, so the child is
+                    // factored from its active set (measured on masses8_N2: keeping the pivoted tableau
+                    // cost 1.5x main, this costs 0.86x)
+                    return (vec![Nbr::Z(z_toggle(tab, n, v), None)], None);
+                }
                 return (vec![Nbr::Toggle(v, kk)], None);
             }
         }
