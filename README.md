@@ -404,7 +404,7 @@ time of `graph` (119 problems solved).
 - **Scale-free pivot test (Case 1 fast path).** `adjacent` and `rank1_case2` now decide "nonzero pivot" and "zero pivot" with
   one scale-free measure (thresholds 1e-6 and 1e-9, the measured gap), where an absolute `PTOL` had sent Case-1 facets of badly
   scaled problems to the Case-2 walk. Paired serial time against main c345cdc: masses from 6 parameters geometric mean
-  0.754 (masses5_N3 0.43, masses4_N4 0.56, masses5_N4 1800 s to 492 s); every other problem 1.005 (A/A 0.98 to 1.02);
+  0.754 (masses5_N3 0.43, masses4_N4 0.56, masses5_N4 492 s, against 1800 s before this change and the rank-1 enumeration, and 153 s for `graph`); every other problem 1.005 (A/A 0.98 to 1.02);
   masses8_N2 is 1.48x slower, unexplained. 93 of 111 region sets are hash-identical and the other 18 differ by
   slivers, with 0 gaps, 0 overlaps and 0 lexico-infeasible regions on all 111. Details in
   `bench/results/mplcp_scale_free_pivot.md`.
@@ -453,6 +453,9 @@ time of `graph` (119 problems solved).
   lexico-feasible. For the rank-1 enumeration of Case 2 (one vanishing slack row, zero pivot) they show that the
   members A + {c} - {j} chosen by the smallest ratio lambda_j / mu_j are exactly the neighbours across the facet,
   and that dropping known members first leaves the explored set unchanged; ties go to the walk, as in the code.
+  For `mplp_lex` they show that a facet whose direct crossing finds no inequality row able to leave the basis has
+  no feasible point beyond it (so skipping it without an LP is exact), and that the success-rate gate choosing
+  between the direct crossing and the facet LP changes only the speed, not the regions.
   Open: KKT necessity, Case-2 completeness (a Lemke-type termination statement), and the
   facet-graph connectivity behind coverage. Tolerances and floating point are not modelled. The model traced the
   pop_001 overlap to absolute tolerances in the Case-2 sign test of `pivot_facet`; that is fixed (see "Bugs found
