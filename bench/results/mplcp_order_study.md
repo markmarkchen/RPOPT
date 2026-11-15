@@ -168,14 +168,14 @@ load 50 to 80, so the us/call are indicative. rand_t12 spends 1.4 s of its 4.3 s
 
 | problem | solve ms | adjacent calls | none: calls, us, share | fast: calls, known, us, share | rank-1 kind 1 (all known): calls, us, share | rank-1 kind 2 (tested): calls, us, share | rank-1 kind 0 share | pre us |
 |---|---:|---:|---|---|---|---|---:|---:|
-| rand_t8_x5_m20_s0 | 711 | 58.3k | 21.4k, 0.31, 0.9% | 28.6k, 89%, 0.69, 2.8% | 29.6k, 2.46, 10.3% | 1.2k, 13.5, 2.3% | 0.7% | 0.31 to 0.38 |
-| rand_t10_x5_m20_s0 | 1890 | 181k | 66.4k, 0.36, 1.3% | 49.9k, 98%, 0.84, 2.2% | 51.7k, 3.45, 9.4% | 5.2k, 18.2, 5.0% | 0.5% | 0.36 to 0.47 |
-| pop_017 | 563 | 54.1k | 3.6k, 0.37, 0.2% | 21.3k, 86%, 0.80, 3.0% | 19.0k, 2.40, 8.1% | 7.6k, 9.9, 13.4% | 0.6% | 0.37 to 0.45 |
-| rand_t12_x5_m20_s0 | 4277 | 233k | 118.5k, 0.41, 1.1% | 47.1k, 90%, 0.89, 1.0% | 61.1k, 4.32, 6.2% | 1.3k, 28.5, 0.9% | 0.1% | 0.41 to 0.52 |
+| rand_t8_x5_m20_s0 | 711 | 86.3k | 21.4k, 0.31, 0.9% | 28.6k, 89%, 0.69, 2.8% | 29.6k, 2.46, 10.3% | 1.2k, 13.5, 2.3% | 0.7% | 0.31 to 0.38 |
+| rand_t10_x5_m20_s0 | 1890 | 182k | 66.4k, 0.36, 1.3% | 49.9k, 98%, 0.84, 2.2% | 51.7k, 3.45, 9.4% | 5.2k, 18.2, 5.0% | 0.5% | 0.36 to 0.47 |
+| pop_017 | 563 | 55.1k | 3.6k, 0.37, 0.2% | 21.3k, 86%, 0.80, 3.0% | 19.0k, 2.40, 8.1% | 7.6k, 9.9, 13.4% | 0.6% | 0.37 to 0.45 |
+| rand_t12_x5_m20_s0 | 4277 | 234k | 118.5k, 0.41, 1.1% | 47.1k, 90%, 0.89, 1.0% | 61.1k, 4.32, 6.2% | 1.3k, 28.5, 0.9% | 0.1% | 0.41 to 0.52 |
 
 - Adjacent time (all classes) is 17% (rand_t8), 18% (rand_t10), 25% (pop_017) of the solve; the rest of
   `expand_candidates` (hints, candidate vectors, the Seen claims) is 1.7% to 3.6%.
-- Rediscovery dominates the counts: 55% (rand_t8), 56% (rand_t10), 48% (pop_017), 44% (rand_t12) of all `adjacent`
+- Rediscovery dominates the counts: 64% (rand_t8), 55% (rand_t10), 68% (pop_017), 44% (rand_t12) of all `adjacent`
   calls are rank-1 calls with every member known, or fast calls to a known toggle. The rank-1 all-known calls alone cost
   6% to 10% of the solve (2.4 to 4.3 us each, against 0.3 to 0.5 us for the pre-decision part); the known fast calls
   1% to 3%.
