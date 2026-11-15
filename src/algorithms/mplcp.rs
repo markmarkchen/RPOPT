@@ -1383,7 +1383,7 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
         let in_band = |i: usize| {
             let j = tab.row_var[i] - n;
             let nu = tab.t[i * n + kk].abs() / (mcc / p.m[j * n + j].max(1e-300)).sqrt();
-            nu > MU_ZERO && nu <= MU_NONZERO
+            nu > ZERO_GUARD_MIN && nu <= MU_NONZERO
         };
         if forced || zrows_all.iter().any(|&i| in_band(i)) {
             let zj: Vec<usize> = zrows_all.iter().map(|&i| tab.row_var[i] - n).collect();
@@ -1464,7 +1464,7 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
         if mi > 0.0 && nu > MU_NONZERO {
             pm.push(i);
             pm_mu.push(mi);
-        } else if mi > 0.0 && !all_ref && nu_tab > ZERO_GUARD_MIN && nu_tab <= MU_ZERO {
+        } else if !all_ref && nu_tab > ZERO_GUARD_MIN && nu_tab <= MU_ZERO {
             // a positive tableau multiplier decided zero without a recomputation (a rounded zero, or a tiny true positive)
             zeroed_pos.push(ai);
         }
@@ -1706,6 +1706,50 @@ fn pivot_measure(p: &Plcp, tab: &Tab, c: usize, kk: usize) -> f64 {
     m
 }
 
+/// Verdict on the pivot of exchanging the vanishing slack row `c` (column `kk`) with its complement.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PivotClass {
+    /// a structural zero: a_c is in the span of the active rows (a rank-1 Case 2)
+    Zero,
+    /// a nonzero pivot, however small in absolute terms (a toggle)
+    Nonzero,
+    /// neither: the measure is in the undecided band and the dependency residual is between `RHO_ZERO` and `RHO_NONZERO` (or could not be formed)
+    Undecided,
+}
+
+/// The one decision on a pivot, for every consumer (the Toggle branch of `adjacent`, the rank-1 gate, the walk's leaf test): the scale-free
+/// `pivot_measure` decides outside the band (MEASURE_ZERO, MEASURE_NONZERO]; inside it the dependency residual rho of the original rows
+/// (`refined_dependency`) decides: rho <= RHO_ZERO is zero, rho >= RHO_NONZERO nonzero. The tableau pivot itself, a difference of Gram entries,
+/// resolves only about 1e-9 and must not be compared with an absolute tolerance.
+pub(crate) fn classify_pivot(p: &Plcp, tab: &Tab, c: usize, kk: usize) -> PivotClass {
+    let m = pivot_measure(p, tab, c, kk);
+    if m <= MEASURE_ZERO {
+        return PivotClass::Zero;
+    }
+    if m > MEASURE_NONZERO {
+        return PivotClass::Nonzero;
+    }
+    classify_gap(p, tab, c)
+}
+
+/// The decision inside the band, see `classify_pivot`.
+pub(crate) fn classify_gap(p: &Plcp, tab: &Tab, c: usize) -> PivotClass {
+    let n = p.n;
+    if p.arows.rows == 0 {
+        return PivotClass::Undecided;
+    }
+    let var = tab.row_var[c];
+    if var >= n {
+        return PivotClass::Undecided;
+    }
+    let zj: Vec<usize> = (0..n).filter(|&i| tab.row_var[i] >= n && tab.row_var[i] < 2 * n).map(|i| tab.row_var[i] - n).collect();
+    match refined_dependency(p, &zj, var) {
+        Some((_, rho)) if rho <= RHO_ZERO => PivotClass::Zero,
+        Some((_, rho)) if rho >= RHO_NONZERO => PivotClass::Nonzero,
+        _ => PivotClass::Undecided,
+    }
+}
+
 /// The pivot part |T[c,kk]| / M_cc of `pivot_measure`, O(1). The measure is the maximum of this and the column part, so
 /// a pivot part above a threshold already puts the measure above it and the O(n) column loop can be skipped.
 fn pivot_part(p: &Plcp, tab: &Tab, c: usize, kk: usize) -> f64 {
@@ -1842,6 +1886,8 @@ const ZERO_GUARD_MIN: f64 = 1e-12;
 const REFINE_STEPS: usize = 2;
 /// The pivot of a gap-band exchange is zero when the dependency residual rho (`refined_dependency`) is at most this: rho = 1e-20 is a relative residual of 1e-10.
 const RHO_ZERO: f64 = 1e-20;
+/// A pivot in the undecided band is nonzero when rho is at least this (a relative residual of 1e-6; nonzero pivots measured 1.7e-5 and above).
+const RHO_NONZERO: f64 = 1e-12;
 static PIVDD_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 /// Switch for the exact decision of pivots in the undecided band (`MPLCP_PIVDD=0` in the examples turns it off).
 pub fn set_pivot_dd(on: bool) {
@@ -1988,8 +2034,38 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         if single && m > MEASURE_ZERO && m <= MEASURE_NONZERO {
             crate::census_bump!(PivotGap, 1);
         }
-        let nonzero_rel = single && tve <= PTOL && m > MEASURE_NONZERO;
-        let demoted = single && tve > PTOL && m <= MEASURE_ZERO;
+        // a measure in the undecided band is decided by the dependency residual of the original rows (`refined_dependency`), on both branches:
+        // a structural zero (rho <= RHO_ZERO) is a rank-1 Case 2 even when the tableau pivot is above PTOL, a clearly nonzero one (rho >= RHO_NONZERO)
+        // is a toggle even when the tableau pivot is at or below PTOL (the walk's leaf test is the same absolute PTOL and would never emit A + {c})
+        let mut gap_zero = false;
+        let mut gap_nonzero = false;
+        if single && m > MEASURE_ZERO && m <= MEASURE_NONZERO && p.arows.rows > 0 {
+            let zj: Vec<usize> = (0..n).filter(|&i| tab.row_var[i] >= n && tab.row_var[i] < 2 * n).map(|i| tab.row_var[i] - n).collect();
+            if let Some((_, rho)) = refined_dependency(p, &zj, var) {
+                gap_zero = rho <= RHO_ZERO;
+                gap_nonzero = rho >= RHO_NONZERO;
+                #[cfg(feature = "lp_census")]
+                {
+                    use crate::census::{bump_slot, PG_BASE};
+                    if tve > PTOL {
+                        bump_slot(PG_BASE + 44, 1);
+                        if gap_zero {
+                            bump_slot(PG_BASE + 45, 1);
+                        }
+                    } else if gap_nonzero {
+                        bump_slot(PG_BASE + 46, 1);
+                    } else if gap_zero {
+                        bump_slot(PG_BASE + 47, 1);
+                    }
+                }
+            }
+        }
+        if !PIVDD_ON.load(std::sync::atomic::Ordering::Relaxed) {
+            gap_zero = false;
+            gap_nonzero = false;
+        }
+        let nonzero_rel = single && tve <= PTOL && (m > MEASURE_NONZERO || gap_nonzero);
+        let demoted = single && tve > PTOL && (m <= MEASURE_ZERO || gap_zero);
         if nonzero_rel {
             crate::census_bump!(FastRel, 1);
         }
