@@ -138,18 +138,18 @@ pub mod s {
     pub const RG_AMBIG_WRONG: usize = 213;
     pub const RG_NOENOUGH: usize = 214; // children whose shared points are fewer than d - 1
     // time profile of the LP-path builder (always counted under lp_census)
-    pub const PF_BOX_NS: usize = 225; // box_chain, whole call
-    pub const PF_PERROW_NS: usize = 226; // projection tests and per-row LPs
-    pub const PF_SETUP_NS: usize = 227; // Plcp::new
-    pub const PF_INIT_NS: usize = 228; // initial_region
-    pub const PF_LOOP_NS: usize = 229; // the exploration loop of pivot_solve
-    pub const PF_CLIP_NS: usize = 230; // clip_flags, all calls (nt <= 5)
-    pub const PF_CLIP_FAIL_NS: usize = 231; // clip_flags calls that returned None
-    pub const PF_CLIP_FAILS: usize = 232;
-    pub const PF_WORK_OK: usize = 233; // 28 log2 buckets of the work of successful clips (nt <= 5)
-    pub const PF_WORK_FAIL: usize = 262; // the same for clips that returned None
-    pub const PF_CLIP_BUDGET_ABORTS: usize = 291;
-    pub const PF_REGSTAT_NS: usize = 292; // census-only work of the per-region records (subtracted from the solve)
+    pub const PF_BOX_NS: usize = 265; // box_chain, whole call
+    pub const PF_PERROW_NS: usize = 266; // projection tests and per-row LPs
+    pub const PF_SETUP_NS: usize = 267; // Plcp::new
+    pub const PF_INIT_NS: usize = 268; // initial_region
+    pub const PF_LOOP_NS: usize = 269; // the exploration loop of pivot_solve
+    pub const PF_CLIP_NS: usize = 270; // clip_flags, all calls (nt <= 5)
+    pub const PF_CLIP_FAIL_NS: usize = 271; // clip_flags calls that returned None
+    pub const PF_CLIP_FAILS: usize = 272;
+    pub const PF_WORK_OK: usize = 273; // 28 log2 buckets of the work of successful clips (nt <= 5)
+    pub const PF_WORK_FAIL: usize = 302; // the same for clips that returned None
+    pub const PF_CLIP_BUDGET_ABORTS: usize = 331;
+    pub const PF_REGSTAT_NS: usize = 332; // census-only work of the per-region records (subtracted from the solve)
     // Clarkson simulation, variant A (seed: parameter-set rows) at SIM_A, variant B (A + entry + parent's kept rows) at SIM_B
     pub const SIM_A: usize = 50;
     pub const SIM_B: usize = 62;

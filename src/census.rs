@@ -35,6 +35,20 @@ macro_rules! census_bump {
     ($c:ident, $n:expr) => {};
 }
 
+/// Records why `rank1_case2` refused the call (census only; read by `adjacent` for the walk class).
+#[cfg(feature = "lp_census")]
+#[macro_export]
+macro_rules! census_reason {
+    ($k:expr) => {
+        $crate::census::reason_set($k)
+    };
+}
+#[cfg(not(feature = "lp_census"))]
+#[macro_export]
+macro_rules! census_reason {
+    ($k:expr) => {};
+}
+
 /// Opens a region-build record named `$id`; it counts as empty unless `census_keep!($id)` runs.
 #[cfg(feature = "lp_census")]
 #[macro_export]
@@ -456,6 +470,24 @@ mod imp {
         CandLawSmallPiv,
         /// bases that `tableau_for` accepted only in the second, largest-pivot-first order
         TabRescued,
+        /// refined multipliers used by the enumeration: band entries decided as zero, as real, or still between (call goes to the walk)
+        MuRefinedZero,
+        BuildColdRetry,
+        BuildThinAccepted,
+        BuildThinRejected,
+        MuEmptyGuard,
+        MuEmptyToWalk,
+        MuRefinedReal,
+        MuRefinedBand,
+        /// audit (every gap-band call run both ways): compared, same neighbour sets, different, walk incomplete or enumeration undecided
+        AuditCalls,
+        AuditSame,
+        AuditDiff,
+        AuditExplained,
+        AuditExtraWalk,
+        AuditNoPositive,
+        AuditSkip,
+        AuditAltNone,
         /// end marker: the Case-2 component block starts here
         CounterEnd,
     }
@@ -524,9 +556,9 @@ mod imp {
     pub const CALIB: usize = C2_BASE + NCOMP * 8;
     /// walk classes (by vanishing rows): 0 one slack row, zero pivot; 1 one slack row, pivot in the gap; 2 one slack row, nonzero pivot;
     /// 3 one z row; 4 two slack rows; 5 one slack one z; 6 two z rows; 7 three or more. Fields: calls, ns, LP ns, DAQP ns, Gamma ns
-    pub const NWK: usize = 8;
+    pub const NWK: usize = 12;
     pub const WK_BASE: usize = CALIB + 4;
-    pub const WK_NAMES: [&str; NWK] = ["1 slack, zero pivot", "1 slack, pivot in gap", "1 slack, nonzero pivot", "1 z row", "2 slack", "1 slack + 1 z", "2 z", "3 or more"];
+    pub const WK_NAMES: [&str; NWK] = ["1 slack, zero pivot", "1 slack, pivot in gap", "1 slack, nonzero pivot", "1 z row", "2 slack", "1 slack + 1 z", "2 z", "3 or more", "1 slack, zero pivot: z column", "1 slack, zero pivot: symmetry mismatch", "1 slack, zero pivot: multiplier in the gap band", "1 slack, zero pivot: tie of two ratios"];
     /// walk Chebyshev LPs by outcome (0 empty at radius 1e-9, 1 nonempty); fields: calls, cold pivots, cold ns, shifted-start calls, shifted pivots,
     /// shifted ns, phase-1 pivots, phase-1 ns
     pub const EO_BASE: usize = WK_BASE + NWK * 5;
@@ -536,7 +568,12 @@ mod imp {
     pub const NU_BASE: usize = EO_BASE + 16;
     /// build-study slots (see `census_diag`)
     pub const MD_BASE: usize = NU_BASE + 16 * 4;
-    pub const NC: usize = MD_BASE + 300;
+    /// refined multipliers of the gap-band calls: [0] calls, [1] entries in the tableau's band, [2] of those refined nu <= 1e-12, [3] >= 1e-6,
+    /// [4] still between, [5] calls with every band entry decided, [6] ns, [7] large entries compared, [8] of those disagreeing (sign or 1e-6
+    /// relative), [9..25] decade histogram of the refined nu of the band entries, [25] tableau zeros the refined value does not call zero
+    pub const MU2_BASE: usize = MD_BASE + 224;
+    /// slots of the time-profile counters of `census_diag` (PF_*) follow the refined-multiplier block
+    pub const NC: usize = MD_BASE + 340;
     pub fn bump_slot(i: usize, n: u64) {
         MINE.with(|m| m.lock().unwrap().counters[i] += n);
     }
@@ -810,6 +847,15 @@ mod imp {
     #[inline]
     pub fn piv_bump() {
         PIV.with(|c| c.set(c.get() + 1));
+    }
+    thread_local! {
+        static REASON: Cell<u8> = const { Cell::new(0) };
+    }
+    pub fn reason_set(k: u8) {
+        REASON.with(|c| c.set(k));
+    }
+    pub fn reason_take() -> u8 {
+        REASON.with(|c| c.replace(0))
     }
     pub fn piv_get() -> u64 {
         PIV.with(|c| c.get())

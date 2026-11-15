@@ -50,6 +50,10 @@ struct Plcp {
     /// exactly the places where a tableau has structural zeros that a fresh factorization fills with rounding noise
     /// computed on first use (only the tableau rebuild path needs it)
     twin: std::sync::OnceLock<Vec<bool>>,
+    /// rows a_i of the constraint matrix and a_i Q^-1 of the inequality rows (n x n_x), empty with equality rows: the original data
+    /// that `refined_multipliers` recomputes a dependency from
+    arows: Mat,
+    aqi: Mat,
 }
 
 /// Rows of [M | q | R] that are a positive multiple of another row (within 1e-9 of the row's largest entry).
@@ -162,7 +166,17 @@ impl Plcp {
             Some((lo, hi)) if lo.iter().chain(hi.iter()).all(|v| v.is_finite()) => lo.iter().zip(hi).map(|(l, h)| (l * l).max(h * h)).sum::<f64>().sqrt(),
             _ => -1.0,
         };
-        Some(Plcp { n, nt, m, q, r, ineq, eq, pos, xe, coord_bound, twin: Default::default() })
+        let (mut arows, mut aqi) = (Mat::zeros(0, 0), Mat::zeros(0, 0));
+        if eq.is_empty() {
+            let nx = program.a.cols;
+            arows = Mat::zeros(n, nx);
+            aqi = Mat::zeros(n, nx);
+            for (a, &i) in ineq.iter().enumerate() {
+                arows.row_mut(a).copy_from_slice(program.a.row(i));
+                aqi.row_mut(a).copy_from_slice(kc.a_qi.row(i));
+            }
+        }
+        Some(Plcp { n, nt, m, q, r, ineq, eq, pos, xe, coord_bound, twin: Default::default(), arows, aqi })
     }
 
     /// Full active set (equalities first) of the z-basic rows.
@@ -1227,26 +1241,27 @@ fn facet_polytope(nb: &[Vec<f64>], g: &[f64], b: f64, e_all: &Mat, f_all: &[f64]
 /// facet point. So the neighbours are A + {c} - {j}, one per j in P- whose piece F ∩ {lambda_j / mu_j <=
 /// lambda_k / mu_k, k in P-} of the facet is nonempty (a witness, or the Chebyshev LP); P- empty means no
 /// neighbour (boundary of the feasible set). A known set is dropped. A multiplier is zero, nonzero or undecided in the scale of the
-/// dependency (`MU_ZERO`, `MU_NONZERO`, as the pivot measure); the undecided ones (none seen) go to the walk. Returns None when the case does not apply
+/// dependency (`MU_ZERO`, `MU_NONZERO`, as the pivot measure); the undecided ones go to the walk (on the benchmark problems the band holds a few hundred to a few thousand multipliers per solve;
+/// a gap-band multiplier is recomputed from the original data first, see `refined_multipliers`). Returns None when the case does not apply
 /// (several vanishing rows, a multiplier row, a nonzero pivot or slack column, ties between two ratios as
 /// affine functions on F, nt = 1), and the walk runs instead.
 #[allow(clippy::too_many_arguments)]
-fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usize], pv: &[usize], e_all: &Mat, f_all: &[f64], seen: Option<&Seen>, region_centre: Option<&[f64]>) -> Option<Vec<Nbr>> {
+fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usize], pv: &[usize], e_all: &Mat, f_all: &[f64], seen: Option<&Seen>, region_centre: Option<&[f64]>, refine: bool) -> Option<Vec<Nbr>> {
     let (n, nt) = (p.n, p.nt);
     let d1 = nt - 1;
     crate::census_t0!(cm);
     if d1 == 0 || zrows.len() != 1 || pv.len() != 1 || pv[0] != zrows[0] {
-        return None;
+        { crate::census_reason!(1); return None; }
     }
     let c = zrows[0];
     let var = tab.row_var[c];
     if var >= n {
-        return None;
+        { crate::census_reason!(2); return None; }
     }
     let kk = tab.col_of(comp(var, n));
     // zero pivot and zero slack columns, in the scale-free measure (see `pivot_measure`)
     if pivot_part(p, tab, c, kk) > MEASURE_ZERO || pivot_measure(p, tab, c, kk) > MEASURE_ZERO {
-        return None;
+        { crate::census_reason!(3); return None; }
     }
     // Hypotheses of the rank-1 lemma (Lean DependentFacet): row c of the tableau is w_c = rho_c + sum_j mu_j w_j with
     // no z column, and column kk is -mu_j on the active rows and 0 elsewhere (checked above for the slack rows).
@@ -1254,7 +1269,7 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
     for (col, &cv) in tab.col_var.iter().enumerate().take(n) {
         if cv >= n && cv < 2 * n {
             if tab.t[c * n + col].abs() > 1e-8 {
-                return None;
+                { crate::census_reason!(4); return None; }
             }
         }
     }
@@ -1262,9 +1277,25 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
     #[cfg(feature = "lp_census")]
     let mu_max = zrows_all.iter().fold(0.0f64, |m, &i| m.max(tab.t[i * n + kk].abs()));
     let mcc = p.m[var * n + var].max(1e-300);
+    // a multiplier in the undecided band of the tableau is recomputed from the original data (`refined_multipliers`); the call goes on only
+    // when every such entry comes out as zero (noise) or clearly nonzero
+    let mut mu_ref: Option<Vec<f64>> = None;
+    if refine {
+        let in_band = |i: usize| {
+            let j = tab.row_var[i] - n;
+            let nu = tab.t[i * n + kk].abs() / (mcc / p.m[j * n + j].max(1e-300)).sqrt();
+            nu > MU_ZERO && nu <= MU_NONZERO
+        };
+        if zrows_all.iter().any(|&i| in_band(i)) {
+            let zj: Vec<usize> = zrows_all.iter().map(|&i| tab.row_var[i] - n).collect();
+            mu_ref = refined_multipliers(p, &zj, var);
+        }
+    }
     let mut pm: Vec<usize> = vec![];
-    for &i in &zrows_all {
-        let mi = -tab.t[i * n + kk];
+    let mut pm_mu: Vec<f64> = vec![];
+    let mut zeroed_pos: Vec<usize> = vec![];
+    for (ai, &i) in zrows_all.iter().enumerate() {
+        let mut mi = -tab.t[i * n + kk];
         let colw = tab.col_of(tab.row_var[i] - n);
         let j = tab.row_var[i] - n;
         // scale of a multiplier: a_c = sum mu_j a_j, so mu_j is in units of ||a_c|| / ||a_j|| = sqrt(M_cc / M_jj)
@@ -1294,17 +1325,55 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
             }
         }
         if (tab.t[c * n + colw] - mi).abs() > 1e-8 * (ujj + mi.abs()) {
-            return None;
+            { crate::census_reason!(5); return None; }
         }
+        let nu_tab = nu;
+        let mut nu = nu;
         if nu > MU_ZERO && nu <= MU_NONZERO {
-            // neither zero nor safely nonzero, in the scale of the dependency: the walk decides
-            return None;
+            let Some(v) = &mu_ref else {
+                // neither zero nor safely nonzero, in the scale of the dependency: the walk decides
+                #[cfg(feature = "lp_census")]
+                refine_probe(p, tab, &zrows_all, var, kk, mcc);
+                { crate::census_reason!(6); return None; }
+            };
+            mi = v[ai];
+            nu = mi.abs() / ujj;
+            if nu > REFINED_ZERO && nu < MU_NONZERO {
+                crate::census_bump!(MuRefinedBand, 1);
+                { crate::census_reason!(6); return None; }
+            }
+            if nu <= REFINED_ZERO {
+                crate::census_bump!(MuRefinedZero, 1);
+            } else {
+                crate::census_bump!(MuRefinedReal, 1);
+            }
         }
         if mi > 0.0 && nu > MU_NONZERO {
             pm.push(i);
+            pm_mu.push(mi);
+        } else if mi > 0.0 && nu_tab > ZERO_GUARD_MIN && nu_tab <= MU_ZERO {
+            // a positive tableau multiplier decided zero without a recomputation (a rounded zero, or a tiny true positive)
+            zeroed_pos.push(ai);
         }
     }
-    let mu: Vec<f64> = pm.iter().map(|&i| -tab.t[i * n + kk]).collect();
+    // Safeguard: when no multiplier is positive but some positive one was decided zero, "no neighbour across the facet" would be wrong if one of them is a
+    // true tiny multiplier (it would be the only member). The recomputation from the original data decides: all exactly zero (rounding level) means a
+    // boundary facet, anything else goes to the walk.
+    if pm.is_empty() && !zeroed_pos.is_empty() {
+        crate::census_bump!(MuEmptyGuard, 1);
+        let zj: Vec<usize> = zrows_all.iter().map(|&i| tab.row_var[i] - n).collect();
+        let exact_zero = refined_multipliers(p, &zj, var).map_or(false, |v| {
+                zeroed_pos.iter().all(|&ai| {
+                    let j = zj[ai];
+                    v[ai].abs() / (mcc / p.m[j * n + j].max(1e-300)).sqrt() <= REFINED_ZERO
+                })
+            });
+        if !exact_zero {
+            crate::census_bump!(MuEmptyToWalk, 1);
+            { crate::census_reason!(9); return None; }
+        }
+    }
+    let mu: Vec<f64> = pm_mu;
     if pm.is_empty() {
         crate::census_bump!(R1Handled, 1);
         return Some(vec![]);
@@ -1348,7 +1417,7 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
         for bb in a + 1..pm.len() {
             let d = cut(a, bb);
             if d.iter().all(|v| v.abs() <= ZTOL * scale(a, bb)) {
-                return None; // two ratios identical on F: the lexicographic tie-break decides, the walk handles it
+                { crate::census_reason!(7); return None; } // two ratios identical on F: the lexicographic tie-break decides, the walk handles it
             }
         }
     }
@@ -1387,7 +1456,7 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
                     empty = true;
                     break;
                 } else if d[0] >= -ZTOL * sc {
-                    return None; // a tie as a constant: the walk decides
+                    { crate::census_reason!(8); return None; } // a tie as a constant: the walk decides
                 }
                 continue;
             }
@@ -1481,6 +1550,128 @@ fn pivot_part(p: &Plcp, tab: &Tab, c: usize, kk: usize) -> f64 {
     let n = p.n;
     let vc = tab.row_var[c];
     tab.t[c * n + kk].abs() / p.m[vc * n + vc].max(1e-300)
+}
+
+/// Census only: recomputes the multipliers of a gap-band call from the original data and records how the refined values fall against the
+/// tableau's (entries in the band, the decade of the refined nu, calls fully decided, time, and agreement on the large entries).
+#[cfg(feature = "lp_census")]
+fn refine_probe(p: &Plcp, tab: &Tab, zrows_all: &[usize], var: usize, kk: usize, mcc: f64) {
+    use crate::census::{bump_slot, MU2_BASE};
+    let n = p.n;
+    let zj: Vec<usize> = zrows_all.iter().map(|&i| tab.row_var[i] - n).collect();
+    let t0 = std::time::Instant::now();
+    let Some(mu) = refined_multipliers(p, &zj, var) else { return };
+    bump_slot(MU2_BASE + 6, t0.elapsed().as_nanos() as u64);
+    bump_slot(MU2_BASE, 1);
+    let mut all_decided = true;
+    for (a, &i) in zrows_all.iter().enumerate() {
+        let j = zj[a];
+        let u = (mcc / p.m[j * n + j].max(1e-300)).sqrt();
+        let nu_t = (-tab.t[i * n + kk]).abs() / u;
+        let nu_r = mu[a].abs() / u;
+        let dec = if nu_r > 0.0 { ((-nu_r.log10()).floor().max(0.0) as usize).min(15) } else { 15 };
+        if nu_t > MU_ZERO && nu_t <= MU_NONZERO {
+            bump_slot(MU2_BASE + 1, 1);
+            bump_slot(MU2_BASE + 9 + dec, 1);
+            if nu_r <= 1e-12 {
+                bump_slot(MU2_BASE + 2, 1);
+            } else if nu_r >= MU_NONZERO {
+                bump_slot(MU2_BASE + 3, 1);
+            } else {
+                bump_slot(MU2_BASE + 4, 1);
+                all_decided = false;
+            }
+        } else if nu_t >= 1e-4 {
+            // agreement on the large entries: sign and relative value of mu = -T[i,kk]
+            bump_slot(MU2_BASE + 7, 1);
+            let mt = -tab.t[i * n + kk];
+            if mt * mu[a] <= 0.0 || (mt - mu[a]).abs() > 1e-6 * mt.abs() {
+                bump_slot(MU2_BASE + 8, 1);
+            }
+        } else if nu_t <= MU_ZERO && nu_r > 1e-12 {
+            // a tableau zero that the refined value does not call zero
+            bump_slot(MU2_BASE + 25, 1);
+        }
+    }
+    if all_decided {
+        bump_slot(MU2_BASE + 5, 1);
+    }
+}
+
+/// The multipliers of the dependency a_c = sum_j mu_j a_j over the rows `zj` (constraint indices of the active z rows), recomputed from
+/// the original data instead of read from the tableau: the Gram system M_ZZ mu = M_Zc (M = A Q^-1 A'), then `REFINE_STEPS` steps of
+/// iterative refinement whose residual r = a_c - sum_j mu_j a_j is formed from the rows of A themselves and whose correction solves
+/// M_ZZ delta = (A_Z Q^-1) r. `None` with equality rows (the data is then reduced) or a singular Gram matrix.
+fn refined_multipliers(p: &Plcp, zj: &[usize], c: usize) -> Option<Vec<f64>> {
+    if p.arows.rows == 0 || zj.is_empty() {
+        return None;
+    }
+    let (n, k) = (p.n, zj.len());
+    // the Gram matrix is equilibrated to a unit diagonal: the rows of A differ in scale by 1e3 and more, and the library LU judges singularity
+    // against the largest entry of the whole matrix
+    let sc: Vec<f64> = zj.iter().map(|&j| p.m[j * n + j].max(1e-300).sqrt()).collect();
+    let mut g = Mat::zeros(k, k);
+    for (a, &ja) in zj.iter().enumerate() {
+        for (b, &jb) in zj.iter().enumerate() {
+            g[(a, b)] = p.m[ja * n + jb] / (sc[a] * sc[b]);
+        }
+    }
+    let lu = crate::linalg::Lu::new(&g)?;
+    let rhs: Vec<f64> = zj.iter().enumerate().map(|(a, &j)| p.m[j * n + c] / sc[a]).collect();
+    let mut mu: Vec<f64> = lu.solve(&rhs).iter().zip(&sc).map(|(y, s)| y / s).collect();
+    let nx = p.arows.cols;
+    let mut r = vec![0.0; nx];
+    for _ in 0..REFINE_STEPS {
+        r.copy_from_slice(p.arows.row(c));
+        for (a, &ja) in zj.iter().enumerate() {
+            let row = p.arows.row(ja);
+            for (rv, x) in r.iter_mut().zip(row) {
+                *rv -= mu[a] * x;
+            }
+        }
+        let corr: Vec<f64> = zj.iter().enumerate().map(|(a, &j)| p.aqi.row(j).iter().zip(&r).map(|(x, y)| x * y).sum::<f64>() / sc[a]).collect();
+        let delta = lu.solve(&corr);
+        for ((m, d), s) in mu.iter_mut().zip(&delta).zip(&sc) {
+            *m += d / s;
+        }
+    }
+    mu.iter().all(|v| v.is_finite()).then_some(mu)
+}
+
+/// Is the set of constraints (original indices, no equality rows) linearly dependent, judged on the equilibrated Gram matrix of their
+/// rows? Such an active set violates LICQ and cannot be the active set of a region.
+#[cfg(feature = "lp_census")]
+fn dependent_set(p: &Plcp, aset: &[usize]) -> bool {
+    let rows: Vec<usize> = aset.iter().map(|&i| p.pos[i]).collect();
+    let n = p.n;
+    let sc: Vec<f64> = rows.iter().map(|&j| p.m[j * n + j].max(1e-300).sqrt()).collect();
+    let mut g = Mat::zeros(rows.len(), rows.len());
+    for (a, &ja) in rows.iter().enumerate() {
+        for (b, &jb) in rows.iter().enumerate() {
+            g[(a, b)] = p.m[ja * n + jb] / (sc[a] * sc[b]);
+        }
+    }
+    crate::linalg::Lu::new(&g).is_none()
+}
+
+/// A positive tableau multiplier below this (in the scale of the dependency) is at the rounding level of the tableau: it cannot be told from an exact
+/// zero there, and a member basis with such a pivot would not pass the relative pivot floor of `tableau_for` anyway, so the empty-P- safeguard ignores it.
+const ZERO_GUARD_MIN: f64 = 1e-12;
+const REFINE_STEPS: usize = 2;
+/// A refined multiplier of this size or below (in the scale of the dependency) is zero: an exact dependency comes out at rounding level 1e-15.
+const REFINED_ZERO: f64 = 1e-12;
+/// Switch for the refined classification of gap-band multipliers (off by default: it adds an overlapping sliver region on masses3_N6 and masses3_N7,
+/// see `bench/results/mplcp_mu_refine.md`).
+/// Census audit (`MPLCP_MU_AUDIT=1`): gap-band calls are answered by the refined enumeration and by the walk, and the neighbour sets compared.
+#[cfg(feature = "lp_census")]
+static MU_AUDIT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+#[cfg(feature = "lp_census")]
+pub fn set_mu_audit(on: bool) {
+    MU_AUDIT.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+static REFINE_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub fn set_refine_multipliers(on: bool) {
+    REFINE_ON.store(on, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// Measure at or below which the pivot is zero (rank-1 case), and above which it is nonzero (Case 1). Between them
@@ -1598,10 +1789,17 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
     crate::census_lap!(cm, Gate);
     // Rank-1 Case 2: one vanishing slack row c with a zero pivot, a_c = sum mu_j a_j over the active rows.
     // The neighbours are enumerated directly, no walk (see `rank1_case2`).
+    #[cfg(feature = "lp_census")]
+    let mut audit_alt: Option<Option<Vec<Nbr>>> = None;
     if RANK1.load(std::sync::atomic::Ordering::Relaxed) {
         #[cfg(feature = "lp_census")]
         let snap = crate::census::c2_snapshot();
-        if let Some(nbrs) = rank1_case2(p, tab, g.as_slice(), b, &gam, &zrows, &pv, e_all, f_all, seen, region_centre) {
+        let refine = REFINE_ON.load(std::sync::atomic::Ordering::Relaxed);
+        #[cfg(feature = "lp_census")]
+        let audit = MU_AUDIT.load(std::sync::atomic::Ordering::Relaxed);
+        #[cfg(not(feature = "lp_census"))]
+        let audit = false;
+        if let Some(nbrs) = rank1_case2(p, tab, g.as_slice(), b, &gam, &zrows, &pv, e_all, f_all, seen, region_centre, refine && !audit) {
             crate::census_bump!(AdjCase2, 1);
             crate::census_bump!(AdjCase2Nanos, _cen_t.elapsed().as_nanos());
             #[cfg(feature = "lp_census")]
@@ -1609,6 +1807,18 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
             return (nbrs, certified);
         }
         crate::census_bump!(R1Fallback, 1);
+        // audit: a call refused for a gap-band multiplier is also answered by the refined enumeration, and compared with the walk below
+        #[cfg(feature = "lp_census")]
+        if audit {
+            let reason = crate::census::reason_take();
+            if reason == 6 {
+                audit_alt = Some(rank1_case2(p, tab, g.as_slice(), b, &gam, &zrows, &pv, e_all, f_all, seen, region_centre, true));
+                if audit_alt.as_ref().map_or(false, |x| x.is_none()) && std::env::var("AUDIT_DBG").is_ok() {
+                    eprintln!("audit alt none reason {}", crate::census::reason_take());
+                }
+            }
+            crate::census::reason_set(reason);
+        }
         // the failed attempt is walk overhead: its inner laps are dropped, its whole time is one lap
         #[cfg(feature = "lp_census")]
         crate::census::c2_restore(snap);
@@ -1682,6 +1892,8 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
     let budget = (WALK_BUDGET_PER_ROW * n).max(WALK_BUDGET_MIN);
     crate::census_lap!(cm, Setup);
     #[cfg(feature = "lp_census")]
+    let r1_reason = crate::census::reason_take();
+    #[cfg(feature = "lp_census")]
     let wk_class = {
         let k = zrows.len();
         let nsl = zrows.iter().filter(|&&i| tab.row_var[i] < n).count();
@@ -1691,7 +1903,15 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
                 let kk = tab.col_of(comp(tab.row_var[c], n));
                 let m = pivot_measure(p, tab, c, kk);
                 if m <= MEASURE_ZERO {
-                    0
+                    // the rank-1 enumeration refused a zero-pivot call: 8 a nonzero z column of row c, 9 symmetry mismatch, 10 multiplier in the gap
+                    // band, 11 a tie between two ratios, 0 anything else (rank-1 not tried)
+                    match r1_reason {
+                        4 => 8,
+                        5 => 9,
+                        6 => 10,
+                        7 | 8 => 11,
+                        _ => 0,
+                    }
                 } else if m <= MEASURE_NONZERO {
                     1
                 } else {
@@ -1744,6 +1964,78 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         })
         .collect();
     let mut nbrs: Vec<Nbr> = nbrs;
+    #[cfg(feature = "lp_census")]
+    if let Some(alt) = audit_alt {
+        use std::collections::BTreeSet;
+        crate::census_bump!(AuditCalls, 1);
+        match alt {
+            Some(alt) if complete => {
+                let set = |v: &[Nbr]| -> BTreeSet<Vec<usize>> { v.iter().filter_map(|nb| if let Nbr::Z(z, _) = nb { Some(p.active_set(z.iter().copied())) } else { None }).collect() };
+                // the walk does not drop every known set (a Case-2 branch ending at once returns it), the enumeration does; the caller
+                // drops known sets either way, so they are removed from the walk's side before comparing
+                let (a, w) = (set(&alt), set(&nbrs).into_iter().filter(|z| !seen.map_or(false, |sn| sn.contains_key(z))).collect::<BTreeSet<_>>());
+                // the sets the walk may add: A + {c} - {j} for a row j whose refined multiplier is zero (the set is then linearly dependent)
+                let c = zrows[0];
+                let var = tab.row_var[c];
+                let zall: Vec<usize> = (0..p.n).filter(|&i| tab.row_var[i] >= p.n && tab.row_var[i] < 2 * p.n).collect();
+                let zjs: Vec<usize> = zall.iter().map(|&i| tab.row_var[i] - p.n).collect();
+                let mut p_real = 0usize;
+                if let Some(mu_r) = refined_multipliers(p, &zjs, var) {
+                    let mcc = p.m[var * p.n + var].max(1e-300);
+                    for (k, &zj) in zjs.iter().enumerate() {
+                        let u = (mcc / p.m[zj * p.n + zj].max(1e-300)).sqrt();
+                        if mu_r[k] > 0.0 && mu_r[k].abs() / u >= MU_NONZERO {
+                            p_real += 1;
+                        }
+                    }
+                }
+                if a == w {
+                    crate::census_bump!(AuditSame, 1);
+                } else if a.is_subset(&w) && w.difference(&a).all(|z| dependent_set(p, z)) {
+                    // every extra set of the walk has linearly dependent rows (it removes a row whose multiplier is zero, or descends from such a set):
+                    // not an active set of any region
+                    crate::census_bump!(AuditExplained, 1);
+                    let _ = p_real;
+                } else if a.is_subset(&w) && p_real == 0 {
+                    // no multiplier is positive in exact arithmetic (no neighbour across the facet), yet the walk, driven by a positive noise multiplier,
+                    // wandered through further bases
+                    crate::census_bump!(AuditNoPositive, 1);
+                } else if a.is_subset(&w) {
+                    // the walk has sets the enumeration lacks, though a real positive multiplier exists
+                    crate::census_bump!(AuditExtraWalk, 1);
+                    if std::env::var("AUDIT_DBG").is_ok() {
+                        eprintln!("audit EXTRA-WALK: refined {:?} walk-only {:?}", a, w.difference(&a).collect::<Vec<_>>());
+                        if let Some(mu_r) = refined_multipliers(p, &zjs, var) {
+                            let mcc = p.m[var * p.n + var].max(1e-300);
+                            for (k, &zj) in zjs.iter().enumerate() {
+                                let u = (mcc / p.m[zj * p.n + zj].max(1e-300)).sqrt();
+                                eprintln!("   j={} refined mu {:.3e} nu {:.2e}", zj, mu_r[k], mu_r[k].abs() / u);
+                            }
+                        }
+                    }
+                } else {
+                    // the enumeration has a set the walk lacks
+                    crate::census_bump!(AuditDiff, 1);
+                    if std::env::var("AUDIT_DBG").is_ok() {
+                        eprintln!("audit diff: refined-only {:?} walk-only {:?}", a.difference(&w).collect::<Vec<_>>(), w.difference(&a).collect::<Vec<_>>());
+                        if let Some(mu_r) = refined_multipliers(p, &zjs, var) {
+                            let mcc = p.m[var * p.n + var].max(1e-300);
+                            for (k, &zj) in zjs.iter().enumerate() {
+                                let u = (mcc / p.m[zj * p.n + zj].max(1e-300)).sqrt();
+                                let mut z: Vec<usize> = zjs.iter().cloned().filter(|&x| x != zj).collect();
+                                z.push(var);
+                                let aset = p.active_set(z.into_iter());
+                                let tag = if w.contains(&aset) && !a.contains(&aset) { "WALK-ONLY" } else if a.contains(&aset) { "both" } else { "-" };
+                                eprintln!("   j={} (constraint {}) refined mu {:.3e} nu {:.2e} tableau nu {:.2e} member-set {}", zj, p.ineq[zj], mu_r[k], mu_r[k].abs() / u, tab.t[zall[k] * p.n + tab.col_of(comp(var, p.n))].abs() / u, tag);
+                            }
+                        }
+                    }
+                }
+            }
+            None => crate::census_bump!(AuditAltNone, 1),
+            Some(_) => crate::census_bump!(AuditSkip, 1),
+        }
+    }
     crate::census_lap!(cm, Post);
     if !complete {
         // a repeated state or the budget stopped the walk: also look across the facet by a QP at a
@@ -1912,10 +2204,36 @@ pub enum Method {
 /// The enumeration method has no perturbation: where several bases describe the same
 /// parameter set (degenerate mpLPs) it may return overlapping regions.
 pub fn solve(program: &MpProgram, seed: u64, method: Method) -> Result<Vec<CriticalRegion>, String> {
+    solve_with_dedupe(program, seed, method, DEDUPE.load(std::sync::atomic::Ordering::Relaxed))
+}
+
+static DEDUPE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// Switches the removal of duplicated constraints inside the pivoting methods (default on).
+pub fn set_dedupe(on: bool) {
+    DEDUPE.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// `solve` with the removal of duplicated constraints chosen explicitly. Inequality rows of [A | F | b] that are a positive
+/// multiple of an earlier inequality row describe the same half-space; the pivoting methods solve the program without them
+/// (a twin makes a tableau carry structural zeros, which a fresh factorization fills with rounding noise, and sends the
+/// rank-1 enumeration back to the facet walk) and the regions are reported in the numbering of `program`: every index of
+/// `active_set`, `lambda_set` and `regular_set` is the lowest-index row of its group, `regular_set.0` is recomputed for the
+/// full list of inactive constraints, and `c`, `d` keep one row per active constraint (the multiplier of the kept row is the
+/// total of the group). `omega_set` (rows of `A_t`) is unchanged; duplicates among those are not removed.
+pub fn solve_with_dedupe(program: &MpProgram, seed: u64, method: Method, dedupe: bool) -> Result<Vec<CriticalRegion>, String> {
     match method {
         Method::Pivot | Method::PivotParallel => {
             if program.q.is_none() {
                 return Err("mplcp: mpLP not supported by the pivoting method (use mplcp_enum)".into());
+            }
+            if dedupe {
+                if let Some((reduced, kept)) = dedupe_program(program) {
+                    if let Some(plcp) = Plcp::new(&reduced) {
+                        let regions = if method == Method::PivotParallel { pivot_solve_par(&reduced, &plcp, seed) } else { pivot_solve(&reduced, &plcp, seed) };
+                        return Ok(unreduce_regions(regions, &kept, program.a.rows));
+                    }
+                }
             }
             #[cfg(feature = "lp_census")]
             let _tsetup = crate::census_diag::t0();
@@ -1927,6 +2245,114 @@ pub fn solve(program: &MpProgram, seed: u64, method: Method) -> Result<Vec<Criti
         }
         Method::Enumeration => enum_solve(program),
     }
+}
+
+/// For each constraint, the lowest-index inequality row of which it is a positive multiple (itself when there is none).
+/// Rows are compared as [A_i | F_i | b_i] to a relative 1e-11 of the row norm. Equality rows are never merged.
+pub fn duplicate_rows(program: &MpProgram) -> Vec<usize> {
+    let m = program.a.rows;
+    let rows: Vec<Vec<f64>> = (0..m)
+        .map(|i| {
+            let mut v = program.a.row(i).to_vec();
+            v.extend_from_slice(program.f.row(i));
+            v.push(program.b[i]);
+            v
+        })
+        .collect();
+    // norm of the constraint part [A_i | F_i]; a row with no constraint part is left alone
+    let norm2: Vec<f64> = rows.iter().map(|v| v[..v.len() - 1].iter().map(|x| x * x).sum::<f64>()).collect();
+    let is_eq = |i: usize| program.equality_indices.contains(&i);
+    // positive multiples have the same normalized sum of entries: sort by it (quantized) and compare only rows whose keys
+    // are equal or adjacent
+    let key: Vec<i64> = (0..m).map(|i| if norm2[i] > 0.0 && !is_eq(i) { (rows[i].iter().sum::<f64>() / norm2[i].sqrt() * 1e6).round() as i64 } else { i64::MIN }).collect();
+    let mut order: Vec<usize> = (0..m).collect();
+    order.sort_unstable_by_key(|&i| (key[i], i));
+    let mut rep: Vec<usize> = (0..m).collect();
+    for p in 0..m {
+        let i = order[p];
+        if key[i] == i64::MIN {
+            continue;
+        }
+        for &j in &order[p + 1..] {
+            if key[j] - key[i] > 1 {
+                break;
+            }
+            if key[j] == i64::MIN {
+                continue;
+            }
+            // i and j in either order of index: the lower index is the representative of the group
+            let (lo, hi) = if i < j { (i, j) } else { (j, i) };
+            let c = rows[lo][..rows[lo].len() - 1].iter().zip(&rows[hi]).map(|(a, b)| a * b).sum::<f64>() / norm2[hi];
+            if c > 0.0 && rows[lo].iter().zip(&rows[hi]).all(|(a, b)| (a - c * b).abs() <= 1e-11 * norm2[lo].sqrt().max(1e-300)) {
+                let r = rep[lo].min(lo);
+                rep[hi] = rep[hi].min(r);
+                rep[lo] = r;
+            }
+        }
+    }
+    // path compression: the representative of a representative
+    for i in 0..m {
+        let mut r = rep[i];
+        while rep[r] != r {
+            r = rep[r];
+        }
+        rep[i] = r;
+    }
+    rep
+}
+
+/// The program without its duplicated inequality rows and the index (in `program`) of each remaining row; `None` when it
+/// has no duplicates.
+fn dedupe_program(program: &MpProgram) -> Option<(MpProgram, Vec<usize>)> {
+    let m = program.a.rows;
+    let rep = duplicate_rows(program);
+    let kept: Vec<usize> = (0..m).filter(|&i| rep[i] == i).collect();
+    if kept.len() == m {
+        return None;
+    }
+    let mut new_idx = vec![usize::MAX; m];
+    for (k, &i) in kept.iter().enumerate() {
+        new_idx[i] = k;
+    }
+    let a = Mat::from_rows(&kept.iter().map(|&i| program.a.row(i).to_vec()).collect::<Vec<_>>());
+    let b: Vec<f64> = kept.iter().map(|&i| program.b[i]).collect();
+    let f = Mat::from_rows(&kept.iter().map(|&i| program.f.row(i).to_vec()).collect::<Vec<_>>());
+    let eq: Vec<usize> = program.equality_indices.iter().map(|&i| new_idx[i]).collect();
+    // from_raw_parts: the data is already processed (`MpProgram::new` would scale the rows a second time)
+    let reduced = MpProgram::from_raw_parts(a, b, program.c.clone(), program.h.clone(), program.q.clone(), program.a_t.clone(), program.b_t.clone(), f, program.c_c, program.c_t.clone(), program.q_t.clone(), eq);
+    Some((reduced, kept))
+}
+
+/// Maps the regions of the deduplicated program back to the numbering of the full program (`m` constraints, `kept[k]` the
+/// index of row `k` of the reduced program).
+fn unreduce_regions(mut regions: Vec<CriticalRegion>, kept: &[usize], m: usize) -> Vec<CriticalRegion> {
+    let mut active = vec![false; m];
+    let mut before = vec![0usize; m];
+    for r in regions.iter_mut() {
+        for v in r.active_set.iter_mut() {
+            *v = kept[*v];
+        }
+        for v in r.lambda_set.iter_mut() {
+            *v = kept[*v];
+        }
+        active.iter_mut().for_each(|a| *a = false);
+        for &i in &r.active_set {
+            active[i] = true;
+        }
+        // position of each constraint in the sorted list of inactive constraints
+        let mut c = 0;
+        for i in 0..m {
+            before[i] = c;
+            if !active[i] {
+                c += 1;
+            }
+        }
+        for (pos, idx) in r.regular_set.0.iter_mut().zip(r.regular_set.1.iter_mut()) {
+            *idx = kept[*idx];
+            *pos = before[*idx];
+        }
+    }
+    regions
 }
 
 /// `solve` for the dispatcher: an unsupported program gives an empty list and a warning on stderr.
@@ -2420,8 +2846,9 @@ pub fn resolve_fallbacks() -> usize {
     RESOLVE_FALLBACKS.load(std::sync::atomic::Ordering::Relaxed)
 }
 
-/// Audit mode counters: candidates returned across certified facets, and those of them that built
-/// a new region (see `pivot_solve`; the regions are found anyway, the order can change).
+/// Audit mode counters: certified facets whose search ran (whether or not it returned a candidate; a rank-1 search of a facet
+/// whose neighbours are all known returns none), and the candidates across them that built a new region (see `pivot_solve`; the
+/// regions are found anyway, the order can change).
 pub fn certificate_audit() -> (usize, usize) {
     (AUDIT_CERTIFIED.load(std::sync::atomic::Ordering::Relaxed), AUDIT_EXTRA.load(std::sync::atomic::Ordering::Relaxed))
 }
@@ -3255,7 +3682,7 @@ fn lp_plcp(program: &MpProgram) -> Plcp {
             r[(2 * nx + j) * nt + t] = program.f[(j, t)];
         }
     }
-    Plcp { n, nt, m, q, r, ineq: vec![], eq: vec![], pos: vec![], xe: Mat::zeros(0, 0), coord_bound: -1.0, twin: Default::default() }
+    Plcp { n, nt, m, q, r, ineq: vec![], eq: vec![], pos: vec![], xe: Mat::zeros(0, 0), coord_bound: -1.0, twin: Default::default(), arows: Mat::zeros(0, 0), aqi: Mat::zeros(0, 0) }
 }
 
 /// State of the depth-first form of Algorithm 1 (pairs are decided one by one; `choice[j]` is
@@ -3434,7 +3861,7 @@ fn permuted(p: &Plcp, perm: &[usize]) -> Plcp {
             m[a * n + b] = p.m[i * n + j];
         }
     }
-    Plcp { n, nt, m, q, r, ineq: p.ineq.clone(), eq: p.eq.clone(), pos: p.pos.clone(), xe: p.xe.clone(), coord_bound: p.coord_bound, twin: Default::default() }
+    Plcp { n, nt, m, q, r, ineq: p.ineq.clone(), eq: p.eq.clone(), pos: p.pos.clone(), xe: p.xe.clone(), coord_bound: p.coord_bound, twin: Default::default(), arows: Mat::zeros(0, 0), aqi: Mat::zeros(0, 0) }
 }
 
 /// Herceg et al. (2015) Algorithm 1: enumerates the feasible complementary bases of the pLCP and
@@ -3651,6 +4078,104 @@ fn lex_feasible_start(program: &MpProgram, init: &CriticalRegion) -> Option<Crit
         return None;
     }
     Some(cr)
+}
+
+/// Smallest pivot of the Gaussian elimination (partial pivoting) of the Gram matrix M_SS of the constraints in `rows` (pLCP row indices), scaled to a unit diagonal:
+/// 1 for orthogonal rows, near 0 when one row is nearly in the span of the others (the active set is at the edge of LICQ).
+fn gram_margin(p: &Plcp, rows: &[usize]) -> f64 {
+    let (n, k) = (p.n, rows.len());
+    if k == 0 {
+        return 1.0;
+    }
+    let sc: Vec<f64> = rows.iter().map(|&j| p.m[j * n + j].max(1e-300).sqrt()).collect();
+    let mut g = vec![0.0; k * k];
+    for (a, &ja) in rows.iter().enumerate() {
+        for (b, &jb) in rows.iter().enumerate() {
+            g[a * k + b] = p.m[ja * n + jb] / (sc[a] * sc[b]);
+        }
+    }
+    let mut min_piv = f64::INFINITY;
+    for c in 0..k {
+        let mut best = c;
+        for r in c + 1..k {
+            if g[r * k + c].abs() > g[best * k + c].abs() {
+                best = r;
+            }
+        }
+        let piv = g[best * k + c];
+        min_piv = min_piv.min(piv.abs());
+        if piv == 0.0 {
+            return 0.0;
+        }
+        if best != c {
+            for j in 0..k {
+                g.swap(c * k + j, best * k + j);
+            }
+        }
+        for r in c + 1..k {
+            let f = g[r * k + c] / piv;
+            if f != 0.0 {
+                for j in c..k {
+                    g[r * k + j] -= f * g[c * k + j];
+                }
+            }
+        }
+    }
+    min_piv
+}
+
+/// Diagnostic: `gram_margin` of an active set given by original constraint indices (no equality rows).
+pub fn licq_margin(program: &MpProgram, aset: &[usize]) -> Option<f64> {
+    let plcp = Plcp::new(program)?;
+    let rows: Vec<usize> = aset.iter().filter_map(|&i| plcp.pos.get(i).copied().filter(|&r| r != usize::MAX)).collect();
+    Some(gram_margin(&plcp, &rows))
+}
+
+/// Diagnostic for one region's basis: (lexico-feasible, rows whose theta part vanishes, smallest signed first significant entry of those rows' lexicographic vectors,
+/// smallest absolute first significant entry). A first entry of -1e-3 is a clear violation, one of +-1e-9 sits on the tolerance `ZTOL`.
+pub fn lex_diagnostic(program: &MpProgram, cr: &CriticalRegion) -> Option<(bool, usize, f64, f64)> {
+    let plcp = Plcp::new(program)?;
+    let tab = tableau_of(&plcp, cr)?;
+    let (n, w) = (tab.n, tab.w);
+    let mut wcol = vec![usize::MAX; n];
+    for (c, &v) in tab.col_var.iter().enumerate() {
+        if v < n {
+            wcol[v] = c;
+        }
+    }
+    let mut wrow = vec![usize::MAX; n];
+    for (r, &v) in tab.row_var.iter().enumerate() {
+        if v < n {
+            wrow[v] = r;
+        }
+    }
+    let mut v = vec![0.0; 1 + n];
+    let (mut rows, mut feas) = (0usize, true);
+    let (mut min_signed, mut min_abs) = (f64::INFINITY, f64::INFINITY);
+    for i in 0..n {
+        if (1..w).any(|k| tab.rv(i, k).abs() > ZTOL) {
+            continue;
+        }
+        rows += 1;
+        v[0] = tab.rv(i, 0);
+        for j in 0..n {
+            v[1 + j] = if wcol[j] != usize::MAX {
+                -tab.tv(i, wcol[j])
+            } else if wrow[j] == i {
+                1.0
+            } else {
+                0.0
+            };
+        }
+        if let Some(x) = v.iter().find(|x| x.abs() > ZTOL) {
+            if *x < 0.0 {
+                feas = false;
+            }
+            min_signed = min_signed.min(*x);
+            min_abs = min_abs.min(x.abs());
+        }
+    }
+    Some((feas, rows, min_signed, min_abs))
 }
 
 /// Diagnostic: number of `regions` whose basis is lexico-infeasible (0 for the output of `solve`).
