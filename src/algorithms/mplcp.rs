@@ -1445,6 +1445,11 @@ fn candidate_law(plcp: &Plcp, parent: &Tab, c: &Cand) -> Option<(crate::program:
 /// candidate basis is rejected (see `build_cand`).
 const TIGHT_TOL: f64 = 1e-3;
 
+/// Diagnostic: the tightness residual of `cr` at `centre` and whether the QP agrees with it.
+pub fn tight_diagnostic(program: &MpProgram, cr: &CriticalRegion, centre: &[f64]) -> (f64, bool) {
+    (tight_residual(program, cr, centre), qp_agrees(program, cr, centre))
+}
+
 static TIGHT_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
 /// Switches the tightness flag of `build_cand` (default on); off reproduces the walk without it,
@@ -1505,7 +1510,10 @@ fn build_cand(program: &MpProgram, plcp: &Plcp, parent: &Tab, c: &Cand, want_ver
         // sliver in an ill-conditioned problem is kept.
         if TIGHT_ON.load(std::sync::atomic::Ordering::Relaxed) && tight_residual(program, &cr, &ce) > TIGHT_TOL {
             crate::census_bump!(TightFlagged, 1);
-            if !qp_agrees(program, &cr, &ce) {
+            // the builder's centre comes from an LP started at a hint; a region of radius 1e-8 can have
+            // the QP flip at that point, so the centre of the final rows is tried as well
+            let c2: Option<Vec<f64>> = crate::utils::chebyshev_ball(&cr.e, &cr.f, &[]).map(|sol| sol.x[..ce.len()].to_vec());
+            if !qp_agrees(program, &cr, &ce) && !c2.map_or(false, |c| qp_agrees(program, &cr, &c)) {
                 crate::census_bump!(TightRejected, 1);
                 return None;
             }

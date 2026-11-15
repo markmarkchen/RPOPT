@@ -48,7 +48,8 @@ fn main() {
                 let same_x = x.len() == o.sol.len() && x.iter().zip(&o.sol).all(|(p, q)| (p - q).abs() <= 1e-6 * (1.0 + q.abs()));
                 if qa == sorted(r) || same_x {
                     real += 1;
-                    reals.push(format!("{:?} radius {:.2e} qp {:?}", sorted(r), s.x[nt], qa));
+                    let (res, agrees) = rpopt::algorithms::mplcp::tight_diagnostic(&prog, r, &c);
+                    reals.push(format!("{:?} radius {:.2e} qp {:?} tight residual {:.2e} qp_agrees_at_centre {}", sorted(r), s.x[nt], qa, res, agrees));
                 } else {
                     other += 1;
                 }
