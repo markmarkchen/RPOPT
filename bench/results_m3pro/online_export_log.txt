@@ -1,0 +1,16 @@
+di_N4: nx 4 nt 2 m 18 nu 1 regions 9 steps 10000 | solve 0.00 s, table 0.03 s, 0.02 MB | explicit median 7.2 ns max 37.8 ns
+di_N6: nx 6 nt 2 m 26 nu 1 regions 11 steps 10000 | solve 0.00 s, table 0.02 s, 0.03 MB | explicit median 7.8 ns max 50.8 ns
+di_N8: nx 8 nt 2 m 34 nu 1 regions 11 steps 10000 | solve 0.00 s, table 0.07 s, 0.03 MB | explicit median 7.8 ns max 51.4 ns
+di_N10: nx 10 nt 2 m 42 nu 1 regions 11 steps 10000 | solve 0.00 s, table 0.03 s, 0.03 MB | explicit median 7.8 ns max 51.4 ns
+dinv_N4: nx 4 nt 2 m 16 nu 1 regions 9 steps 10000 | solve 0.00 s, table 0.01 s, 0.02 MB | explicit median 7.2 ns max 38.4 ns
+dinv_N6: nx 6 nt 2 m 24 nu 1 regions 11 steps 10000 | solve 0.00 s, table 0.02 s, 0.03 MB | explicit median 7.2 ns max 50.8 ns
+dinv_N8: nx 8 nt 2 m 32 nu 1 regions 11 steps 10000 | solve 0.00 s, table 0.05 s, 0.03 MB | explicit median 7.8 ns max 50.8 ns
+masses2_N4: nx 4 nt 4 m 40 nu 1 regions 307 steps 9077 | solve 0.02 s, table 0.70 s, 3.17 MB | explicit median 14.3 ns max 105.5 ns
+masses2_N6: nx 6 nt 4 m 60 nu 1 regions 901 steps 10000 | solve 0.12 s, table 2.14 s, 9.46 MB | explicit median 15.6 ns max 205.7 ns
+sys3x2_N3: nx 6 nt 3 m 30 nu 2 regions 211 steps 3620 | solve 0.01 s, table 0.36 s, 1.36 MB | explicit median 13.0 ns max 43.0 ns
+sys3x2_N5: nx 10 nt 3 m 50 nu 2 regions 973 steps 4576 | solve 0.04 s, table 1.31 s, 6.00 MB | explicit median 13.0 ns max 102.9 ns
+masses2_N8: nx 8 nt 4 m 80 nu 1 regions 2837 steps 10000 | solve 0.34 s, table 8.19 s, 28.15 MB | explicit median 13.7 ns max 201.2 ns
+sys3x2_N9: nx 18 nt 3 m 74 nu 2 regions 3745 steps 6074 | solve 0.46 s, table 7.27 s, 25.38 MB | explicit median 11.1 ns max 111.3 ns
+masses3_N4: nx 4 nt 6 m 56 nu 1 regions 3642 steps 7703 | solve 501.40 s, table 208.80 s, 26.18 MB | explicit median 80.7 ns max 423.2 ns
+masses4_N3: nx 3 nt 8 m 52 nu 1 regions 2890 steps 4933 | solve 354.28 s, table 50444.88 s, 35.86 MB | explicit median 113.9 ns max 517.6 ns
+masses2_N12: nx 12 nt 4 m 120 nu 1 regions 12779 steps 10000 | solve 4.80 s, table 77.61 s, 51.90 MB | explicit median 14.3 ns max 241.5 ns
