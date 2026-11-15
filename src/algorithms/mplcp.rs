@@ -371,6 +371,7 @@ struct Facet<'a> {
 
 /// Algorithm 2 (`pivot`): from the ACLFB `tab` (α basic or entering as column `e`) returns the
 /// z-row sets of the adjacent bases.
+#[inline(never)]
 fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centre: Option<&[f64]>, first: Option<WalkKey>, left: &mut usize, stack: &mut Vec<Frame>, out: &mut Vec<(Vec<usize>, Option<Vec<f64>>)>) -> WalkEnd {
     let n = p.n;
     let d1 = p.nt - 1;
@@ -626,6 +627,7 @@ struct Frame {
 
 /// Algorithm 2 on an explicit work stack (no depth limit, no iteration cap). Returns false when a
 /// repeated state or the pivot `budget` stopped some branch, so a neighbour may be missing.
+#[inline(never)]
 fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, budget: usize, out: &mut Vec<(Vec<usize>, Option<Vec<f64>>)>) -> bool {
     let mut left = budget;
     let mut stack: Vec<Frame> = vec![];
@@ -1235,13 +1237,17 @@ fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>
             }
             r
         };
-        // a point on the facet: the region's Chebyshev center projected onto the row
-        let hint: Option<Vec<f64>> = center.map(|c| {
-            let a = cur.e.row(k);
-            let sft = cur.f[k] - a.iter().zip(c).map(|(x, y)| x * y).sum::<f64>();
-            c.iter().zip(a).map(|(ci, ai)| ci + sft * ai).collect()
-        });
-        let (nbrs, certified) = adjacent(plcp, tab, cur.e.row(k), cur.f[k], &cur.e, &cur.f, ws, if cert.is_some() { Some(&cfun as &dyn Fn() -> Option<usize>) } else { None }, cert.map_or(false, |c| c.audit), seen, if cfg!(feature = "lp_census") { hint.as_deref() } else { None });
+        // a point on the facet: the region's Chebyshev center projected onto the row (computed up front
+        // only for the census, which counts how often it lies in a leaf's sub-facet)
+        let mk_hint = || -> Option<Vec<f64>> {
+            center.map(|c| {
+                let a = cur.e.row(k);
+                let sft = cur.f[k] - a.iter().zip(c).map(|(x, y)| x * y).sum::<f64>();
+                c.iter().zip(a).map(|(ci, ai)| ci + sft * ai).collect()
+            })
+        };
+        let early_hint: Option<Vec<f64>> = if cfg!(feature = "lp_census") { mk_hint() } else { None };
+        let (nbrs, certified) = adjacent(plcp, tab, cur.e.row(k), cur.f[k], &cur.e, &cur.f, ws, if cert.is_some() { Some(&cfun as &dyn Fn() -> Option<usize>) } else { None }, cert.map_or(false, |c| c.audit), seen, early_hint.as_deref());
         if nbrs.is_empty() {
             continue;
         }
@@ -1257,6 +1263,7 @@ fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>
                 }
             }
         }
+        let hint = if cfg!(feature = "lp_census") { early_hint } else { mk_hint() };
         for nb in nbrs {
             if let Nbr::Across(pt) = &nb {
                 // fallback: the QP just across the facet gives the neighbouring active set
