@@ -365,11 +365,13 @@ struct Facet<'a> {
     /// active sets already known (built or rejected): a leaf branch that ends in one of them is
     /// skipped without its Chebyshev LP, since `expand_candidates` would drop it anyway
     seen: Option<&'a Seen>,
+    /// the old hint (parent centre projected onto the row) in facet coordinates, for the census only
+    hint_f: Option<&'a [f64]>,
 }
 
 /// Algorithm 2 (`pivot`): from the ACLFB `tab` (α basic or entering as column `e`) returns the
 /// z-row sets of the adjacent bases.
-fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, out: &mut Vec<Vec<usize>>) {
+fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centre: Option<&[f64]>, out: &mut Vec<(Vec<usize>, Option<Vec<f64>>)>) {
     let n = p.n;
     let d1 = p.nt - 1;
     let alpha = 2 * n;
@@ -445,7 +447,7 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
         if pz.is_empty() {
             if let Some(ra) = alpha_row {
                 if tab.tv(ra, e) > PTOL {
-                    out.push(z_after(tab, n, ra, e));
+                    push_leaf(&fpoly, z_after(tab, n, ra, e), centre, out);
                     return;
                 }
             }
@@ -524,6 +526,7 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
             if leaf_z.is_some() {
                 crate::census_bump!(LeafKept, 1);
             }
+            let mut bcentre: Option<Vec<f64>> = None;
             if d1 > 0 {
                 crate::census_bump!(PfCheb, 1);
                 let ball = {
@@ -531,7 +534,7 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
                     chebyshev_ball(&ef, &ff, &[])
                 };
                 match ball {
-                    Some(s) if s.x[d1] > 1e-9 => {}
+                    Some(s) if s.x[d1] > 1e-9 => bcentre = Some(s.x[..d1].to_vec()),
                     _ => {
                         crate::census_bump!(PfChebEmpty, 1);
                         continue;
@@ -539,7 +542,7 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
                 }
             }
             if let Some(z) = leaf_z {
-                out.push(z);
+                push_leaf(&Facet { ef: &ef, ff: &ff, sc: fpoly.sc, seen: fpoly.seen, hint_f: fpoly.hint_f }, z, bcentre.as_deref(), out);
                 continue;
             }
             let mut next = tab.clone();
@@ -554,11 +557,32 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
                     crate::census_bump!(PfRepeatBasis, 1);
                 }
             }
-            pivot_facet(p, &mut next, ne, Facet { ef: &ef, ff: &ff, sc: fpoly.sc, seen: fpoly.seen }, depth + 1, out);
+            pivot_facet(p, &mut next, ne, Facet { ef: &ef, ff: &ff, sc: fpoly.sc, seen: fpoly.seen, hint_f: fpoly.hint_f }, depth + 1, bcentre.as_deref(), out);
         }
         return;
     }
     crate::census_bump!(PfIterLimit, 1);
+}
+
+/// Records a returned basis with the Chebyshev centre (facet coordinates) of the sub-facet it was
+/// reached on, and counts whether the old hint lies in that sub-facet (census).
+fn push_leaf(fpoly: &Facet, z: Vec<usize>, centre: Option<&[f64]>, out: &mut Vec<(Vec<usize>, Option<Vec<f64>>)>) {
+    #[cfg(feature = "lp_census")]
+    {
+        if centre.is_some() {
+            crate::census_bump!(HintCentre, 1);
+        }
+        if let Some(h) = fpoly.hint_f {
+            let inside = (0..fpoly.ef.rows).all(|i| fpoly.ef.row(i).iter().zip(h).map(|(a, b)| a * b).sum::<f64>() <= fpoly.ff[i] + 1e-9);
+            if inside {
+                crate::census_bump!(HintInside, 1);
+            } else {
+                crate::census_bump!(HintOutside, 1);
+            }
+        }
+    }
+    let _ = fpoly;
+    out.push((z, centre.map(|c| c.to_vec())));
 }
 
 /// z rows of the basis `tab` with the pair of row v toggled.
@@ -623,7 +647,8 @@ fn null_basis(g: &[f64]) -> Vec<Vec<f64>> {
 /// A neighbouring basis: the principal pivot (row, column) of the current tableau, or its z rows.
 enum Nbr {
     Toggle(usize, usize),
-    Z(Vec<usize>),
+    /// z rows, and the Chebyshev centre (in parameter space) of the sub-facet the basis was reached on
+    Z(Vec<usize>, Option<Vec<f64>>),
 }
 
 /// Neighbouring z-row sets across the facet {e_k θ = f_k} of the region with tableau `tab`.
@@ -631,7 +656,7 @@ enum Nbr {
 /// `cert` is asked only when the fast path has failed, that is, when the slow path (Case 2) would
 /// run: if it names a known region R that is the only one across the facet, the search is skipped
 /// (unless `audit`, which runs it anyway). The third result is that region.
-fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[f64], ws: &mut Option<Tab>, cert: Option<&dyn Fn() -> Option<usize>>, audit: bool, seen: Option<&Seen>) -> (Vec<Nbr>, Option<usize>) {
+fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[f64], ws: &mut Option<Tab>, cert: Option<&dyn Fn() -> Option<usize>>, audit: bool, seen: Option<&Seen>, old_hint: Option<&[f64]>) -> (Vec<Nbr>, Option<usize>) {
     #[cfg(feature = "lp_census")]
     let _cen_t = std::time::Instant::now();
     crate::census_bump!(AdjCalls, 1);
@@ -724,11 +749,21 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
     let mut out = vec![];
     #[cfg(feature = "lp_census")]
     crate::census::basis_reset();
-    pivot_facet(p, &mut work, n, Facet { ef: &ef, ff: &ff, sc: &rowsc, seen }, 0, &mut out);
+    // the old hint (parent centre on the row) in facet coordinates: N' hint (N is orthogonal to g)
+    let hint_f: Option<Vec<f64>> = old_hint.map(|h| nb.iter().map(|v| h.iter().zip(v).map(|(a, b)| a * b).sum()).collect());
+    pivot_facet(p, &mut work, n, Facet { ef: &ef, ff: &ff, sc: &rowsc, seen, hint_f: hint_f.as_deref() }, 0, None, &mut out);
     *ws = Some(work);
     crate::census_bump!(AdjCase2, 1);
     crate::census_bump!(AdjCase2Nanos, _cen_t.elapsed().as_nanos());
-    (out.into_iter().map(Nbr::Z).collect(), certified)
+    // theta = N theta_f - g b
+    let nbrs = out
+        .into_iter()
+        .map(|(z, c)| {
+            let c = c.map(|cf| (0..nt).map(|k| nb.iter().zip(&cf).map(|(v, x)| v[k] * x).sum::<f64>() - g[k] * b).collect::<Vec<f64>>());
+            Nbr::Z(z, c)
+        })
+        .collect();
+    (nbrs, certified)
 }
 
 /// Which pLCP method `solve` runs.
@@ -1092,7 +1127,13 @@ fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>
             }
             r
         };
-        let (nbrs, certified) = adjacent(plcp, tab, cur.e.row(k), cur.f[k], &cur.e, &cur.f, ws, if cert.is_some() { Some(&cfun as &dyn Fn() -> Option<usize>) } else { None }, cert.map_or(false, |c| c.audit), seen);
+        // a point on the facet: the region's Chebyshev center projected onto the row
+        let hint: Option<Vec<f64>> = center.map(|c| {
+            let a = cur.e.row(k);
+            let sft = cur.f[k] - a.iter().zip(c).map(|(x, y)| x * y).sum::<f64>();
+            c.iter().zip(a).map(|(ci, ai)| ci + sft * ai).collect()
+        });
+        let (nbrs, certified) = adjacent(plcp, tab, cur.e.row(k), cur.f[k], &cur.e, &cur.f, ws, if cert.is_some() { Some(&cfun as &dyn Fn() -> Option<usize>) } else { None }, cert.map_or(false, |c| c.audit), seen, if cfg!(feature = "lp_census") { hint.as_deref() } else { None });
         if nbrs.is_empty() {
             continue;
         }
@@ -1108,16 +1149,15 @@ fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>
                 }
             }
         }
-        // a point on the facet: the region's Chebyshev center projected onto the row
-        let hint: Option<Vec<f64>> = center.map(|c| {
-            let a = cur.e.row(k);
-            let sft = cur.f[k] - a.iter().zip(c).map(|(x, y)| x * y).sum::<f64>();
-            c.iter().zip(a).map(|(ci, ai)| ci + sft * ai).collect()
-        });
         for nb in nbrs {
             let z = match &nb {
                 Nbr::Toggle(v, _) => z_toggle(tab, plcp.n, *v),
-                Nbr::Z(z) => z.clone(),
+                Nbr::Z(z, _) => z.clone(),
+            };
+            // a Case-2 basis starts from the centre of its own sub-facet when the walk found one
+            let hint = match &nb {
+                Nbr::Z(_, Some(c)) => Some(c.clone()),
+                _ => hint.clone(),
             };
             let entry = match &nb {
                 Nbr::Toggle(..) => {
@@ -1131,7 +1171,7 @@ fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>
                 Nbr::Toggle(v, kk) if depth + 1 < REFACTOR => Some((v, kk)),
                 _ => None,
             };
-            cands.push(Cand { aset: plcp.active_set(z.into_iter()), hint: hint.clone(), piv, entry, cert: certified });
+            cands.push(Cand { aset: plcp.active_set(z.into_iter()), hint, piv, entry, cert: certified });
         }
     }
     #[cfg(feature = "lp_census")]
