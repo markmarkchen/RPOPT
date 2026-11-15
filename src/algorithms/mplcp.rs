@@ -611,7 +611,7 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
                 }
                 #[cfg(feature = "lp_census")]
                 let boxe = if bwit.is_none() && bcentre.is_none() { box_probe(&ef, &ff, fpoly.ef.rows) } else { false };
-                crate::census_skip!(cm);
+                crate::census_lap!(cm, Census);
                 let dq = bwit.is_none() && bcentre.is_none() && daqp_certainly_empty(&ef, &ff, d1);
                 if bwit.is_none() && bcentre.is_none() {
                     crate::census_lap!(cm, Daqp);
@@ -650,7 +650,7 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
                         }
                         cheb_probe(&ef, &ff, fpoly.ef.rows, centre.or(witness).or(fpoly.hint_f), d1, crate::census::piv_get() - piv0, ball.as_ref().map(|s| s.x.clone()), leaf_z.is_some(), lp_ns);
                     }
-                    crate::census_skip!(cm);
+                    crate::census_lap!(cm, Census);
                     match ball {
                         Some(s) if s.x[d1] > 1e-9 => {
                             bcentre = Some(s.x[..d1].to_vec());
@@ -796,6 +796,9 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, budget: usize, o
 #[cfg(feature = "lp_census")]
 fn cheb_probe(ef: &Mat, ff: &[f64], parent_rows: usize, pt: Option<&[f64]>, d1: usize, cold_piv: u64, cold_x: Option<Vec<f64>>, leaf: bool, lp_ns: u64) {
     use crate::census::Counter as C;
+    if !probes() {
+        return;
+    }
     if leaf {
         crate::census::bump(C::LpLeafCalls, 1);
         crate::census::bump(C::LpLeafNs, lp_ns);
@@ -926,8 +929,19 @@ thread_local! {
     static HYPERS: std::cell::RefCell<std::collections::HashMap<Vec<i64>, u8>> = std::cell::RefCell::new(std::collections::HashMap::new());
 }
 
+/// Census only: the extra probes (Chebyshev warm start, phase-1, row redundancy, region box) run only with CHEB_PROBE=1, so a plain
+/// census run keeps clean timings.
+#[cfg(feature = "lp_census")]
+fn probes() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("CHEB_PROBE").is_ok())
+}
+
 #[cfg(feature = "lp_census")]
 fn box_set(e_all: &Mat, f_all: &[f64], centre: Option<&[f64]>, nb: &[Vec<f64>]) {
+    if !probes() {
+        return;
+    }
     let bx = centre.and_then(|c| crate::mpqp_utils::region_bbox(e_all, f_all, c));
     BOXCTX.with(|b| *b.borrow_mut() = bx.map(|(lo, hi)| (lo, hi, nb.to_vec())));
 }
@@ -962,6 +976,9 @@ fn census_hyper(g: &[f64], b: f64) -> bool {
 #[cfg(feature = "lp_census")]
 fn box_probe(ef: &Mat, ff: &[f64], parent_rows: usize) -> bool {
     use crate::census::Counter as C;
+    if !probes() {
+        return false;
+    }
     crate::census::bump(C::BoxTests, 1);
     crate::census::bump(C::BoxRows, ef.rows as u64);
     crate::census::bump(C::BoxCutRows, (ef.rows - parent_rows) as u64);
