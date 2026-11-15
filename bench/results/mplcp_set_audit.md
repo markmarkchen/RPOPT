@@ -461,3 +461,245 @@ Columns: radius of the Chebyshev ball of the rebuilt region, lex margin = smalle
 | masses5_N4 | [54, 65, 69] | 5.276e-8 | true | 6.549545899397344 | n/a | n/a |
 | masses5_N4 | [54, 69, 71] | 1.452e-7 | true | 6.581152814120287 | n/a | n/a |
 | masses5_N4 | [54, 69, 76] | 2.590e-7 | true | 6.968316110491287 | n/a | n/a |
+
+## Round 2: coldretry-final 6136b44
+
+Build: 6136b44 (main b98b621 with the dedupe, the box-chain check and the cold retry), release, own target directory on scratch, plus `audit_solve` and `set_audit` (the only files added). One solve each on the ten problems whose old and a3ebf60 sets differ, with solver dumps (`AUDIT_DUMP`); old c345cdc is not re-solved, its sets and dumps are those of round 1. masses4_N5 and masses5_N4 ran with 2 CPUs and 2500 MB; the others with 1 CPU and 1900 MB. The other 143 problems were not re-solved with 6136b44, so nothing is claimed about them.
+
+`set_audit` now splits the spurious class (c) by reason, tested in this order:
+
+- c4: the set cannot be rebuilt and the solver's region has radius zero or no dump entry;
+- c1: the region's centre lies inside another region of its own solve (an overlap); the depth is the distance from that centre to the other region's boundary, given with both radii;
+- c3: the QP is infeasible at the centre;
+- c2: the QP returns another set, which is not in the other solve's list (a QP set in the other solve's list is the duplicate class d).
+
+Sets that cannot be rebuilt are judged at the centre of the solver's own region, and now also take part in the overlap test. An unbuildable region of the same solve is invisible to c1 as the overlapped region, so c1 is a lower bound.
+
+| problem | old c345cdc s | main a3ebf60 s | 6136b44 s |
+|---|---|---|---|
+| masses3_N5 | 21.8 | 5.0 | 5.0 |
+| masses3_N6 | 59.8 | 15.9 | 16.0 |
+| masses3_N7 | 185.6 | 40.3 | 39.2 |
+| masses4_N2 | 0.2 | 0.1 | 0.1 |
+| masses4_N3 | 4.1 | 2.0 | 2.2 |
+| masses4_N4 | 70.1 | 21.2 | 23.6 |
+| masses4_N5 | 1681.3 | 449.5 | 466.6 |
+| masses5_N2 | 0.4 | 0.2 | 0.2 |
+| masses5_N3 | 31.9 | 9.3 | 10.5 |
+| masses5_N4 | 1601.8 | 404.7 | 443.0 |
+
+Single runs on shared nodes; masses4_N5 and masses5_N4 ran on 2-CPU tasks of the same node type.
+
+### 1. Which of the 355 lost regions come back
+
+(a) of round 1 are the rows of `class3` (old against a3ebf60, re-classified with this `set_audit`); a set comes back if it is in the 6136b44 sets of that problem.
+
+| problem | (a) lost by a3ebf60 | back in 6136b44 | still missing from 6136b44 |
+|---|---|---|---|
+| masses3_N5 | 2 | 2 | 0 |
+| masses3_N6 | 3 | 2 | 1 |
+| masses3_N7 | 5 | 3 | 2 |
+| masses4_N2 | 0 | 0 | 0 |
+| masses4_N3 | 6 | 6 | 0 |
+| masses4_N4 | 18 | 17 | 1 |
+| masses4_N5 | 183 | 150 | 33 |
+| masses5_N2 | 0 | 0 | 0 |
+| masses5_N3 | 2 | 2 | 0 |
+| masses5_N4 | 136 | 116 | 20 |
+| total | 355 | 298 | 57 |
+
+(A set missing from 6136b44 can still be covered by it as a duplicate; the class tables below classify old against 6136b44 directly.)
+
+The four sets that the fix build also lacked:
+
+| problem | set | in 6136b44 | class in old against 6136b44 |
+|---|---|---|---|
+| masses3_N6 | [0, 4, 8, 9, 35, 77] | NO | a_lost |
+| masses3_N7 | [4, 8, 12, 13, 22, 43] | NO | a_lost |
+| masses3_N7 | [5, 6, 30, 37, 49, 51, 84] | NO | a_lost |
+| masses4_N4 | [1, 9, 53, 56] | NO | a_lost |
+
+Old against 6136b44, classes per problem:
+
+| problem | only old | only 6136b44 | (a) | (b) | (d) | c1 | c2 | c3 | c4 |
+|---|---|---|---|---|---|---|---|---|---|
+| masses3_N5 | 0 | 7 | 0 | 4 | 0 | 0 | 0 | 3 | 0 |
+| masses3_N6 | 1 | 8 | 1 | 8 | 0 | 0 | 0 | 0 | 0 |
+| masses3_N7 | 3 | 16 | 2 | 16 | 0 | 0 | 0 | 1 | 0 |
+| masses4_N2 | 0 | 2 | 0 | 0 | 2 | 0 | 0 | 0 | 0 |
+| masses4_N3 | 0 | 62 | 0 | 34 | 1 | 2 | 18 | 7 | 0 |
+| masses4_N4 | 7 | 299 | 1 | 143 | 4 | 3 | 48 | 107 | 0 |
+| masses4_N5 | 77 | 1400 | 33 | 538 | 22 | 38 | 95 | 749 | 2 |
+| masses5_N2 | 0 | 3 | 0 | 2 | 0 | 0 | 1 | 0 | 0 |
+| masses5_N3 | 0 | 213 | 0 | 145 | 2 | 4 | 20 | 42 | 0 |
+| masses5_N4 | 26 | 1778 | 20 | 1133 | 28 | 15 | 150 | 452 | 6 |
+| total | 114 | 3788 | 57 | 2023 | 59 | 62 | 332 | 1361 | 8 |
+
+Genuine regions of c345cdc that 6136b44 still lacks (a), in full:
+
+| problem | active set | radius | lex margin (min signed first entry) | also lost by a3ebf60 |
+|---|---|---|---|---|
+| masses3_N6 | [0, 4, 8, 9, 35, 77] | 1.61e-08 | 1.0000000000000002 | yes |
+| masses3_N7 | [4, 8, 12, 13, 22, 43] | 1.64e-08 | 1.0 | yes |
+| masses3_N7 | [5, 6, 30, 37, 49, 51, 84] | 1.25e-08 | 0.9999999999688641 | yes |
+| masses4_N4 | [1, 9, 53, 56] | 1.03e-08 | 6.748565110505297 | yes |
+| masses4_N5 | [0, 1, 2, 71, 78] | 2.55e-08 | 0.9999999999999999 | yes |
+| masses4_N5 | [0, 28, 55, 61, 86] | 3.45e-08 | 5.800840143449477 | yes |
+| masses4_N5 | [0, 7, 33, 63, 82] | 1.01e-08 | 7.058727027448185 | yes |
+| masses4_N5 | [1, 4, 11, 55, 58] | 1.03e-08 | 1.0 | yes |
+| masses4_N5 | [1, 4, 11, 55, 86] | 5.05e-08 | 1.0 | yes |
+| masses4_N5 | [1, 4, 13, 55, 58] | 1.11e-08 | 1.0 | yes |
+| masses4_N5 | [1, 4, 31, 50, 81] | 1.85e-08 | 1.0 | yes |
+| masses4_N5 | [16, 29, 87] | 2.35e-08 | 5.582176376570715 | yes |
+| masses4_N5 | [2, 19, 63, 65] | 6.72e-08 | 6.593132815549325 | yes |
+| masses4_N5 | [2, 4, 23, 86] | 9.69e-08 | 1.0 | yes |
+| masses4_N5 | [2, 5, 29, 71, 74] | 1.16e-08 | 1.0 | yes |
+| masses4_N5 | [22, 36, 52, 69, 78] | 3.04e-07 | 5.800840143449932 | yes |
+| masses4_N5 | [3, 16, 71, 78] | 4.75e-08 | 1.0 | yes |
+| masses4_N5 | [3, 4, 19, 30] | 4.19e-07 | 1.0 | yes |
+| masses4_N5 | [3, 4, 23, 42] | 6.52e-08 | 6.362710237771011 | yes |
+| masses4_N5 | [4, 5, 6, 66] | 3.47e-05 | 0.9999999999994666 | yes |
+| masses4_N5 | [4, 6, 39, 42, 86] | 2.15e-08 | 1.0 | yes |
+| masses4_N5 | [4, 6, 8, 39, 42] | 2.41e-08 | 1.0 | yes |
+| masses4_N5 | [4, 7, 8, 16, 74] | 1.90e-07 | 0.9999999997060702 | yes |
+| masses4_N5 | [5, 6, 7, 63, 86] | 2.55e-08 | 0.9999999999999999 | yes |
+| masses4_N5 | [6, 20, 48, 63, 86] | 2.56e-08 | 5.800840143450841 | yes |
+| masses4_N5 | [6, 29, 55, 58, 76] | 1.11e-08 | 5.51372779160738 | yes |
+| masses4_N5 | [6, 49, 63, 82] | 1.17e-08 | 1.0 | yes |
+| masses4_N5 | [6, 8, 28, 55, 73] | 1.36e-08 | 0.9999999999999999 | yes |
+| masses4_N5 | [7, 15, 39, 73] | 5.51e-08 | 1.0 | yes |
+| masses4_N5 | [7, 16, 65, 77] | 4.61e-08 | 1.0 | yes |
+| masses4_N5 | [8, 12, 87] | 2.57e-06 | 1.0000000000840399 | yes |
+| masses4_N5 | [8, 16, 28, 84, 87] | 4.17e-08 | 1.0 | yes |
+| masses4_N5 | [8, 22, 31, 69] | 2.12e-07 | 5.661584096407992 | yes |
+| masses4_N5 | [9, 15, 39, 61, 64] | 1.26e-07 | 1.0 | yes |
+| masses4_N5 | [9, 15, 39, 61] | 1.96e-07 | 1.0 | yes |
+| masses4_N5 | [9, 15, 39, 73] | 1.81e-07 | 1.0 | yes |
+| masses4_N5 | [9, 18, 31, 66, 78] | 1.36e-08 | 5.661584096407716 | yes |
+| masses5_N4 | [1, 3, 14, 71] | 8.36e-08 | 1.0 | yes |
+| masses5_N4 | [14, 46, 57, 65] | 2.11e-08 | 6.064264397605656 | yes |
+| masses5_N4 | [2, 12, 37, 67] | 3.36e-08 | 5.570400345525949 | yes |
+| masses5_N4 | [20, 25, 45] | 5.11e-08 | 6.063236587254836 | yes |
+| masses5_N4 | [21, 23, 60, 76] | 1.50e-08 | 6.064264397605886 | yes |
+| masses5_N4 | [21, 28, 75] | 2.06e-08 | 5.570400345524831 | yes |
+| masses5_N4 | [21, 28] | 2.06e-08 | 5.570400345524831 | yes |
+| masses5_N4 | [22, 49, 58, 75] | 2.25e-08 | 6.5495458990335464 | yes |
+| masses5_N4 | [28, 51, 59, 75] | 2.08e-08 | 6.549545899964869 | yes |
+| masses5_N4 | [28, 56, 59] | 4.20e-08 | 6.86210550923972 | yes |
+| masses5_N4 | [29, 59, 76] | 3.16e-07 | 5.601015953364342 | yes |
+| masses5_N4 | [3, 14, 36, 40] | 4.80e-08 | 1.0000000015569648 | yes |
+| masses5_N4 | [3, 8, 42, 58] (unbuildable, judged at the solver centre) | 7.34e-07 | n/a (unbuildable) | yes |
+| masses5_N4 | [37, 49] | 2.19e-07 | 5.5704003448582675 | yes |
+| masses5_N4 | [54, 69, 76] | 2.59e-07 | 6.968316110491287 | yes |
+| masses5_N4 | [6, 24, 38] | 4.32e-07 | 1.0 | yes |
+| masses5_N4 | [6, 30, 37, 60] | 1.06e-08 | 5.57040034552665 | yes |
+| masses5_N4 | [7, 14, 57] | 1.01e-07 | 0.999999997340958 | yes |
+| masses5_N4 | [7, 30, 51] | 2.23e-07 | 1.0000000006800818 | yes |
+| masses5_N4 | [7, 30, 61, 77] | 1.02e-07 | 5.661584040260837 | yes |
+
+### 2. The spurious class split by reason
+
+Old against main a3ebf60 (round 1 data, re-classified):
+
+| problem | only old | only a3ebf60 | (a) | (b) | (d) | c1 | c2 | c3 | c4 |
+|---|---|---|---|---|---|---|---|---|---|
+| masses3_N5 | 2 | 1 | 2 | 0 | 0 | 0 | 0 | 1 | 0 |
+| masses3_N6 | 3 | 1 | 3 | 1 | 0 | 0 | 0 | 0 | 0 |
+| masses3_N7 | 6 | 2 | 5 | 2 | 0 | 0 | 0 | 1 | 0 |
+| masses4_N2 | 0 | 2 | 0 | 0 | 2 | 0 | 0 | 0 | 0 |
+| masses4_N3 | 6 | 62 | 6 | 34 | 1 | 2 | 18 | 7 | 0 |
+| masses4_N4 | 27 | 289 | 18 | 135 | 5 | 3 | 48 | 107 | 0 |
+| masses4_N5 | 257 | 1298 | 183 | 455 | 24 | 41 | 94 | 757 | 1 |
+| masses5_N2 | 0 | 3 | 0 | 2 | 0 | 0 | 1 | 0 | 0 |
+| masses5_N3 | 3 | 209 | 2 | 141 | 3 | 4 | 20 | 42 | 0 |
+| masses5_N4 | 150 | 1731 | 136 | 1091 | 28 | 15 | 150 | 455 | 6 |
+| total | 454 | 3598 | 355 | 1861 | 63 | 65 | 331 | 1370 | 7 |
+
+| class | side | count | radius (min / median / p90 / max) |
+|---|---|---|---|
+| c1 | old-only | 6 | 1.1e-08 / 5.0e-08 / 1.8e-07 / 1.8e-07 |
+| c1 | a3ebf60-only | 59 | 1.1e-08 / 3.7e-08 / 3.3e-07 / 4.5e-07 |
+| c2 | old-only | 0 | |
+| c2 | a3ebf60-only | 331 | 1.0e-08 / 4.5e-08 / 5.8e-08 / 1.3e-07 |
+| c3 | old-only | 86 | 0.0e+00 / 1.2e-08 / 2.6e-08 / 1.5e-07 |
+| c3 | a3ebf60-only | 1284 | 0.0e+00 / 4.0e-08 / 4.9e-08 / 2.4e-07 |
+| c4 | old-only | 0 | |
+| c4 | a3ebf60-only | 7 | 0.0e+00 / 0.0e+00 / 0.0e+00 / 0.0e+00 |
+
+c1 overlaps, old against a3ebf60:
+
+65 rows (6 old-only, 59 a3ebf60-only). Deepest overlap depth: 3.45e-07; rows whose depth exceeds half of the smaller of the two radii: 34.
+
+| problem | side | set | its radius | overlapped region | depth of the centre below that region's boundary | that region's radius |
+|---|---|---|---|---|---|---|
+| masses4_N5 | a3ebf60-only | [8, 13, 28, 57, 87] | 4.05e-07 | [0, 8, 28, 57, 87] | 3.45e-07 | 4.06e-07 |
+| masses4_N5 | a3ebf60-only | [7, 8, 13, 56, 87] | 3.44e-07 | [8, 13, 28, 56, 87] | 3.18e-07 | 5.83e-07 |
+| masses4_N5 | a3ebf60-only | [2, 3, 20, 64, 79] | 3.44e-07 | [3, 20, 36, 64, 79] | 3.18e-07 | 5.82e-07 |
+| masses4_N5 | a3ebf60-only | [2, 3, 20, 65, 79] | 4.50e-07 | [1, 2, 3, 65, 79] | 2.42e-07 | 5.80e-07 |
+| masses4_N5 | a3ebf60-only | [7, 8, 13, 57, 87] | 4.50e-07 | [6, 7, 8, 57, 87] | 2.42e-07 | 5.80e-07 |
+| masses4_N5 | a3ebf60-only | [3, 6, 20, 64, 79] | 3.33e-07 | [6, 7, 20, 64, 79] | 2.36e-07 | 5.85e-07 |
+| masses5_N4 | a3ebf60-only | [1, 35, 64] | 1.21e-07 | [18, 35, 64] | 1.20e-07 | 1.21e-07 |
+| masses4_N5 | old-only | [5, 9, 31, 44, 81] | 1.08e-07 | [9, 17, 31, 44, 81] | 1.08e-07 | 1.08e-07 |
+| masses5_N4 | a3ebf60-only | [11, 41, 69, 78] | 1.19e-07 | [12, 41, 69, 78] | 7.02e-08 | 3.12e-07 |
+| masses4_N5 | a3ebf60-only | [3, 5, 42, 44, 87] | 6.86e-08 | [3, 7, 42, 44, 87] | 6.16e-08 | 1.75e-07 |
+| masses5_N4 | a3ebf60-only | [1, 31, 69, 71] | 8.50e-08 | [4, 31, 69, 71] | 6.03e-08 | 8.49e-08 |
+| masses5_N4 | a3ebf60-only | [3, 4, 31, 48] | 1.35e-07 | [3, 4, 5, 48] | 5.08e-08 | 7.24e-07 |
+
+Old against 6136b44:
+
+| class | side | count | radius (min / median / p90 / max) |
+|---|---|---|---|
+| c1 | old-only | 1 | 1.1e-08 / 1.1e-08 / 1.1e-08 / 1.1e-08 |
+| c1 | 6136b44-only | 61 | 4.4e-09 / 3.5e-08 / 1.3e-07 / 4.5e-07 |
+| c2 | old-only | 0 | |
+| c2 | 6136b44-only | 332 | 1.0e-08 / 4.5e-08 / 5.8e-08 / 1.3e-07 |
+| c3 | old-only | 55 | 1.0e-08 / 1.2e-08 / 2.5e-08 / 1.5e-07 |
+| c3 | 6136b44-only | 1306 | 0.0e+00 / 4.0e-08 / 4.9e-08 / 2.4e-07 |
+| c4 | old-only | 0 | |
+| c4 | 6136b44-only | 8 | 0.0e+00 / 0.0e+00 / 0.0e+00 / 0.0e+00 |
+
+c1 overlaps, old against 6136b44:
+
+62 rows (1 old-only, 61 6136b44-only). Deepest overlap depth: 3.45e-07; rows whose depth exceeds half of the smaller of the two radii: 33.
+
+| problem | side | set | its radius | overlapped region | depth of the centre below that region's boundary | that region's radius |
+|---|---|---|---|---|---|---|
+| masses4_N5 | 6136b44-only | [8, 13, 28, 57, 87] | 4.05e-07 | [0, 8, 28, 57, 87] | 3.45e-07 | 4.06e-07 |
+| masses4_N5 | 6136b44-only | [7, 8, 13, 56, 87] | 3.44e-07 | [8, 13, 28, 56, 87] | 3.18e-07 | 5.83e-07 |
+| masses4_N5 | 6136b44-only | [2, 3, 20, 64, 79] | 3.44e-07 | [3, 20, 36, 64, 79] | 3.18e-07 | 5.82e-07 |
+| masses4_N5 | 6136b44-only | [2, 3, 20, 65, 79] | 4.50e-07 | [1, 2, 3, 65, 79] | 2.42e-07 | 5.80e-07 |
+| masses4_N5 | 6136b44-only | [7, 8, 13, 57, 87] | 4.50e-07 | [6, 7, 8, 57, 87] | 2.42e-07 | 5.80e-07 |
+| masses4_N5 | 6136b44-only | [3, 6, 20, 64, 79] | 3.33e-07 | [6, 7, 20, 64, 79] | 2.36e-07 | 5.85e-07 |
+| masses5_N4 | 6136b44-only | [1, 35, 64] | 1.21e-07 | [18, 35, 64] | 1.20e-07 | 1.21e-07 |
+| masses5_N4 | 6136b44-only | [11, 41, 69, 78] | 1.19e-07 | [12, 41, 69, 78] | 7.02e-08 | 3.12e-07 |
+| masses4_N5 | 6136b44-only | [3, 5, 42, 44, 87] | 6.86e-08 | [3, 7, 42, 44, 87] | 6.16e-08 | 1.75e-07 |
+| masses5_N4 | 6136b44-only | [1, 31, 69, 71] | 8.50e-08 | [4, 31, 69, 71] | 6.03e-08 | 8.49e-08 |
+| masses5_N4 | 6136b44-only | [3, 4, 31, 48] | 1.35e-07 | [3, 4, 5, 48] | 5.08e-08 | 7.24e-07 |
+| masses4_N3 | 6136b44-only | [4, 25, 47] | 4.88e-08 | [10, 25, 47] | 4.83e-08 | 4.89e-08 |
+
+### 3. The 41 fix-only sets
+
+Sets of the fix build (1f080db) that are in neither old nor a3ebf60. Verdict = class in old against 6136b44, where they are new-only if 6136b44 has them.
+
+| problem | fix-only sets | in 6136b44 | b gained | other class | not in 6136b44 |
+|---|---|---|---|---|---|
+| masses3_N5 | 6 | 6 | 4 | c3_qp_infeasible 2 | 0 |
+| masses3_N6 | 7 | 7 | 7 | - | 0 |
+| masses3_N7 | 14 | 14 | 14 | - | 0 |
+| masses4_N2 | 0 | | | | |
+| masses4_N3 | 0 | | | | |
+| masses4_N4 | 10 | 10 | 8 | c3_qp_infeasible 2 | 0 |
+| masses5_N2 | 0 | | | | |
+| masses5_N3 | 4 | 4 | 4 | - | 0 |
+| total | 41 | 41 | 37 | | 0 |
+
+
+### Reading round 2
+
+- **Lost regions:** 298 of the 355 (a) of a3ebf60 are in the 6136b44 sets (masses4_N5 150 of 183, masses5_N4 116 of 136, masses3_N5 2 of 2, masses3_N6 2 of 3, masses3_N7 3 of 5, masses4_N3 6 of 6, masses4_N4 17 of 18, masses5_N3 2 of 2). 57 are still missing, and old against 6136b44 classifies exactly these 57 as (a): 33 on masses4_N5, 20 on masses5_N4, 4 on the small problems (the four sets of the fix build, all still absent). No region is newly lost relative to a3ebf60. All 57 have radius 1.0e-8 to 3.5e-5 (two above 1e-6: masses4_N5 [4, 5, 6, 66] and [8, 12, 87]) and are lexico-feasible.
+- **The four sets** masses3_N6 [0, 4, 8, 9, 35, 77], masses3_N7 [4, 8, 12, 13, 22, 43] and [5, 6, 30, 37, 49, 51, 84], masses4_N4 [1, 9, 53, 56] are still missing, each classified (a): genuine, QP agrees at the centre, centre in no 6136b44 region.
+- **c1 (overlap):** 62 rows against 6136b44 (1 old-only, 61 6136b44-only) and 65 against a3ebf60 (6 old-only, 59 a3ebf60-only). The overlapped region is typically one index away from the row's set and about as large (for example masses4_N5 [8, 13, 28, 57, 87], radius 4.05e-7, centre 3.45e-7 inside [0, 8, 28, 57, 87], radius 4.06e-7), so the pairs are near-duplicates of one region emitted under two sets. Overlap depth is at most 3.5e-7 and exceeds half of the smaller radius in about half of the rows. Old c345cdc has such pairs too (6 old-only rows against a3ebf60), so overlaps are not new with the recent changes, and they are not removed by the cold retry (the count did not fall). c1 is a lower bound: a region that cannot be rebuilt cannot be the overlapped one.
+- **c2 and c3:** every one is thin. Radii against 6136b44: c2 (6136b44-only) 1.0e-8 to 1.3e-7; c3 old-only 1.0e-8 to 1.5e-7, 6136b44-only up to 2.4e-7 (a few below 1e-12, kept as c3 because the solver radius was positive). c3 is the largest class (1,361 rows against 6136b44), consistent with the QP's answer flipping at the centres of regions of radius 1e-8 to 1e-7. c4 (radius zero or no dump entry) is 8 rows.
+- **The 41 fix-only sets:** all 41 are in 6136b44. 37 are (b) genuine gained (masses3_N5 4 of 6, masses3_N6 7, masses3_N7 14, masses4_N4 8 of 10, masses5_N3 4); the other 4 are c3 (QP infeasible at the centre, masses3_N5 2 and masses4_N4 2).
+- **Time:** 6136b44 is 0 to 13 percent slower than a3ebf60 on these ten problems (masses4_N5 467 s against 450 s, masses5_N4 443 s against 405 s, single runs).
+- **Not covered:** the other 143 problems (identical sets for old and a3ebf60) were not solved with 6136b44.
