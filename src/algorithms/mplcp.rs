@@ -842,9 +842,13 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
     crate::census::basis_reset();
     // the old hint (parent centre on the row) in facet coordinates: N' hint (N is orthogonal to g)
     let hint_f: Option<Vec<f64>> = old_hint.map(|h| nb.iter().map(|v| h.iter().zip(v).map(|(a, b)| a * b).sum()).collect());
-    // Without a repeated state the walk visits distinct bases (Lean walk_no_repeat), at most 2^n of them;
-    // the pivot budget of one facet is that bound capped at 20,000.
-    let budget = (1usize << n.min(15)).clamp(64, 20_000);
+    // Pivot budget of one facet walk. The exact cycle check makes the walk finite (distinct states, so at
+    // most 2^n pivots, Lean walk_no_repeat), but that bound is no use as a cost limit: walks of thousands
+    // of pivots exist and never find a region the shorter ones miss (measured on masses3_N3 to masses8_N2,
+    // pop_005, rand_t12 and rand_t14: 30 to 20,000 pivots give the same regions apart from 3 on pop_005,
+    // while the time grows 10-fold at 300 and 300-fold at 3,000). 2n pivots (at least 64) keeps the cost
+    // of the old caps, and a spent budget is not silent: the facet also gets the QP just across it.
+    let budget = (2 * n).max(64);
     let complete = pivot_facet(p, &mut work, n, Facet { ef: &ef, ff: &ff, sc: &rowsc, seen, hint_f: hint_f.as_deref() }, budget, &mut out);
     *ws = Some(work);
     crate::census_bump!(AdjCase2, 1);
