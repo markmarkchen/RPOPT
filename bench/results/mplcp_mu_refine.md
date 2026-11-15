@@ -46,7 +46,7 @@ Neighbour sets compared as sorted active sets, known sets (Seen) removed from th
 
 (walk calls left is the audit run's count, where the walk answers every call; with the refined rule on, 241 remain on masses4_N3.)
 
-* 82% to 89% of the audited calls give the same set. Where they differ the walk is the one with more: the extra sets are linearly dependent rows (the walk
+* 69% to 86% of the audited calls give the same set (masses4_N3 73%, masses5_N3 85%, masses4_N4 82%, pop_005 86%, rand_t12 69%, masses3_N6 77%, masses3_N7 78%). Where they differ the walk is the one with more: the extra sets are linearly dependent rows (the walk
   removes a row whose multiplier is zero, or descends from such a set: not an active set of any region), or the walk wandered through further bases
   because a positive noise multiplier made it think there was a neighbour although every real multiplier is negative (the P- of the exact dependency is empty).
   In 8 calls of pop_005 and 1 to 2 of masses4_N3 and masses3_N7 the enumeration has a set the walk lacks: in the sampled cases the walk's lexicographic
