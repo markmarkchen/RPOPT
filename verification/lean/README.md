@@ -9,11 +9,12 @@ Lean 4 and Mathlib proofs of the mathematics behind two RPOPT solvers:
 
 The proofs are at the model level, in exact real arithmetic. They justify the steps the Rust code
 takes, not its floating point execution. Every result listed as proved has no `sorry`, and
-`Audit.lean` prints the axioms of all 107 main theorems: each uses only `propext`,
-`Classical.choice` and `Quot.sound` (two use none). Modelling assumptions are explicit hypotheses,
+`Audit.lean` prints the axioms of all 110 main theorems: each uses at most `propext`,
+`Classical.choice` and `Quot.sound` (two use none, one only `propext` and `Quot.sound`). Modelling
+assumptions are explicit hypotheses,
 never axioms.
 
-Rust line numbers refer to main at commit `f234e64`.
+Rust line numbers refer to main at commit `76c5070` (mplcp.rs unchanged since `f234e64`).
 
 ## Build
 
@@ -52,6 +53,7 @@ lake env lean Audit.lean    # one line per main theorem: the axioms it depends o
 | `MplpLex/Certificate.lean` | LP weak duality and the basis certificate |
 | `MplpLex/Pivot.lean` | ratio tests, rank-1 basis update, dual and primal simplex steps |
 | `MplpLex/LexUnique.lean` | uniqueness of the lexico-optimal basis |
+| `MplpLex/Crossing.lean` | the direct facet crossing: no admissible ratio-test row means nothing feasible beyond the facet |
 | `MplpLex/Enumeration.lean` | the enumeration path for H = 0: conditions (D) and (Z), full-dimensional regions, no overlaps |
 | `Audit.lean` | `#print axioms` for every main theorem |
 
@@ -110,6 +112,8 @@ lake env lean Audit.lean    # one line per main theorem: the axioms it depends o
 | B2 | `dual_pivot` | phase 1: the ratio test keeps the multipliers dual feasible and drives the leaving one to 0 | proved |
 | B2 | `primal_direction`, `ratio_test`, `lex_ratio_test` | phase 2: the edge direction and the (lexicographic) ratio test keep primal feasibility | proved |
 | B3 | `lexOptimal_unique`, `nondeg_basis_unique` | the lexico-optimal basis is unique for each `θ` (no overlaps) | proved |
+| B2 | `infeasible_beyond`, `row_j_combination` | no inequality position with `T_jp > 0` in the dual ratio test: no feasible point anywhere beyond the facet (Farkas certificate) | proved |
+| B2 | `reach_congr` | the explored set depends only on the neighbour relation, not on which procedure computes it | proved |
 | B3 | gap-freeness | every feasible `θ` has a lexico-optimal basis (termination of the lexicographic simplex) | **open** |
 | Enum | `EnumBasis.LexOpt` | step 1: lexico-optimal at θ means (D) and lexico-positive nonbasic slack rows; `lexOpt_unique` ties it to `lexOptimal_unique` | definition, proved link |
 | Enum | `primalLex_iff_of_interior`, `slack_zero_of_interior` | step 2: in the interior of the closed region, primal lexico-feasibility is exactly (Z) | proved |
@@ -163,7 +167,7 @@ rather than returns.
 
 ## Correspondence with the Rust code
 
-`mplcp.rs` at `f234e64` unless noted; `build` is `mplcp_build.rs`.
+`mplcp.rs` at `76c5070` unless noted; `build` is `mplcp_build.rs`.
 
 | Lean theorem | Rust function or step | What it justifies |
 |:-------------|:----------------------|:------------------|
@@ -200,18 +204,20 @@ rather than returns.
 | `known_region_unique_neighbour`, `known_region_skip`, `vertices_subset_polyhedron` | facet certificate `certify` (1587-1656), asked in `adjacent` after the fast path (1056-1061); `CERT` mode (1479, default 1 at 3 to 5 parameters) | skipping a Case-2 facet contained in a known region |
 | `cr_interiors_disjoint` | stray overlapping regions (pop_005, pop_007, pop_011) | which hypothesis an overlap breaks |
 | `basic_solves`, `slack_primalOf`, `lcp_unique_optimizer` | tightness guard: `TIGHT_TOL` (1888), `qp_agrees` (1905), `tight_residual` (1921), used in `build_cand` (1953-1963) | an exact tableau makes its active rows tight under its law (residual 0); the QP optimizer at a point is unique |
-| `relint_of_strict` | mplp_lex.rs facet point: foot of the region's Chebyshev centre (622-642), else the facet's Chebyshev LP (646-672) | the point used for the lexicographic neighbour is in the facet's relative interior |
+| `relint_of_strict` | mplp_lex.rs facet point: foot of the region's Chebyshev centre (627-647), else the facet's Chebyshev LP (648-677) | the point used for the lexicographic neighbour is in the facet's relative interior |
 | `chebyshev_ball_feasible` | program.rs `ball_points` (1227), `feasible_space_chebychev_ball` (1075) with the Clarabel fallback (1242); used by `gen_optimal_active_set` and `degenerate_start` | sampled start parameters are feasible (inequality rows) |
 | `reach_least` | `pivot_solve` (1970), `pivot_solve_par` (2048), `seen` (1973, 1997, 2025, 2057, 2095, 2120) | the explored set does not depend on the visiting order |
-| `reach_skip` | `seen_claim` before `build_cand` (1413, 1997); mplp_lex `crossed` (mplp_lex.rs 517, 529, 560-562, 689) | skipping known neighbours is safe |
+| `reach_skip` | `seen_claim` before `build_cand` (1413, 1997); mplp_lex `crossed` (mplp_lex.rs 517, 529, 560-562, 694) | skipping known neighbours is safe |
 | `lp_certificate`, `basis_certificate` | mplp_lex.rs header (13-16), `Lex::solve` (273-386), `Ok(())` at 367 | a basis with no lexico-negative slack or multiplier row is optimal |
 | `rank1_inverse`, `rank1_tableau` | mplp_lex.rs `Lex::pivot` (168-190) | the rank-1 update of `binv` and `t` |
 | `dual_pivot`, `ratio_test` | mplp_lex.rs phase 1 (319-351), ratio `l / y` with `y > 1e-9` (333-347) | phase 1 keeps dual feasibility |
 | `primal_direction`, `lex_ratio_test` | mplp_lex.rs phase 2 (352-383), `aj = -T_jp` (374), `slack_cmp` (235-267) | phase 2 keeps primal lexico-feasibility |
 | `lexOptimal_unique` | mplp_lex.rs header (17-19), `slack_sign` (205-232), `lam_row` (389-404) | one lexico-optimal basis per `θ` |
-| `EnumBasis.dual`, `LexOpt` | mplp_lex.rs `dual_lex_feasible_bases` (781-894), test `lex_sign(&lam_out) <= 0` (863); `enumeration_applies` (768-777) requires H = 0 | (D) is a property of the basis alone |
-| `EnumBasis.ZCond`, `primalLex_iff_of_interior` | mplp_lex.rs `candidate_ok` (901-983): zero test (937-952), ε-row sign over `B ∪ {j}` (959-979) | (Z) on the identically zero slacks |
-| `fullDim_iff`, `enum_interiors_disjoint` | mplp_lex.rs `enumerate_regions` (987-993), dispatch in `solve` (454-455), `use_enumeration` cost model (753-765) | the enumerated regions are the full-dimensional lexicographic regions, without overlaps |
+| `infeasible_beyond`, `row_j_combination` | mplp_lex.rs `direct_cross` (1070-1115): ratio test over inequality positions with `T_jp > 1e-9` (1076-1090); none means nothing beyond (1091-1098), and `solve` skips the facet (570, 578-581); `direct_row` (1049-1060) | the skipped facet has no neighbour; the LP path's phase 1 uses the same `y > 1e-9` rule (336) and ends in `Fail::Infeasible` |
+| `reach_congr`, `lexOptimal_unique` | the success-rate gate `s_avg`, `q_avg` (524, 542, 615-619), no longer fed by these skips (31a12ae) | the gate only chooses between the direct crossing and the LP path, which return the same neighbour |
+| `EnumBasis.dual`, `LexOpt` | mplp_lex.rs `dual_lex_feasible_bases` (786-899), test `lex_sign(&lam_out) <= 0` (868); `enumeration_applies` (773-782) requires H = 0 | (D) is a property of the basis alone |
+| `EnumBasis.ZCond`, `primalLex_iff_of_interior` | mplp_lex.rs `candidate_ok` (906-988): zero test (942-957), ε-row sign over `B ∪ {j}` (964-984) | (Z) on the identically zero slacks |
+| `fullDim_iff`, `enum_interiors_disjoint` | mplp_lex.rs `enumerate_regions` (992-998), dispatch in `solve` (454-455), `use_enumeration` cost model (758-770) | the enumerated regions are the full-dimensional lexicographic regions, without overlaps |
 
 ## Modelling assumptions
 
@@ -242,7 +248,9 @@ All of these appear as explicit hypotheses of the theorems that need them.
 - Floating point, rounding, and every tolerance listed above.
 - The sub-facet polytopes and the Chebyshev radius `> 1e-9` (pieces without interior are dropped);
   the recursion itself beyond its pointwise walk.
-- The region builder (`build_region`, `build` 18-146, and `gen_cr_from_prepared` in `mpqp_utils.rs`): vertex
+- The region builder (`build_region`, `build` 18-146, and `gen_cr_from_prepared` in `mpqp_utils.rs`; its Chebyshev LP now
+  retries cold, then with the rows reversed, then with a relaxed right-hand side, `chebyshev_ball_from_or_cold`, 76c5070,
+  numerics only): vertex
   clipping (now up to 5 parameters), the LP redundancy removal above that, `remove_duplicate_rows`, the
   Chebyshev center and the facet hint. The model treats a region as the set `CR`; its row list only matters
   through the facets that get searched.
@@ -465,6 +473,33 @@ All of these appear as explicit hypotheses of the theorems that need them.
         near points where `λ_j` vanishes, at `F`'s boundary;
       - a piece thinner than the witness margin `1e-8` or the Chebyshev radius `1e-9` is dropped.
       - `nt = 1` (`d1 == 0`) is left to the walk, although the model covers it.
+15. **mplp_lex: nothing beyond the facet (76c5070).** `direct_cross` reports "nothing beyond" when no
+    inequality position has `T_jp > 1e-9`, where `T = A β` and `T_j = A_j β` is the row of the entering
+    constraint `j`, as in `Lex::pivot`.
+    - *Proved* (`infeasible_beyond`): with `T_jp ≤ 0` at every inequality position, no `x` is feasible at
+      any parameter where `B`'s basic point violates row `j`. The certificate is the identity
+      `A_j = Σ_p T_jp A_{b p}`. `T` does not depend on θ, so this holds on the whole open half-space beyond
+      the facet hyperplane: the facet lies on the boundary of the feasible parameter set and has no
+      neighbour. Skipping it without an LP is exact.
+    - *Sign convention:* it matches the code. The candidates are the positions with `T_jp > 1e-9`
+      (1076-1078), equality positions `p < neq` are excluded, and in the model they are the rows of `E`
+      with free sign. The code's "none" is therefore `T_jp ≤ 1e-9`, not `≤ 0`.
+    - *The LP path agrees:* phase 1 of `Lex::solve` uses the same `y > 1e-9` rule (336) and ends in
+      `Fail::Infeasible`.
+    - *The success-rate gate (31a12ae):* `s_avg` and `q_avg` only decide whether a region tries the direct
+      crossing or the LP path. Both return the same neighbour:
+      - an accepted direct crossing is lexico-optimal at `θ0 + γ n`, because the check is sign-only and the
+        synthetic slack values have the right signs, so it equals the LP path's basis (`lexOptimal_unique`);
+      - a failed attempt falls back to the LP path;
+      - both report nothing beyond a boundary facet.
+      So the neighbour relation, and with it the explored set, does not depend on the gate (`reach_congr`).
+      Leaving the skips out of the averages changes speed only.
+    - *Departures:*
+      - a true `T_jp` in `(0, 1e-9]` counts as `≤ 0`. In exact arithmetic the program is then feasible beyond
+        the facet, though only far from the basic point (the slack of row `b p` must grow like
+        `|s_j| / T_jp`). Both paths make the same call, so they still agree with each other;
+      - the comment at 579 ("counts as a success of the attempt") is out of date since 31a12ae, which
+        removed the update.
 
 The measurements in findings 3 to 5 come from an uncommitted debug build run on the laptop (runs of 4
 to 30 s). They are diagnostics, not timings.

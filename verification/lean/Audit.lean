@@ -125,3 +125,7 @@ import RpoptProofs
 #print axioms Rpopt.DepFacet.pieces_cover
 #print axioms Rpopt.DepFacet.argmin_only_on_facet
 #print axioms Rpopt.DepFacet.hinj_of_dependency
+-- Round 9: mplp_lex direct crossing, nothing beyond the facet (76c5070)
+#print axioms Rpopt.row_j_combination
+#print axioms Rpopt.infeasible_beyond
+#print axioms Rpopt.reach_congr

@@ -846,10 +846,8 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
         return None;
     }
     let kk = tab.col_of(comp(var, n));
-    if tab.t[c * n + kk].abs() > PTOL * gam[c].abs().max(1.0) {
-        return None;
-    }
-    if (0..n).any(|i| i != c && tab.row_var[i] < n && tab.t[i * n + kk].abs() > 1e-8) {
+    // zero pivot and zero slack columns, in the scale-free measure (see `pivot_measure`)
+    if pivot_measure(p, tab, c, kk) > MEASURE_ZERO {
         return None;
     }
     // Hypotheses of the rank-1 lemma (Lean DependentFacet): row c of the tableau is w_c = rho_c + sum_j mu_j w_j with
@@ -1010,6 +1008,31 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
     Some(out)
 }
 
+/// Scale-free size of the pivot of exchanging the vanishing slack row `c` with its complement (column `kk`):
+/// the larger of the pivot |T[c,kk]| / M_cc and the slack-column entries |T[i,kk]| / sqrt(M_ii M_cc) over the other
+/// slack rows (M the pLCP matrix, so the diagonal is the scale of each constraint). The pivot of an exact linear
+/// dependence of constraint c on the active rows has measure 0 up to rounding (observed below 4e-10), and any other
+/// pivot has measure of at least 1.7e-5 on the masses, POP and random problems measured; M entries range from 5e-13
+/// to 5e2, so absolute thresholds (PTOL on the pivot, 1e-8 on the column) called a tiny but nonzero pivot zero.
+fn pivot_measure(p: &Plcp, tab: &Tab, c: usize, kk: usize) -> f64 {
+    let n = p.n;
+    let vc = tab.row_var[c];
+    let mcc = p.m[vc * n + vc].max(1e-300);
+    let mut m = tab.t[c * n + kk].abs() / mcc;
+    for i in 0..n {
+        let vi = tab.row_var[i];
+        if i != c && vi < n {
+            m = m.max(tab.t[i * n + kk].abs() / (p.m[vi * n + vi].max(1e-300) * mcc).sqrt());
+        }
+    }
+    m
+}
+
+/// Measure at or below which the pivot is zero (rank-1 case), and above which it is nonzero (Case 1). Between them
+/// the walk decides; `PivotGap` counts those calls.
+const MEASURE_ZERO: f64 = 1e-9;
+const MEASURE_NONZERO: f64 = 1e-6;
+
 /// Neighbouring z-row sets across the facet {e_k θ = f_k} of the region with tableau `tab`.
 ///
 /// `cert` is asked only when the fast path has failed, that is, when the slow path (Case 2) would
@@ -1055,7 +1078,19 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         let kk = tab.col_of(comp(var, n));
         let pp = gam[v];
         let tve = -tab.t[v * n + kk] / pp;
-        if tve > PTOL {
+        // a pivot below the absolute PTOL is still nonzero when it is not small against the scale of M
+        // (single vanishing slack row: the neighbour is the toggle for any nonzero pivot)
+        let nonzero_rel = tve > 0.0 && tve <= PTOL && zrows.len() == 1 && var < n && {
+            let m = pivot_measure(p, tab, v, kk);
+            if m > MEASURE_ZERO && m <= MEASURE_NONZERO {
+                crate::census_bump!(PivotGap, 1);
+            }
+            m > MEASURE_NONZERO
+        };
+        if nonzero_rel {
+            crate::census_bump!(FastRel, 1);
+        }
+        if tve > PTOL || nonzero_rel {
             let blocked = zrows.iter().any(|&i| i != v && -(tab.t[i * n + kk] + gam[i] * tve) > PTOL);
             if !blocked {
                 crate::census_bump!(AdjFast, 1);

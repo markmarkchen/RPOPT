@@ -18,3 +18,4 @@ import RpoptProofs.MplpLex.Certificate
 import RpoptProofs.MplpLex.Pivot
 import RpoptProofs.MplpLex.LexUnique
 import RpoptProofs.MplpLex.Enumeration
+import RpoptProofs.MplpLex.Crossing

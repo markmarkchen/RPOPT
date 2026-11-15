@@ -467,15 +467,15 @@ fn highdim_tables(rows: &[Row], skipped: &[(String, String)]) {
         );
     }
     println!("\n### High-dimension 3i: mplcp rank-1 enumeration of Case 2\n");
-    println!("| problem | Case-2 calls | answered by the enumeration | handed to the walk | candidates emitted | members dropped as known | emitted on a witness | sub-facet LPs | members with an empty sub-facet | neighbour LPs/region | distinct active sets tested | repeated tests | of which empty |");
-    println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+    println!("| problem | Case-2 calls | answered by the enumeration | handed to the walk | candidates emitted | members dropped as known | emitted on a witness | sub-facet LPs | members with an empty sub-facet | neighbour LPs/region | distinct active sets tested | repeated tests | of which empty | fast path by relative pivot | pivot measure in the gap |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
     for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::AdjCase2) > 0.0) {
         let n = r.regions.max(1) as f64;
         println!(
-            "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {:.1} | {} | {} | {} |",
+            "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {:.1} | {} | {} | {} | {} | {} |",
             r.problem, c(r, Counter::AdjCase2), c(r, Counter::R1Handled), c(r, Counter::R1Fallback), c(r, Counter::R1Emitted), c(r, Counter::R1SkipSeen),
             c(r, Counter::R1WitnessAcc), c(r, Counter::R1LpRun), c(r, Counter::R1EmptyMember), c(r, Counter::PfCheb) / n,
-            c(r, Counter::R1TestDistinct), c(r, Counter::R1TestRepeat), c(r, Counter::R1EmptyRepeat)
+            c(r, Counter::R1TestDistinct), c(r, Counter::R1TestRepeat), c(r, Counter::R1EmptyRepeat), c(r, Counter::FastRel), c(r, Counter::PivotGap)
         );
     }
     println!("\n### High-dimension 3j: parametric_daqp active-set tests and region builds\n");
