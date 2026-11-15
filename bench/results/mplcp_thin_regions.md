@@ -69,5 +69,4 @@ against known regions differing in at most two constraints is the next item.
 * Region sets, `base` = 685c144, `fix` = base + the merged branch, `oracle` = fix with the walk only: identical in every number to the pre-rebase run (same 12 problems with the same region counts
   and the same set hashes for base, fix and oracle; fix against oracle: 157 of 158 identical, masses3_N7 one genuine region more). The box chain and the twin snap change no region set on these 158 problems.
 * Timing (51 problems, `base` against `fix`, A/A pair): all 0.993, masses 0.979, not masses 0.997, 2 to 5 parameters 0.995, 6 to 16 parameters 0.989, A/A 0.999 to 1.000.
-* Suite (ci tag c2cost_N, 147 tests): 143 passed, 0 failed, 3 ignored with 145 of 147 results in; the two slow `pl_wnn` tests (random_mpqp_theta6 and theta8_b) were still running when this was written. The
-  pre-rebase tree passed 144/0/3.
+* Suite (ci tag c2cost_N, 147 tests as a 1-CPU array): 145 passed, 0 failed, 3 ignored, the same as main (the two slow `pl_wnn` tests, 354 s and 1,231 s, were rerun once after a disk-quota failure of the first attempt).
