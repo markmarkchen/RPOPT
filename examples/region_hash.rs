@@ -87,8 +87,8 @@ fn main() {
         // RPOPT_BOX_STATS=1: the fallback statistics of the box chain
         if std::env::var("RPOPT_BOX_STATS").is_ok() {
             let (creg, cfb, ceng, coff) = rpopt::algorithms::mplcp::box_chain_stats();
-            let (cinit, creb) = rpopt::algorithms::mplcp::box_chain_detail();
-            eprintln!("box_chain regions {creg} fallbacks_incl_init {cfb} engine_lps {ceng} init_failures {cinit} rebuild_resolved {creb} switched_off {coff}");
+            let (cinit, creb, coff_at) = rpopt::algorithms::mplcp::box_chain_detail();
+            eprintln!("box_chain regions {creg} fallbacks_incl_init {cfb} engine_lps {ceng} init_failures {cinit} rebuild_resolved {creb} switched_off {coff} at_region {coff_at}");
         }
         if std::env::var("RPOPT_INDEX_FIRST").is_ok() {
             eprintln!("index_first facets_skipped/audit_checks/audit_violations/regions_skipped/regions_would_skip/path_differs {:?}", rpopt::algorithms::mplcp::index_first_stats());

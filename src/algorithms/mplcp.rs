@@ -3478,8 +3478,8 @@ pub fn box_chain_stats() -> (u64, u64, u64, bool) {
     build::chain_stats()
 }
 
-/// (chains that could not be started at a vertex, so that every later objective went to the engine; failed optimum checks that rebuilding the state resolved) of the last solve.
-pub fn box_chain_detail() -> (u64, u64) {
+/// (chains that could not be started at a vertex, so that every later objective went to the engine; failed optimum checks that rebuilding the state resolved; the region count at which the guard switched the chain off, 0 if it did not) of the last solve.
+pub fn box_chain_detail() -> (u64, u64, u64) {
     build::chain_detail()
 }
 
