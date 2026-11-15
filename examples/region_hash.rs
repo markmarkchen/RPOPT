@@ -17,6 +17,10 @@ fn main() {
         rpopt::algorithms::mplp_lex::set_mode(v.parse().unwrap());
     }
     let alg = MpqpAlgorithm::from_name(&args[1]).expect("algorithm");
+    // MPLCP_NO_DAQP=1: answer every sub-facet nonemptiness test with the LP
+    if std::env::var("MPLCP_NO_DAQP").is_ok() {
+        rpopt::algorithms::mplcp::set_daqp_tests(false);
+    }
     // MPLCP_TAB_BUDGET=<bytes>: limit on live parent tableaux (default 256 MiB, 0 = none)
     if let Some(b) = std::env::var("MPLCP_TAB_BUDGET").ok().and_then(|v| v.parse().ok()) {
         rpopt::algorithms::mplcp::set_tab_budget(b);

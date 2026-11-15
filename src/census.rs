@@ -322,8 +322,14 @@ mod imp {
         PdLpFallback,
         PdLdlNanos,
         PdSetupNanos,
+        /// mplcp sub-facet nonemptiness tests answered by DAQP (nonempty on the shifted rows / empty on the unshifted rows),
+        /// sent on to the LP (thin band or DAQP undecided), and ns spent in the DAQP solves
+        DqNonempty,
+        DqEmpty,
+        DqFallback,
+        DqNanos,
     }
-    pub const NC: usize = 138;
+    pub const NC: usize = 142;
 
     #[derive(Clone, Debug)]
     pub struct Stats {

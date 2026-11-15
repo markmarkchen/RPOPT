@@ -492,6 +492,17 @@ fn highdim_tables(rows: &[Row], skipped: &[(String, String)]) {
             r.solve_s * 1e3 - tn / 1e6 - bn / 1e6
         );
     }
+    println!("\n### High-dimension 3k: mplcp sub-facet nonemptiness tests answered by DAQP\n");
+    println!("| problem | regions | solve ms | DAQP nonempty / region | DAQP empty / region | LP fallback / region | share decided by DAQP | us per DAQP test | neighbour LPs / region |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::DqNonempty) + c(r, Counter::DqEmpty) + c(r, Counter::DqFallback) > 0.0) {
+        let n = r.regions.max(1) as f64;
+        let (a, b, d) = (c(r, Counter::DqNonempty), c(r, Counter::DqEmpty), c(r, Counter::DqFallback));
+        println!(
+            "| {} | {} | {:.0} | {:.2} | {:.2} | {:.2} | {:.0}% | {:.2} | {:.1} |",
+            r.problem, r.regions, r.solve_s * 1e3, a / n, b / n, d / n, 100.0 * (a + b) / (a + b + d), c(r, Counter::DqNanos) / (a + b + d) / 1e3, c(r, Counter::PfCheb) / n
+        );
+    }
     println!("\n### High-dimension 4: vertex clipping (`clip_flags`) outcomes per call\n");
     println!("| problem | algorithm | clip calls/region | ok | nt outside 2..=6 | more than 128 hyperplanes | infinite box | more than 600 vertices | too few vertices | vertex violates a row | redundancy LPs/region |");
     println!("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
