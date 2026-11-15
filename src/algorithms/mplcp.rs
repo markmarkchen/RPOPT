@@ -3183,16 +3183,17 @@ fn entry_skip_row(cur: &CriticalRegion, entry: Option<&(Vec<f64>, f64)>) -> Opti
 /// classification and no `adjacent` call are needed.
 static INDEX_FIRST: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(1);
 const IDXZ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-// facets skipped, audit checks, audit violations, regions whose tableau was skipped, regions that would be (audit)
-static INDEX_STATS: [std::sync::atomic::AtomicU64; 5] = [IDXZ; 5];
+// facets skipped, audit checks, audit violations (the search returned an unknown candidate), regions whose tableau was skipped, regions that would be (audit), audit checks whose search ended another way without an unknown candidate
+static INDEX_STATS: [std::sync::atomic::AtomicU64; 6] = [IDXZ; 6];
 
 pub fn set_index_first(mode: u8) {
     INDEX_FIRST.store(mode, std::sync::atomic::Ordering::Relaxed);
 }
 
-/// Facets skipped by index, audit checks, audit violations (must be 0), regions whose tableau was skipped, regions that would be.
-pub fn index_first_stats() -> [u64; 5] {
-    let mut o = [0u64; 5];
+/// Facets skipped by index, audit checks, audit violations (must be 0), regions whose tableau was skipped, regions that would be,
+/// audit checks whose search ended another way (benign: nothing unknown).
+pub fn index_first_stats() -> [u64; 6] {
+    let mut o = [0u64; 6];
     for (i, c) in INDEX_STATS.iter().enumerate() {
         o[i] = c.load(std::sync::atomic::Ordering::Relaxed);
     }
@@ -3321,13 +3322,27 @@ fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>
             AUDIT_CERTIFIED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
         if let Some((omega, key)) = idx_audit {
-            // the search ran as before: it must have ended without a neighbour, by the no-vanishing-row exit (Theta row) or on
-            // a known Case-1 toggle with the same active set
+            // the search ran as before. Exactness: nothing it returns may be unknown (a candidate the caller would claim). Separately
+            // counted: searches that did not end in the expected way (no vanishing row for a Theta row, a known toggle with the
+            // same active set otherwise), which lose nothing when the neighbour is known.
             INDEX_STATS[1].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let path = IDX_PATH.with(|c| c.get());
-            let ok = nbrs.is_empty() && if omega { path == 1 } else { path == 2 && IDX_TOGGLE_KEY.with(|c| c.get()) == key };
-            if !ok {
+            let unknown = |nb: &Nbr| match nb {
+                Nbr::Toggle(v, _) => !seen.map_or(false, |sn| sn.contains_key(&plcp.active_set(z_toggle(tab, plcp.n, *v).into_iter()))),
+                Nbr::Z(z, _) => !seen.map_or(false, |sn| sn.contains_key(&plcp.active_set(z.iter().copied()))),
+                Nbr::Across(_) => true,
+            };
+            if nbrs.iter().any(unknown) {
                 INDEX_STATS[2].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            } else {
+                let ok = nbrs.is_empty() && if omega { path == 1 } else { path == 2 && IDX_TOGGLE_KEY.with(|c| c.get()) == key };
+                if !ok {
+                    INDEX_STATS[5].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    if std::env::var_os("RPOPT_INDEX_DEBUG").is_some() {
+                        let nl = cur.lambda_set.len();
+                        eprintln!("IDXPATH k={} kind={} omega={} path={} nbrs={} keyeq={} rows={}", k, if k < nl { "lambda" } else if k < nl + cur.regular_set.1.len() { "regular" } else { "omega" }, omega, path, nbrs.len(), IDX_TOGGLE_KEY.with(|c| c.get()) == key, cur.e.rows);
+                    }
+                }
             }
         }
         if nbrs.is_empty() {

@@ -56,7 +56,7 @@ fn main() {
         let sol = solve_mpqp(&p, alg);
         let dt = t0.elapsed().as_secs_f64();
         if std::env::var("RPOPT_INDEX_FIRST").is_ok() {
-            eprintln!("index_first facets_skipped/audit_checks/audit_violations/regions_skipped/regions_would_skip {:?}", rpopt::algorithms::mplcp::index_first_stats());
+            eprintln!("index_first facets_skipped/audit_checks/audit_violations/regions_skipped/regions_would_skip/path_differs {:?}", rpopt::algorithms::mplcp::index_first_stats());
         }
         let mut recs: Vec<(Vec<usize>, Vec<i64>)> = sol
             .critical_regions
