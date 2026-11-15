@@ -1190,17 +1190,17 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
     let d1 = nt - 1;
     crate::census_t0!(cm);
     if d1 == 0 || zrows.len() != 1 || pv.len() != 1 || pv[0] != zrows[0] {
-        return None;
+        { crate::census_reason!(1); return None; }
     }
     let c = zrows[0];
     let var = tab.row_var[c];
     if var >= n {
-        return None;
+        { crate::census_reason!(2); return None; }
     }
     let kk = tab.col_of(comp(var, n));
     // zero pivot and zero slack columns, in the scale-free measure (see `pivot_measure`)
     if pivot_part(p, tab, c, kk) > MEASURE_ZERO || pivot_measure(p, tab, c, kk) > MEASURE_ZERO {
-        return None;
+        { crate::census_reason!(3); return None; }
     }
     // Hypotheses of the rank-1 lemma (Lean DependentFacet): row c of the tableau is w_c = rho_c + sum_j mu_j w_j with
     // no z column, and column kk is -mu_j on the active rows and 0 elsewhere (checked above for the slack rows).
@@ -1208,7 +1208,7 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
     for (col, &cv) in tab.col_var.iter().enumerate().take(n) {
         if cv >= n && cv < 2 * n {
             if tab.t[c * n + col].abs() > 1e-8 {
-                return None;
+                { crate::census_reason!(4); return None; }
             }
         }
     }
@@ -1248,11 +1248,11 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
             }
         }
         if (tab.t[c * n + colw] - mi).abs() > 1e-8 * (ujj + mi.abs()) {
-            return None;
+            { crate::census_reason!(5); return None; }
         }
         if nu > MU_ZERO && nu <= MU_NONZERO {
             // neither zero nor safely nonzero, in the scale of the dependency: the walk decides
-            return None;
+            { crate::census_reason!(6); return None; }
         }
         if mi > 0.0 && nu > MU_NONZERO {
             pm.push(i);
@@ -1302,7 +1302,7 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
         for bb in a + 1..pm.len() {
             let d = cut(a, bb);
             if d.iter().all(|v| v.abs() <= ZTOL * scale(a, bb)) {
-                return None; // two ratios identical on F: the lexicographic tie-break decides, the walk handles it
+                { crate::census_reason!(7); return None; } // two ratios identical on F: the lexicographic tie-break decides, the walk handles it
             }
         }
     }
@@ -1341,7 +1341,7 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
                     empty = true;
                     break;
                 } else if d[0] >= -ZTOL * sc {
-                    return None; // a tie as a constant: the walk decides
+                    { crate::census_reason!(8); return None; } // a tie as a constant: the walk decides
                 }
                 continue;
             }
@@ -1636,6 +1636,8 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
     let budget = (WALK_BUDGET_PER_ROW * n).max(WALK_BUDGET_MIN);
     crate::census_lap!(cm, Setup);
     #[cfg(feature = "lp_census")]
+    let r1_reason = crate::census::reason_take();
+    #[cfg(feature = "lp_census")]
     let wk_class = {
         let k = zrows.len();
         let nsl = zrows.iter().filter(|&&i| tab.row_var[i] < n).count();
@@ -1645,7 +1647,15 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
                 let kk = tab.col_of(comp(tab.row_var[c], n));
                 let m = pivot_measure(p, tab, c, kk);
                 if m <= MEASURE_ZERO {
-                    0
+                    // the rank-1 enumeration refused a zero-pivot call: 8 a nonzero z column of row c, 9 symmetry mismatch, 10 multiplier in the gap
+                    // band, 11 a tie between two ratios, 0 anything else (rank-1 not tried)
+                    match r1_reason {
+                        4 => 8,
+                        5 => 9,
+                        6 => 10,
+                        7 | 8 => 11,
+                        _ => 0,
+                    }
                 } else if m <= MEASURE_NONZERO {
                     1
                 } else {

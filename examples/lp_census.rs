@@ -580,7 +580,7 @@ fn highdim_tables(rows: &[Row], skipped: &[(String, String)]) {
     println!("\n### High-dimension 3n: mplcp walk calls by class of vanishing rows (time without census work)\n");
     println!("| problem | class | walk calls | share of calls | us/call | share of solve | LP share of class time | DAQP share | Gamma share |");
     println!("|---|---|---:|---:|---:|---:|---:|---:|---:|");
-    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::ChebRows) > 0.0) {
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::AdjCase2) > 0.0) {
         let tot: f64 = (0..census::NWK).map(|k| r.s.counters[census::WK_BASE + k * 5] as f64).sum();
         for k in 0..census::NWK {
             let g = |f: usize| r.s.counters[census::WK_BASE + k * 5 + f] as f64;
