@@ -32,3 +32,13 @@ debug = false
 [profile.profiling]
 inherits = "release"
 debug = "line-tables-only"
+
+# Test and correctness runs: release optimisation without fat LTO, so a build links in parallel and
+# rebuilds incrementally. Rust never reorders or fuses float arithmetic, so results do not depend
+# on LTO. Timing and benchmarks keep the release profile.
+#   cargo test --profile gate
+[profile.gate]
+inherits = "release"
+lto = false
+codegen-units = 16
+incremental = true
