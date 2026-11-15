@@ -847,7 +847,7 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
     }
     let kk = tab.col_of(comp(var, n));
     // zero pivot and zero slack columns, in the scale-free measure (see `pivot_measure`)
-    if pivot_measure(p, tab, c, kk) > MEASURE_ZERO {
+    if pivot_part(p, tab, c, kk) > MEASURE_ZERO || pivot_measure(p, tab, c, kk) > MEASURE_ZERO {
         return None;
     }
     // Hypotheses of the rank-1 lemma (Lean DependentFacet): row c of the tableau is w_c = rho_c + sum_j mu_j w_j with
@@ -1018,7 +1018,7 @@ fn pivot_measure(p: &Plcp, tab: &Tab, c: usize, kk: usize) -> f64 {
     let n = p.n;
     let vc = tab.row_var[c];
     let mcc = p.m[vc * n + vc].max(1e-300);
-    let mut m = tab.t[c * n + kk].abs() / mcc;
+    let mut m = pivot_part(p, tab, c, kk);
     for i in 0..n {
         let vi = tab.row_var[i];
         if i != c && vi < n {
@@ -1026,6 +1026,14 @@ fn pivot_measure(p: &Plcp, tab: &Tab, c: usize, kk: usize) -> f64 {
         }
     }
     m
+}
+
+/// The pivot part |T[c,kk]| / M_cc of `pivot_measure`, O(1). The measure is the maximum of this and the column part, so
+/// a pivot part above a threshold already puts the measure above it and the O(n) column loop can be skipped.
+fn pivot_part(p: &Plcp, tab: &Tab, c: usize, kk: usize) -> f64 {
+    let n = p.n;
+    let vc = tab.row_var[c];
+    tab.t[c * n + kk].abs() / p.m[vc * n + vc].max(1e-300)
 }
 
 /// Measure at or below which the pivot is zero (rank-1 case), and above which it is nonzero (Case 1). Between them
@@ -1083,7 +1091,20 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         // pivot above PTOL is rounding of an exact dependence when the measure is at most MEASURE_ZERO: that
         // facet is a rank-1 Case 2 and not a Case-1 toggle (`demoted`).
         let single = zrows.len() == 1 && var < n && tve > 0.0;
-        let m = if single { pivot_measure(p, tab, v, kk) } else { f64::INFINITY };
+        // the O(n) column loop is needed only when the decision is not already fixed by the pivot part: above
+        // MEASURE_ZERO a call with tve > PTOL cannot be demoted, above MEASURE_NONZERO a call with tve <= PTOL is
+        // nonzero; the census build always computes the full measure so that `PivotGap` counts exactly
+        let m = if !single {
+            f64::INFINITY
+        } else {
+            let pp = pivot_part(p, tab, v, kk);
+            let decided = if tve > PTOL { pp > MEASURE_ZERO } else { pp > MEASURE_NONZERO };
+            if decided && !cfg!(feature = "lp_census") {
+                pp
+            } else {
+                pivot_measure(p, tab, v, kk)
+            }
+        };
         if single && m > MEASURE_ZERO && m <= MEASURE_NONZERO {
             crate::census_bump!(PivotGap, 1);
         }
