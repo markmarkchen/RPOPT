@@ -1,4 +1,4 @@
-problem,solver,source,regions,total_ms,cand_ms,rowgen_ms,box_ms,perrow_ms,cheb_ms,build_other_ms,tab_ms,rest_ms,case2_ms,rank1_ms
+problem,solver,source,regions,total_ms,cand_ms,rowgen_ms,box_ms,perrow_ms,cheb_ms,build_other_ms,tab_ms,rest_ms,case2_ms,walk_ms
 sys3x2_N5,mplcp,census,973,25.251,8.374,2.971,0.000,0.000,2.769,7.771,1.254,2.111,1.452,0.000
 sys3x2_N5,graph,census,973,195.323,20.219,15.323,0.000,0.000,2.093,0.000,0.000,157.688,0.000,0.000
 sys3x2_N5,combinatorial_graph,census,973,632.300,65.818,15.392,0.000,0.000,2.228,0.000,0.000,548.863,0.000,0.000

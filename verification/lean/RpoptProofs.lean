@@ -20,6 +20,9 @@ import RpoptProofs.Optimizations.KnownRegionSkip
 import RpoptProofs.Optimizations.ReverseCrossing
 import RpoptProofs.Optimizations.BoxChain
 import RpoptProofs.Optimizations.SeenClaims
+import RpoptProofs.Optimizations.IndexFirst
+import RpoptProofs.Optimizations.SeenTable
+import RpoptProofs.Optimizations.WeaklyActive
 import RpoptProofs.MplpLex.Certificate
 import RpoptProofs.MplpLex.Pivot
 import RpoptProofs.MplpLex.LexUnique

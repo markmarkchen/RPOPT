@@ -93,11 +93,12 @@ fn profile(alg: &str, s: &Stats, dt: f64) -> Value {
     let total = dt * 1e9 - if alg == "mplcp" { slot(s, d::PF_REGSTAT_NS) } else { 0.0 };
     let build_total = if alg == "mplcp" { c(Counter::MplcpBuildNanos) } else { c(Counter::BuildNanos) };
     let build_lp = c(Counter::BuildLpNanos);
-    let (cand, case2, rank1, tab, rowgen, box_ns, perrow, cheb, build_other);
+    let (cand, case2, walk, tab, rowgen, box_ns, perrow, cheb, build_other);
     if alg == "mplcp" {
         cand = c(Counter::MplcpNbrNanos);
         case2 = c(Counter::AdjCase2Nanos);
-        rank1 = [Counter::R1Nanos0, Counter::R1Nanos1, Counter::R1Nanos2, Counter::R1Nanos3, Counter::R1Nanos4, Counter::R1Nanos5].iter().map(|&k| c(k)).sum::<f64>();
+        // R1Nanos0..5 are bumped after `pivot_facet`: they are the time of the walks (classified by why rank 1 refused), not of rank-1 calls
+        walk = [Counter::R1Nanos0, Counter::R1Nanos1, Counter::R1Nanos2, Counter::R1Nanos3, Counter::R1Nanos4, Counter::R1Nanos5].iter().map(|&k| c(k)).sum::<f64>();
         tab = c(Counter::MplcpTabNanos);
         rowgen = slot(s, d::LAW_NS) + slot(s, d::ROWS_NS);
         cheb = slot(s, d::CHEB_NS);
@@ -107,7 +108,7 @@ fn profile(alg: &str, s: &Stats, dt: f64) -> Value {
     } else {
         cand = if alg == "parametric_daqp" { c(Counter::PdTestNanos) } else { by(1) + by(2) };
         case2 = 0.0;
-        rank1 = 0.0;
+        walk = 0.0;
         tab = 0.0;
         rowgen = (build_total - build_lp).max(0.0);
         box_ns = by(4);
@@ -116,7 +117,7 @@ fn profile(alg: &str, s: &Stats, dt: f64) -> Value {
         build_other = (build_lp - box_ns - perrow - cheb).max(0.0);
     }
     let rest = total - cand - tab - build_total;
-    json!({"pd_tests": c(Counter::PdTests), "total": total, "cand": cand, "case2": case2, "rank1": rank1, "tab": tab, "build_total": build_total, "rowgen": rowgen, "box": box_ns, "perrow": perrow, "cheb": cheb, "build_other": build_other, "rest": rest, "work_ok": (0..28).map(|b| slot(s, d::PF_WORK_OK + b)).collect::<Vec<f64>>(), "work_fail": (0..28).map(|b| slot(s, d::PF_WORK_FAIL + b)).collect::<Vec<f64>>(), "clip": slot(s, d::PF_CLIP_NS), "clip_fail": slot(s, d::PF_CLIP_FAIL_NS), "clip_fails": slot(s, d::PF_CLIP_FAILS), "setup": slot(s, d::PF_SETUP_NS), "init": slot(s, d::PF_INIT_NS), "loop": slot(s, d::PF_LOOP_NS)})
+    json!({"pd_tests": c(Counter::PdTests), "total": total, "cand": cand, "case2": case2, "walk": walk, "tab": tab, "build_total": build_total, "rowgen": rowgen, "box": box_ns, "perrow": perrow, "cheb": cheb, "build_other": build_other, "rest": rest, "work_ok": (0..28).map(|b| slot(s, d::PF_WORK_OK + b)).collect::<Vec<f64>>(), "work_fail": (0..28).map(|b| slot(s, d::PF_WORK_FAIL + b)).collect::<Vec<f64>>(), "clip": slot(s, d::PF_CLIP_NS), "clip_fail": slot(s, d::PF_CLIP_FAIL_NS), "clip_fails": slot(s, d::PF_CLIP_FAILS), "setup": slot(s, d::PF_SETUP_NS), "init": slot(s, d::PF_INIT_NS), "loop": slot(s, d::PF_LOOP_NS)})
 }
 
 struct Row {

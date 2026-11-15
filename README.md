@@ -479,6 +479,9 @@ time of `graph` (119 problems solved).
   rebuilt from an active set is the same in any pivot order. Removing duplicated constraints keeps the feasible set
   and the optimizer, and the full program's multipliers are exactly the splits of the reduced ones among the twins.
   The lexicographic partition can change only where a twin group takes part in a primal degeneracy.
+  The index-first skip of a Case-1 facet is safe: a facet whose hyperplane no other row shares and whose toggle is
+  a built region has a single vanishing row and a nonzero pivot, so the toggle is its only neighbour. Two labels
+  of a weakly active constraint have the same region and law.
   For `mplp_lex` they show that a facet whose direct crossing finds no inequality row able to leave the basis has
   no feasible point beyond it (so skipping it without an LP is exact), and that the success-rate gate choosing
   between the direct crossing and the facet LP changes only the speed, not the regions.
