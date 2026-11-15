@@ -28,24 +28,31 @@ fn bench_problems_match_geometric() {
 }
 
 /// The counters that steer one solve (the live parent tableaux of the budget, the box-chain fallback guard) belong to that solve: solves running at the
-/// same time, on several threads, give the same regions as the same solves one after the other. Two problems that queue lazy children and use the chain
-/// (6 parameters), each run by two threads at once, one of the four with the parallel method.
+/// same time, on several threads, give the same regions as the same solves one after the other. The threads start their solves at staggered times (25 ms
+/// apart) and each runs two in a row, so a solve starts while the others hold lazy children (a start that reset a shared counter made the later releases wrap
+/// it; with overflow checks the next budget test panics). Two problems that queue lazy children, one with 6 parameters (the box chain); one of the
+/// four threads uses the parallel method.
 #[test]
 fn concurrent_solves_match_sequential() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("bench");
     let load = |dir: &str, name: &str| Arc::new(MpProgram::from_json_file(&root.join(dir).join(format!("{name}.json"))).unwrap());
     let progs = [load("problems", "masses2_N6"), load("problems_large", "masses3_N3")];
     let reference: Vec<_> = progs.iter().map(|p| region_signature(&solve_mpqp(p, MpqpAlgorithm::Mplcp).critical_regions)).collect();
-    for _round in 0..3 {
+    for _round in 0..4 {
         let handles: Vec<_> = (0..4)
             .map(|i| {
                 let p = progs[i % 2].clone();
                 let alg = if i == 3 { MpqpAlgorithm::MplcpParallel } else { MpqpAlgorithm::Mplcp };
-                std::thread::spawn(move || region_signature(&solve_mpqp(&p, alg).critical_regions))
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(25 * i as u64));
+                    (0..2).map(|_| region_signature(&solve_mpqp(&p, alg).critical_regions)).collect::<Vec<_>>()
+                })
             })
             .collect();
         for (i, h) in handles.into_iter().enumerate() {
-            assert_eq!(h.join().unwrap(), reference[i % 2], "solve {i}");
+            for (j, sig) in h.join().unwrap().into_iter().enumerate() {
+                assert_eq!(sig, reference[i % 2], "solve {i}.{j}");
+            }
         }
     }
 }

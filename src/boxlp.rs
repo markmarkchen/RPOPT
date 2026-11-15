@@ -13,8 +13,8 @@
 //! least -1e-8 (1 + |b_j|), so x is feasible up to that margin. The bound is then certified by the
 //! multipliers: c = s e_k, y = W' c, r = c - sum_i y_i a_{T_i} (computed from the rows, not from R). For
 //! every point x' of the polytope, c.x' <= c.x + g with
-//!   g = sum_i y_i^+ |b_{T_i} - a_{T_i}.x| + sum_i y_i^- sqrt(n) D + |r|_1 D,
-//! where D bounds ||x' - x||_inf over the outer box of the caller (the propagated parameter box, passed in: a valid
+//!   g = sum_i y_i^+ |b_{T_i} - a_{T_i}.x| + sum_i |y_i^-| sum_q |a_{T_i q}| D_q + sum_q |r_q| D_q,
+//! where D_q bounds |x'_q - x_q| over the outer box of the caller (the propagated parameter box, passed in: a valid
 //! bound before any objective of the chain has been optimised, and it contains the polytope the caller screens) and y^- are the negative multipliers (the
 //! simplex stops with y_i >= -1e-10). The optimum is accepted when g <= 1e-6 (1 + |c.x|); the box
 //! returned to the caller is widened by g (lo_k - g, hi_k + g for the objective's side), so the
@@ -255,27 +255,27 @@ fn certify(e: &Mat, f: &[f64], sc: &mut Scr, k: usize, sg: f64, outer: (&[f64], 
         }
         sc.s[j] = sj;
     }
-    // D bounds ||x' - x||_inf for every x' of the outer box (which contains the polytope of the caller)
-    let diam = (0..n).fold(0.0f64, |m, q| m.max((sc.x[q] - outer.0[q]).abs()).max((outer.1[q] - sc.x[q]).abs()));
+    // D_q bounds |x'_q - x_q| for every x' of the outer box (which contains the polytope of the caller), coordinate by coordinate
+    sc.alpha.clear();
+    sc.alpha.extend((0..n).map(|q| (sc.x[q] - outer.0[q]).abs().max((outer.1[q] - sc.x[q]).abs())));
     let mut g = 0.0;
-    let sqrt_n = (n as f64).sqrt();
     for i in 0..n {
         let yi = sc.y[i];
         if yi >= 0.0 {
             g += yi * sc.s[sc.t[i]].abs();
         } else {
-            g += -yi * sqrt_n * diam;
+            // a_i.x' >= a_i.x - sum_q |a_iq| D_q
+            let row = e.row(sc.t[i]);
+            g += -yi * (0..n).map(|q| row[q].abs() * sc.alpha[q]).sum::<f64>();
         }
     }
-    let mut r1 = 0.0;
     for q in 0..n {
         let mut r = if q == k { sg } else { 0.0 };
         for i in 0..n {
             r -= sc.y[i] * e[(sc.t[i], q)];
         }
-        r1 += r.abs();
+        g += r.abs() * sc.alpha[q];
     }
-    g += r1 * diam;
     if !(g <= 1e-6 * (1.0 + (sg * sc.x[k]).abs())) {
         return None;
     }
