@@ -330,6 +330,8 @@ fn iterate<const N: usize, const P1: bool, const DEGEN: bool>(st: &mut St<N>, ro
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
 fn pivot<const N: usize>(st: &mut St<N>, flags: &mut [u8], m: usize, leave: usize, enter: usize, neg: bool, u: &[f64; N], d2: f64, d1: Option<f64>) {
+    #[cfg(feature = "lp_census")]
+    crate::census::piv_bump();
     let ip = 1.0 / u[leave];
     // row `leave` of B^-1 is divided by the pivot, the others lose u_r times it (column by
     // column of the transposed inverse: contiguous axpys). Each column is written once, with a

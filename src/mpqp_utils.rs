@@ -344,7 +344,7 @@ fn chebyshev_ball_from_or_cold(a: &Mat, b: &[f64], x0: &[f64]) -> Option<crate::
 }
 
 /// Chebyshev ball LP started at `x0` = (θ0, r0).
-fn chebyshev_ball_from(a: &Mat, b: &[f64], x0: &[f64]) -> Option<crate::solver::lp::LpSolution> {
+pub(crate) fn chebyshev_ball_from(a: &Mat, b: &[f64], x0: &[f64]) -> Option<crate::solver::lp::LpSolution> {
     let n = a.cols;
     let m = a.rows;
     let mut ab = Mat::zeros(m + 1, n + 1);

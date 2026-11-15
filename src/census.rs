@@ -371,6 +371,29 @@ mod imp {
         DqEmpty,
         DqFallback,
         DqNanos,
+        /// simplex pivots of every LP (all three solver paths)
+        LpPivots,
+        /// walk Chebyshev LPs (PfCheb): rows of the child piece, rows added to the parent's polytope (sum and histogram 0 / 1 / 2 / 3+),
+        /// pivots of the cold LP, calls with a parent point (centre, witness or hint), rows of the child that the parent point violates
+        /// (all rows / added rows, sum over calls with a point), calls where the parent point is in the child piece, pivots of the
+        /// cold LP on those calls, and an extra primal-shifted solve from the parent point (calls, pivots, ns; census only)
+        ChebRows,
+        ChebAdded,
+        ChebAdd0,
+        ChebAdd1,
+        ChebAdd2,
+        ChebAdd3p,
+        ChebPivots,
+        ChebHasPt,
+        ChebViolAll,
+        ChebViolNew,
+        ChebPtInside,
+        ChebPivotsPt,
+        ChebShiftCalls,
+        ChebShiftPivots,
+        ChebShiftNs,
+        ChebShiftSame,
+        ChebDims,
         /// end marker: the Case-2 component block starts here
         CounterEnd,
     }
@@ -694,6 +717,18 @@ mod imp {
             bump(Counter::BuildNanos, self.1.elapsed().as_nanos() as u64);
             bump(if self.0 { Counter::Kept } else { Counter::Empty }, 1);
         }
+    }
+
+    thread_local! {
+        static PIV: Cell<u64> = const { Cell::new(0) };
+    }
+    /// Counts one simplex pivot (thread-local, no lock).
+    #[inline]
+    pub fn piv_bump() {
+        PIV.with(|c| c.set(c.get() + 1));
+    }
+    pub fn piv_get() -> u64 {
+        PIV.with(|c| c.get())
     }
 
     thread_local! {

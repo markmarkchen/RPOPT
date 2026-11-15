@@ -620,11 +620,16 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
                 }
                 if bwit.is_none() && bcentre.is_none() {
                     crate::census_bump!(PfCheb, 1);
+                    #[cfg(feature = "lp_census")]
+                    let piv0 = crate::census::piv_get();
                     let ball = {
                         crate::census_purpose!(Neighbour);
                         chebyshev_ball(&ef, &ff, &[])
                     };
                     crate::census_lap!(cm, Lp);
+                    #[cfg(feature = "lp_census")]
+                    cheb_probe(&ef, &ff, fpoly.ef.rows, centre.or(witness).or(fpoly.hint_f), d1, crate::census::piv_get() - piv0, ball.as_ref().map(|s| s.x.clone()));
+                    crate::census_skip!(cm);
                     match ball {
                         Some(s) if s.x[d1] > 1e-9 => {
                             bcentre = Some(s.x[..d1].to_vec());
@@ -763,6 +768,58 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, budget: usize, o
         crate::census_lap!(cm, Stack);
     }
     complete
+}
+
+/// Census only: what a walk Chebyshev LP looked like against its parent (rows added, parent point violations, cold pivots), and
+/// an extra primal-shifted solve from the parent point to see how many pivots a warm start takes.
+#[cfg(feature = "lp_census")]
+fn cheb_probe(ef: &Mat, ff: &[f64], parent_rows: usize, pt: Option<&[f64]>, d1: usize, cold_piv: u64, cold_x: Option<Vec<f64>>) {
+    use crate::census::Counter as C;
+    let added = ef.rows - parent_rows;
+    crate::census::bump(C::ChebRows, ef.rows as u64);
+    crate::census::bump(C::ChebDims, d1 as u64);
+    crate::census::bump(C::ChebAdded, added as u64);
+    crate::census::bump([C::ChebAdd0, C::ChebAdd1, C::ChebAdd2, C::ChebAdd3p][added.min(3)], 1);
+    crate::census::bump(C::ChebPivots, cold_piv);
+    let Some(pt) = pt else { return };
+    crate::census::bump(C::ChebHasPt, 1);
+    let nrm = |i: usize| ef.row(i).iter().map(|v| v * v).sum::<f64>().sqrt();
+    let slack = |i: usize| ff[i] - ef.row(i).iter().zip(pt).map(|(a, b)| a * b).sum::<f64>();
+    let (mut va, mut vn) = (0u64, 0u64);
+    let mut r0 = f64::INFINITY;
+    for i in 0..ef.rows {
+        if slack(i) < 0.0 {
+            va += 1;
+            if i >= parent_rows {
+                vn += 1;
+            }
+        }
+        r0 = r0.min(slack(i) / nrm(i));
+    }
+    crate::census::bump(C::ChebViolAll, va);
+    crate::census::bump(C::ChebViolNew, vn);
+    crate::census::bump(C::ChebPivotsPt, cold_piv);
+    if va == 0 {
+        crate::census::bump(C::ChebPtInside, 1);
+    }
+    let mut x0 = pt.to_vec();
+    x0.push(r0.max(0.0));
+    let t = std::time::Instant::now();
+    let p0 = crate::census::piv_get();
+    let sol = {
+        crate::census_purpose!(Other);
+        crate::mpqp_utils::chebyshev_ball_from(ef, ff, &x0)
+    };
+    let np = crate::census::piv_get() - p0;
+    crate::census::bump(C::ChebShiftCalls, 1);
+    crate::census::bump(C::ChebShiftPivots, np);
+    crate::census::bump(C::ChebShiftNs, t.elapsed().as_nanos() as u64);
+    // same decision: both nonempty at the 1e-9 radius or both not, and the radius within 1e-7
+    if let (Some(a), Some(b)) = (cold_x, sol) {
+        if (a[d1] > 1e-9) == (b.x[d1] > 1e-9) && (a[d1] - b.x[d1]).abs() <= 1e-7 {
+            crate::census::bump(C::ChebShiftSame, 1);
+        }
+    }
 }
 
 /// Records a returned basis with the Chebyshev centre (facet coordinates) of the sub-facet it was

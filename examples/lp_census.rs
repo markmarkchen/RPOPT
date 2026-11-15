@@ -557,6 +557,21 @@ fn highdim_tables(rows: &[Row], skipped: &[(String, String)]) {
             println!();
         }
     }
+    println!("\n### High-dimension 3m: mplcp walk Chebyshev LPs against the parent piece (warm-start potential)\n");
+    println!("| problem | walk LPs | polytope rows (child) | rows added: 0 / 1 / 2 / 3+ | cold pivots/LP | with a parent point | child rows the point violates (all / added) | point inside child | cold pivots on those | shifted-start pivots/LP | shifted us/LP | cold us/LP | same decision and radius |");
+    println!("|---|---:|---:|---|---:|---:|---|---:|---:|---:|---:|---:|---:|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::ChebRows) > 0.0) {
+        let n = c(r, Counter::PfCheb);
+        let hp = c(r, Counter::ChebHasPt).max(1.0);
+        let lpn = r.s.counters[census::c2_slot(census::Comp::Lp as usize, 1, 0)] as f64;
+        println!(
+            "| {} | {} | {:.1} (d1 {:.1}) | {} / {} / {} / {} | {:.1} | {} | {:.2} / {:.2} | {} | {:.1} | {:.1} | {:.1} | {:.1} | {} |",
+            r.problem, n, c(r, Counter::ChebRows) / n, c(r, Counter::ChebDims) / n, c(r, Counter::ChebAdd0), c(r, Counter::ChebAdd1), c(r, Counter::ChebAdd2), c(r, Counter::ChebAdd3p),
+            c(r, Counter::ChebPivots) / n, pct(c(r, Counter::ChebHasPt), n), c(r, Counter::ChebViolAll) / hp, c(r, Counter::ChebViolNew) / hp, pct(c(r, Counter::ChebPtInside), c(r, Counter::ChebHasPt)),
+            c(r, Counter::ChebPivotsPt) / hp, c(r, Counter::ChebShiftPivots) / c(r, Counter::ChebShiftCalls).max(1.0), c(r, Counter::ChebShiftNs) / c(r, Counter::ChebShiftCalls).max(1.0) / 1e3, lpn / n / 1e3,
+            pct(c(r, Counter::ChebShiftSame), c(r, Counter::ChebShiftCalls))
+        );
+    }
     println!("\n### High-dimension 4: vertex clipping (`clip_flags`) outcomes per call\n");
     println!("| problem | algorithm | clip calls/region | ok | nt outside 2..=6 | more than 128 hyperplanes | infinite box | more than 600 vertices | too few vertices | vertex violates a row | redundancy LPs/region |");
     println!("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
