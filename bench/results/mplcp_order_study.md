@@ -68,3 +68,26 @@ the parameter-set constraints (a_t, b_t) within 1e-7, so there is no facet-of-Th
 04d4ca9 (c345cdc) the empty class was 2.3% (masses4_N3), 1.2% (masses4_N4) and 1% (masses5_N3) of the solve.
 The time is in the new and mixed classes (walks that find a new region): 24% to 62% of the solve on the masses family
 and 47% on pop_005, with 71% to 94% of their Chebyshev LPs proving a sub-facet empty.
+
+Correction: that "cheb empty" column counted the sub-facets that the DAQP certificate decided as well as the LPs
+that ran, so it overstates the LP verdicts. The next section separates them.
+
+## Cheap emptiness proofs in front of the sub-facet LP (walk_one, scratch build on main 054eb58, one solve each)
+Outcomes of the sub-facet tests that reach the DAQP check: DAQP-certified empty, LP empty, LP nonempty. Two exact
+proofs are counted on every test: the box proof (the box of the root facet F, 2*d1 LPs per Case-2 call, computed
+lazily; a new cut row whose minimum over the box exceeds its rhs proves the piece empty) and the pair proof (two
+rows nearly opposite with b_i + b_j < 0). Node a005 at load 92, so ms are inflated, ratios are indicative.
+
+| problem | DAQP empty | LP empty | LP nonempty | LP-empty share of LPs run | box decides LP-empty | box decides DAQP-empty | pair adds to box (LP-empty) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| masses4_N3 | 1800 | 15918 | 5390 | 75% | 43% | 36% | 4% |
+| masses5_N3 | 17668 | 67358 | 24649 | 73% | 19% | 28% | 7% |
+| masses4_N4 | 262749 | 274191 | 64506 | 81% | 42% | 49% | 6% |
+| pop_005 | 117157 | 4608 | 11763 | 28% | 0% | 52% | 18% |
+| rand_t12_x5_m20_s0 | 627 | 21479 | 9445 | 69% | 25% | 71% | 1% |
+
+Cost: a box test is about 1 us; the root box costs about 60 us (14 to 22 LPs) per Case-2 call that reaches an LP
+test, 2795 of 3517 walk calls on masses4_N3. Time shares of the solve: LP-empty tests 9% (masses4_N3), 15%
+(masses5_N3), 11% (masses4_N4), 1% (pop_005), 19% (rand_t12); DAQP 0.7%, 2.8%, 7.4%, 12%, 1%. The root box costs 6.8%
+(masses4_N3), 11% (masses5_N3), 2.3% (masses4_N4), 1.5% (pop_005), 7.2% (rand_t12) of the solve, as much as or more
+than the LP time it saves, except on masses4_N4 (net about 2% to 4%). The pair proof is too weak and too costly.
