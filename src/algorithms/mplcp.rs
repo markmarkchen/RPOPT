@@ -1365,6 +1365,27 @@ const WITNESS_MARGIN: f64 = 1e-8;
 const WALK_BUDGET_PER_ROW: usize = 2;
 const WALK_BUDGET_MIN: usize = 64;
 
+/// Memory statistics and knobs of the serial exploration: parents whose tableau is shared by queued lazy children,
+/// the peak of that count, and the size of one tableau; `LIFO` pops the newest queued region first; `TAB_BUDGET` (bytes,
+/// 0 = no limit) is the limit on the tableaux of live parents beyond which a parent's children are queued without a
+/// tableau and rebuild it from their active set when popped.
+static LIVE_PARENTS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static PEAK_PARENTS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static TAB_BYTES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static LIFO: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static TAB_BUDGET: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// (peak number of live parent tableaux, bytes of one tableau) of the last serial exploration.
+pub fn tab_stats() -> (usize, usize) {
+    (PEAK_PARENTS.load(std::sync::atomic::Ordering::Relaxed), TAB_BYTES.load(std::sync::atomic::Ordering::Relaxed))
+}
+
+/// Pop order (`lifo`) and the byte budget for live parent tableaux (0 = none) of the serial exploration.
+pub fn set_memory_mode(lifo: bool, tab_budget: usize) {
+    LIFO.store(lifo, std::sync::atomic::Ordering::Relaxed);
+    TAB_BUDGET.store(tab_budget, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// Where a queued region's tableau comes from. `Lazy` is the parent's tableau shared with the
 /// siblings plus the principal pivot (row, column) that turns it into this region's tableau; the
 /// pivot is done when the region is popped, and the last holder of the parent pivots it in place.
@@ -1387,6 +1408,7 @@ impl TabSrc {
             TabSrc::Ready(t) => Some(t),
             TabSrc::Lazy(a, v, kk) => Some(match std::sync::Arc::try_unwrap(a) {
                 Ok(mut t) => {
+                    LIVE_PARENTS.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
                     t.pivot(v, kk);
                     t
                 }
@@ -1982,7 +2004,12 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
     let mut ws: Option<Tab> = None;
     let mut pending: Vec<(CriticalRegion, Option<Vec<f64>>, Option<(usize, usize)>, Option<Tab>, Option<(Vec<f64>, f64)>, Option<Vec<f64>>)> = vec![];
     let mut wave_limit = 1usize;
-    while let Some(Item { idx, center, tab, depth, entry, verts }) = queue.pop_front() {
+    LIVE_PARENTS.store(0, std::sync::atomic::Ordering::Relaxed);
+    PEAK_PARENTS.store(0, std::sync::atomic::Ordering::Relaxed);
+    let lifo = LIFO.load(std::sync::atomic::Ordering::Relaxed);
+    let budget = TAB_BUDGET.load(std::sync::atomic::Ordering::Relaxed);
+    loop {
+        let Some(Item { idx, center, tab, depth, entry, verts }) = (if lifo { queue.pop_back() } else { queue.pop_front() }) else { break };
         if idx >= wave_limit {
             wave_limit = regions.len();
         }
@@ -2016,10 +2043,19 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
         }
         // the neighbours' tableaux are one pivot away (rebuilt from scratch every REFACTOR levels);
         // each pivot is done when its region is popped, and the last one popped takes over this tableau
+        let tbytes = (tab.t.len() + tab.rho.len()) * 8 + (tab.row_var.len() + tab.col_var.len()) * 8;
+        TAB_BYTES.store(tbytes, std::sync::atomic::Ordering::Relaxed);
+        // beyond the budget for live parent tableaux the children are queued without one and rebuild it when popped
+        let over = budget > 0 && (LIVE_PARENTS.load(std::sync::atomic::Ordering::Relaxed) + 1) * tbytes > budget;
         let tab = std::sync::Arc::new(tab);
+        let mut lazy_children = 0usize;
         for (cr, ce, piv, own, ent, vt) in pending.drain(..) {
             let (src, nd) = match piv {
-                Some((v, kk)) => (TabSrc::Lazy(tab.clone(), v, kk), depth + 1),
+                Some((v, kk)) if !over => {
+                    lazy_children += 1;
+                    (TabSrc::Lazy(tab.clone(), v, kk), depth + 1)
+                }
+                Some(_) => (TabSrc::None, 0),
                 None => (TabSrc::from(own), 0),
             };
             seen.insert(cr.active_set.clone(), Slot::Built(regions.len()));
@@ -2028,6 +2064,10 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
                 known.add(regions.len() - 1, regions.last().unwrap());
             }
             queue.push_back(Item { idx: regions.len() - 1, center: ce, tab: src, depth: nd, entry: ent, verts: vt });
+        }
+        if lazy_children > 0 {
+            let live = LIVE_PARENTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+            PEAK_PARENTS.fetch_max(live, std::sync::atomic::Ordering::Relaxed);
         }
     }
     regions

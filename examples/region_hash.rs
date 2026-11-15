@@ -17,6 +17,8 @@ fn main() {
         rpopt::algorithms::mplp_lex::set_mode(v.parse().unwrap());
     }
     let alg = MpqpAlgorithm::from_name(&args[1]).expect("algorithm");
+    // MPLCP_LIFO=1: pop the newest queued region first; MPLCP_TAB_BUDGET=<bytes>: limit on live parent tableaux
+    rpopt::algorithms::mplcp::set_memory_mode(std::env::var("MPLCP_LIFO").is_ok(), std::env::var("MPLCP_TAB_BUDGET").ok().and_then(|v| v.parse().ok()).unwrap_or(0));
     // RPOPT_HASH_SCALE: rounding scale of E and f (default 1e9)
     let scale: f64 = std::env::var("RPOPT_HASH_SCALE").ok().and_then(|v| v.parse().ok()).unwrap_or(1e9);
     for f in &args[2..] {
@@ -43,6 +45,8 @@ fn main() {
         let mut h = std::collections::hash_map::DefaultHasher::new();
         recs.hash(&mut h);
         let name = std::path::Path::new(f).file_stem().unwrap().to_string_lossy().to_string();
-        println!("{name} {} regions {} facet_rows {rows} hash {:016x} solve_s {dt:.3}", args[1], recs.len(), h.finish());
+        let (peak_parents, tab_bytes) = rpopt::algorithms::mplcp::tab_stats();
+        let hwm_mb = std::fs::read_to_string("/proc/self/status").ok().and_then(|t| t.lines().find(|l| l.starts_with("VmHWM")).and_then(|l| l.split_whitespace().nth(1).and_then(|v| v.parse::<f64>().ok()))).map_or(0.0, |kb| kb / 1024.0);
+        println!("{name} {} regions {} facet_rows {rows} hash {:016x} solve_s {dt:.3} peak_parents {peak_parents} tab_bytes {tab_bytes} peak_parent_mb {:.0} rss_peak_mb {hwm_mb:.0}", args[1], recs.len(), h.finish(), (peak_parents * tab_bytes) as f64 / 1048576.0);
     }
 }
