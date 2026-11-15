@@ -17,6 +17,10 @@ fn main() {
         rpopt::algorithms::mplp_lex::set_mode(v.parse().unwrap());
     }
     let alg = MpqpAlgorithm::from_name(&args[1]).expect("algorithm");
+    // MPLCP_NO_DEDUPE=1: solve with the duplicated constraints (no removal)
+    if std::env::var("MPLCP_NO_DEDUPE").is_ok() {
+        rpopt::algorithms::mplcp::set_dedupe(false);
+    }
     // MPLCP_NO_DAQP=1: answer every sub-facet nonemptiness test with the LP
     if std::env::var("MPLCP_NO_DAQP").is_ok() {
         rpopt::algorithms::mplcp::set_daqp_tests(false);
