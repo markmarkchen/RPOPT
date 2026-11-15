@@ -1046,6 +1046,7 @@ struct Cand {
 
 // ---------------------------------------------------------------------------- facet certificate
 
+/// Modes 5 and 6 are cost diagnostics: 5 collects vertices and the hyperplane index as mode 1 but looks nothing up; 6 collects the vertices only.
 /// Certificate mode: 0 off, 1 on (default), 2 audit (certify, but still search, and count the new
 /// regions that the search reaches across certified facets; for the census and the tests). Modes
 /// 1 and 2 apply to 3 to 5 parameters, where the check measured faster or neutral; modes 3 (on) and
@@ -1074,30 +1075,34 @@ pub fn certificate_audit() -> (usize, usize) {
 /// Does mode `mode` apply the certificate to a program with `nt` parameters?
 fn cert_active(mode: u8, nt: usize) -> bool {
     match mode {
-        1 | 2 => (3..=5).contains(&nt),
+        1 | 2 | 5 | 6 => (3..=5).contains(&nt),
         3 | 4 => (2..=6).contains(&nt),
         _ => false,
     }
 }
 
-type HKey = [i64; 7];
+type HKey = u64;
 
 /// Hash key of the unit-normalised hyperplane (a·θ <= b), rounded to 1e-5. Used only to find
-/// candidate regions; a missed rounding boundary loses a skip, never soundness.
+/// candidate regions (collisions and a missed rounding boundary lose or add a candidate, never
+/// soundness: every candidate is checked exactly).
 fn hkey(a: &[f64], b: f64) -> HKey {
     let nrm = a.iter().map(|v| v * v).sum::<f64>().sqrt();
-    let mut k = [0i64; 7];
-    for (o, v) in k.iter_mut().zip(a) {
-        *o = (v / nrm * 1e5).round() as i64;
+    let inv = 1e5 / nrm;
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for v in a {
+        h = (h ^ ((v * inv).round() as i64 as u64)).wrapping_mul(0x0000_0100_0000_01b3);
     }
-    k[6] = (b / nrm * 1e5).round() as i64;
-    k
+    (h ^ ((b * inv).round() as i64 as u64)).wrapping_mul(0x0000_0100_0000_01b3)
 }
 
 /// The facet hyperplanes of the known regions, for 2 to 6 parameters (the range of the vertex clip).
+/// `heads` maps a hyperplane key to the newest entry of a chain in `entries` (region, next entry);
+/// no allocation per row.
 #[derive(Default)]
 struct Known {
-    map: crate::fxhash::FxHashMap<HKey, Vec<u32>>,
+    heads: crate::fxhash::FxHashMap<HKey, u32>,
+    entries: Vec<(u32, u32)>,
 }
 
 impl Known {
@@ -1106,8 +1111,23 @@ impl Known {
             return;
         }
         for k in 0..cr.e.rows {
-            self.map.entry(hkey(cr.e.row(k), cr.f[k])).or_default().push(idx as u32);
+            let at = self.entries.len() as u32;
+            let prev = self.heads.insert(hkey(cr.e.row(k), cr.f[k]), at).unwrap_or(u32::MAX);
+            self.entries.push((idx as u32, prev));
         }
+    }
+
+    /// Regions that have a row with this key, newest first.
+    fn candidates(&self, key: HKey) -> impl Iterator<Item = u32> + '_ {
+        let mut at = self.heads.get(&key).copied().unwrap_or(u32::MAX);
+        std::iter::from_fn(move || {
+            if at == u32::MAX {
+                return None;
+            }
+            let (region, next) = self.entries[at as usize];
+            at = next;
+            Some(region)
+        })
     }
 }
 
@@ -1125,7 +1145,7 @@ struct CertCtx<'a> {
 impl<'a> CertCtx<'a> {
     fn new(mode: u8, verts: Option<&'a [f64]>, known: &'a Known, regions: &'a [CriticalRegion], nt: usize, limit: usize) -> Option<CertCtx<'a>> {
         match (mode, verts) {
-            (_, Some(v)) if cert_active(mode, nt) => Some(CertCtx { verts: v, known, regions, nt, audit: mode == 2 || mode == 4, limit }),
+            (_, Some(v)) if mode != 5 && mode != 6 && cert_active(mode, nt) => Some(CertCtx { verts: v, known, regions, nt, audit: mode == 2 || mode == 4, limit }),
             _ => None,
         }
     }
@@ -1151,7 +1171,8 @@ fn certify(cx: &CertCtx, cur: &CriticalRegion, k: usize) -> Option<usize> {
     let g: Vec<f64> = row.iter().map(|v| v / nrm).collect();
     let b = cur.f[k] / nrm;
     let ng: Vec<f64> = g.iter().map(|v| -v).collect();
-    let cand = cx.known.map.get(&hkey(&ng, -b))?;
+    let mut cand = cx.known.candidates(hkey(&ng, -b)).peekable();
+    cand.peek()?;
     // vertices of F
     let tol = 1e-9 * (1.0 + b.abs());
     let tight: Vec<&[f64]> = cx.verts.chunks_exact(nt).filter(|v| (v.iter().zip(&g).map(|(x, y)| x * y).sum::<f64>() - b).abs() <= 10.0 * tol).collect();
@@ -1180,7 +1201,7 @@ fn certify(cx: &CertCtx, cur: &CriticalRegion, k: usize) -> Option<usize> {
     if basis.len() != nt - 1 {
         return None;
     }
-    'regions: for &j in cand {
+    'regions: for j in cand {
         if j as usize >= cx.limit {
             continue;
         }
@@ -1532,7 +1553,7 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
     let mut regions = vec![initial];
     let cmode = CERT.load(std::sync::atomic::Ordering::Relaxed);
     let mut known = Known::default();
-    if cert_active(cmode, plcp.nt) {
+    if cmode != 6 && cert_active(cmode, plcp.nt) {
         known.add(0, &regions[0]);
     }
     let mut queue: VecDeque<Item> = VecDeque::new();
@@ -1582,7 +1603,7 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
             };
             seen.insert(cr.active_set.clone(), Slot::Built(regions.len()));
             regions.push(cr);
-            if cert_active(cmode, plcp.nt) {
+            if cmode != 6 && cert_active(cmode, plcp.nt) {
                 known.add(regions.len() - 1, regions.last().unwrap());
             }
             queue.push_back(Item { idx: regions.len() - 1, center: ce, tab: src, depth: nd, entry: ent, verts: vt });
@@ -1616,7 +1637,7 @@ fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalR
     let mut regions = vec![initial];
     let cmode = CERT.load(std::sync::atomic::Ordering::Relaxed);
     let mut known = Known::default();
-    if cert_active(cmode, plcp.nt) {
+    if cmode != 6 && cert_active(cmode, plcp.nt) {
         known.add(0, &regions[0]);
     }
     let mut wave: Vec<Item> = vec![Item { idx: 0, center: init_center, tab: TabSrc::None, depth: 0, entry: None, verts: None }];
@@ -1677,7 +1698,7 @@ fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalR
         for (cr, center, tab, depth, entry, verts) in built.into_iter().flatten() {
             seen.insert(cr.active_set.clone(), Slot::Built(regions.len()));
             regions.push(cr);
-            if cert_active(cmode, plcp.nt) {
+            if cmode != 6 && cert_active(cmode, plcp.nt) {
                 known.add(regions.len() - 1, regions.last().unwrap());
             }
             wave.push(Item { idx: regions.len() - 1, center, tab: tab.into(), depth, entry, verts });
