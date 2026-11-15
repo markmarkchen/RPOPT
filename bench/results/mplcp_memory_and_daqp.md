@@ -225,6 +225,7 @@ pop_002 totals 2,649 B per region by capacity.
 | pop_036 | `mplcp` now, 48 GB request | **solved: 6,655,636 regions, 3,299 s, 123.7 M facet rows**; `region_hash` peak 35.9 GB (includes the hash copy of all rows, about 9 GB); 6,666,880 `Seen` entries (669 MB), peak queue 2.65 M items (1.0 GB) |
 | pop_095 | `mplcp` before the budget | killed at 32.7 GB after 41 min |
 | pop_095 | `graph` | not finished: 10,500 s timeout at 25.1 GB |
+| pop_095 | `mplcp` now, 48 GB request | **solved: 5,012,492 regions, 40 min wall (job), peak resident 18.3 GB (`region_bytes`, no hash copy), 3,447 B of stored fields per region, 3.6 KB resident growth per region** |
 
 ### Correctness caveat of the rebuild path
 
