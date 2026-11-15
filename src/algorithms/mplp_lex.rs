@@ -515,6 +515,7 @@ pub fn solve(program: &MpProgram, seed: u64) -> Result<Vec<CriticalRegion>, Stri
             let cr = &regions[ri];
             (0..cr.e.rows).filter_map(|k| unit(cr.e.row(k), cr.f[k])).collect()
         };
+        let mut centre: Option<Option<Vec<f64>>> = None;
         for k in 0..facets.len() {
             let (nk, fk) = (&facets[k].0, facets[k].1);
             // facet on the boundary of Θ
@@ -524,26 +525,57 @@ pub fn solve(program: &MpProgram, seed: u64) -> Result<Vec<CriticalRegion>, Stri
             if known.iter().any(|(t, ft)| t.iter().zip(nk).all(|(a, b)| (a - b).abs() < 1e-7) && (ft - fk).abs() < 1e-6 * (1.0 + fk.abs())) {
                 continue;
             }
-            // relative interior point θ0 of the facet (rows on the same plane are dropped)
-            let mut rows: Vec<Vec<f64>> = vec![];
-            let mut rhs: Vec<f64> = vec![];
-            for (i, (ni, fi)) in facets.iter().enumerate() {
-                if i != k && ni.iter().zip(nk).all(|(a, b)| (a - b).abs() < 1e-7) && (fi - fk).abs() < 1e-7 * (1.0 + fk.abs()) {
+            // relative interior point θ0 of the facet. First try the foot of the region's Chebyshev
+            // center on the facet plane: it is in the relative interior when it satisfies every other
+            // facet row with a margin (no LP). Otherwise the facet's own Chebyshev center (rows on the
+            // same plane are dropped).
+            if centre.is_none() {
+                let rows: Vec<Vec<f64>> = facets.iter().map(|(n, _)| n.clone()).collect();
+                let rhs: Vec<f64> = facets.iter().map(|(_, f)| *f).collect();
+                centre = Some({
+                    crate::census_purpose!(Neighbour);
+                    chebyshev_ball(&Mat::from_rows(&rows), &rhs, &[]).map(|b| b.x[..nt].to_vec())
+                });
+            }
+            let mut foot: Option<Vec<f64>> = None;
+            if let Some(Some(c)) = &centre {
+                let d = fk - nk.iter().zip(c).map(|(a, b)| a * b).sum::<f64>();
+                let p: Vec<f64> = c.iter().zip(nk).map(|(c, n)| c + d * n).collect();
+                let ok = facets.iter().enumerate().all(|(i, (ni, fi))| {
+                    if i == k || (ni.iter().zip(nk).all(|(a, b)| (a - b).abs() < 1e-7) && (fi - fk).abs() < 1e-7 * (1.0 + fk.abs())) {
+                        return true;
+                    }
+                    fi - ni.iter().zip(&p).map(|(a, b)| a * b).sum::<f64>() > 1e-6 * (1.0 + fi.abs())
+                });
+                if ok {
+                    foot = Some(p);
+                }
+            }
+            let ball_x: Vec<f64>;
+            if let Some(p) = foot {
+                ball_x = p;
+            } else {
+                let mut rows: Vec<Vec<f64>> = vec![];
+                let mut rhs: Vec<f64> = vec![];
+                for (i, (ni, fi)) in facets.iter().enumerate() {
+                    if i != k && ni.iter().zip(nk).all(|(a, b)| (a - b).abs() < 1e-7) && (fi - fk).abs() < 1e-7 * (1.0 + fk.abs()) {
+                        continue;
+                    }
+                    rows.push(ni.clone());
+                    rhs.push(*fi);
+                }
+                let kk = rows.iter().position(|r| r == nk).unwrap_or(0);
+                let ball = {
+                    crate::census_purpose!(Neighbour);
+                    chebyshev_ball(&Mat::from_rows(&rows), &rhs, &[kk])
+                };
+                let Some(ball) = ball else { continue };
+                if ball.x[nt] <= 1e-9 {
                     continue;
                 }
-                rows.push(ni.clone());
-                rhs.push(*fi);
+                ball_x = ball.x;
             }
-            let kk = rows.iter().position(|r| r == nk).unwrap_or(0);
-            let ball = {
-                crate::census_purpose!(Neighbour);
-                chebyshev_ball(&Mat::from_rows(&rows), &rhs, &[kk])
-            };
-            let Some(ball) = ball else { continue };
-            if ball.x[nt] <= 1e-9 {
-                continue;
-            }
-            let th0 = &ball.x[..nt];
+            let th0 = &ball_x[..nt];
             // lex data: value at θ0 and coefficient of γ along the outward normal
             let q0 = rhs_at(program, th0);
             let q1 = program.f.matvec(nk);
