@@ -3,6 +3,8 @@
 //! that only the shared builder kept (a row the chain screened out although it bounds the region: expected 0) and the rows only
 //! the chain kept (rows that graze the region, kept because the widened box could not reject them).
 //!
+//! The two solves of a problem run one after the other in one process (the chain switch is read at the start of a solve).
+//!
 //!   box_rows_diff <problem.json>...
 use rpopt::algorithms::{solve_mpqp, MpqpAlgorithm};
 use rpopt::critical_region::CriticalRegion;

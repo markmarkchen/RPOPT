@@ -2570,7 +2570,14 @@ struct DqState {
     calls: u32,
     empties: u32,
     pause: u32,
+    /// the solve epoch this state belongs to: a new solve resets the adaptive counters above
+    epoch: u64,
 }
+
+/// Bumped at the start of every solve; the DAQP filter's adaptive counters (per thread) restart when they see a new epoch, so a solve does not inherit
+/// the pause of the previous one. Two solves running at the same time only restart each other's counters, which changes which of two agreeing
+/// emptiness tests answers, not the answer.
+static DQ_EPOCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 thread_local! {
     static DQ_WS: std::cell::RefCell<DqState> = std::cell::RefCell::new(DqState::default());
@@ -2597,6 +2604,13 @@ fn daqp_certainly_empty(e: &Mat, f: &[f64], d1: usize, bound: f64) -> bool {
     crate::census_bump!(DqTests, 1);
     let empty = DQ_WS.with(|ws| {
         let st = &mut *ws.borrow_mut();
+        let ep = DQ_EPOCH.load(std::sync::atomic::Ordering::Relaxed);
+        if st.epoch != ep {
+            st.epoch = ep;
+            st.calls = 0;
+            st.empties = 0;
+            st.pause = 0;
+        }
         if st.pause > 0 {
             st.pause -= 1;
             return None;
@@ -3761,6 +3775,7 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
     crate::census_diag::lap(crate::census_diag::s::PF_INIT_NS, _tinit);
     #[cfg(feature = "lp_census")]
     let _tloop = crate::census_diag::t0();
+    DQ_EPOCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let guard = build::ChainGuard::new();
     let live_parents = std::sync::atomic::AtomicUsize::new(0);
     let mut seen: Seen = new_seen(plcp);
@@ -3937,6 +3952,7 @@ fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalR
         return pivot_solve(program, plcp, seed);
     }
     let Some((initial, init_center)) = initial_region(program, seed) else { return vec![] };
+    DQ_EPOCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let guard = build::ChainGuard::new();
     let live_parents = std::sync::atomic::AtomicUsize::new(0);
     let mut seen: Seen = new_seen(plcp);
