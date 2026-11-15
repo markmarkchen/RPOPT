@@ -449,6 +449,9 @@ mod imp {
         TabRefuse,
         TabRefuseRel,
         ResolveNone,
+        /// tableaux rebuilt from the active set when a queued child is popped, and the entries of them set to zero as rounding noise
+        SnapRebuilds,
+        SnapEntries,
         CandLawNoTab,
         CandLawSmallPiv,
         /// bases that `tableau_for` accepted only in the second, largest-pivot-first order

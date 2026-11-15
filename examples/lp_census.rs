@@ -27,6 +27,10 @@ fn child(path: &str, alg: &str) {
     let prog = Arc::new(MpProgram::from_json_file(std::path::Path::new(path)).unwrap());
     let algo = MpqpAlgorithm::from_name(alg).unwrap_or_else(|| panic!("unknown algorithm {alg}"));
     let opts = SolveOptions::default();
+    // MPLCP_TAB_BUDGET=<bytes>: the tableau budget of the serial mplcp search (0 = none); a small value forces the rebuilds
+    if let Some(b) = std::env::var("MPLCP_TAB_BUDGET").ok().and_then(|v| v.parse().ok()) {
+        rpopt::algorithms::mplcp::set_tab_budget(b);
+    }
     // RPOPT_CERT=0|1|2|3|4: mplcp facet certificate off (default), on (3 to 5 parameters), audit, on at 2 to 6, audit at 2 to 6
     if let Ok(m) = std::env::var("RPOPT_CERT") {
         rpopt::algorithms::mplcp::set_certificate(m.parse().unwrap());
@@ -642,12 +646,12 @@ fn highdim_tables(rows: &[Row], skipped: &[(String, String)]) {
         );
     }
     println!("\n### High-dimension 3j: mplcp tableau rebuilds refused\n");
-    println!("| problem | regions | `tableau_for` refusals | of which pivot / M_ii above 1e-6 | regions popped without a tableau (neighbour search skipped) | `candidate_law`: fresh tableau refused | `candidate_law`: one-pivot step below 1e-9| bases accepted in the second pivot order |");
-    println!("|---|---:|---:|---:|---:|---:|---:|---:|");
+    println!("| problem | regions | `tableau_for` refusals | of which pivot / M_ii above 1e-6 | regions popped without a tableau (neighbour search skipped) | `candidate_law`: fresh tableau refused | `candidate_law`: one-pivot step below 1e-9| bases accepted in the second pivot order | tableaux rebuilt for popped children (tableau budget) | entries set to zero as rounding noise |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
     for r in rows.iter().filter(|r| r.alg == "mplcp") {
         println!(
-            "| {} | {} | {} | {} | {} | {} | {} | {} |",
-            r.problem, r.regions, c(r, Counter::TabRefuse), c(r, Counter::TabRefuseRel), c(r, Counter::ResolveNone), c(r, Counter::CandLawNoTab), c(r, Counter::CandLawSmallPiv), c(r, Counter::TabRescued)
+            "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |",
+            r.problem, r.regions, c(r, Counter::TabRefuse), c(r, Counter::TabRefuseRel), c(r, Counter::ResolveNone), c(r, Counter::CandLawNoTab), c(r, Counter::CandLawSmallPiv), c(r, Counter::TabRescued), c(r, Counter::SnapRebuilds), c(r, Counter::SnapEntries)
         );
     }
     println!("\n### High-dimension 4: vertex clipping (`clip_flags`) outcomes per call\n");
