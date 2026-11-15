@@ -9,11 +9,11 @@ Lean 4 and Mathlib proofs of the mathematics behind two RPOPT solvers:
 
 The proofs are at the model level, in exact real arithmetic. They justify the steps the Rust code
 takes, not its floating point execution. Every result listed as proved has no `sorry`, and
-`Audit.lean` prints the axioms of all 78 main theorems: each uses only `propext`,
+`Audit.lean` prints the axioms of all 80 main theorems: each uses only `propext`,
 `Classical.choice` and `Quot.sound` (two use none). Modelling assumptions are explicit hypotheses,
 never axioms.
 
-Rust line numbers refer to main at commit `2b0c6c7`.
+Rust line numbers refer to main at commit `663a59e` (mplcp.rs is unchanged since `2b0c6c7`).
 
 ## Build
 
@@ -37,6 +37,7 @@ lake env lean Audit.lean    # one line per main theorem: the axioms it depends o
 |:-----|:--------|
 | `Foundations/QP.lean` | strictly convex QP, KKT conditions, sufficiency and uniqueness |
 | `Foundations/LCP.lean` | the pLCP of the KKT system (`M`, `q`, `Q`, `x(λ)`), uniqueness of `w` |
+| `Foundations/Chebyshev.lean` | points of a Chebyshev ball are feasible (start samplers) |
 | `Tableau.lean` | complementary bases, semantic tableaux, basic solutions, region law |
 | `Pivot.lean` | dictionary pivot, principal pivot, `tableau_for` |
 | `Lex.lean` | lexicographic order, symbolic `ε`, perturbation block from `T`, uniqueness |
@@ -94,6 +95,8 @@ lake env lean Audit.lean    # one line per main theorem: the axioms it depends o
 | Skip 1 | `entry_facet_unique_neighbour`, `reach_skip_parent` | across the entry facet of a Case-1 child, the only lexico-feasible basis on the parent's side is the parent | proved (needs a lexico-feasible parent) |
 | Skip 2 | `known_region_unique_neighbour`, `known_region_skip` | if a known lexico-feasible region `R` on the other side contains `F`, every lexico-feasible basis across `F` is `R`'s; skipping `F` keeps the explored set | proved |
 | Skip 2 | `vertices_subset_polyhedron` | the vertices of `F` in `R` imply `F ⊆ R` | proved |
+| Facets | `relint_of_strict` | a point on the facet plane that clears every other row strictly is a relative-interior point of the facet | proved |
+| Start | `chebyshev_ball_feasible` | every point within the radius of a Chebyshev centre satisfies every inequality row | proved |
 | B1 | `lp_certificate`, `basis_certificate`, `lp_weak_duality` | primal and dual feasibility (with complementarity) imply optimality | proved |
 | B2 | `rank1_inverse`, `rank1_tableau` | `Lex::pivot` keeps `β = A_B⁻¹` and `T = Aβ` | proved |
 | B2 | `dual_pivot` | phase 1: the ratio test keeps the multipliers dual feasible and drives the leaving one to 0 | proved |
@@ -146,7 +149,7 @@ rather than returns.
 
 ## Correspondence with the Rust code
 
-`mplcp.rs` at `2b0c6c7` unless noted; `build` is `mplcp_build.rs`.
+`mplcp.rs` at `663a59e` unless noted; `build` is `mplcp_build.rs`.
 
 | Lean theorem | Rust function or step | What it justifies |
 |:-------------|:----------------------|:------------------|
@@ -173,8 +176,10 @@ rather than returns.
 | `case2_needs_dependent_rows` | slow path entered with `tve ≈ 0` (638); Case 2 (459) | Case 2 moves multipliers among dependent active rows |
 | `walk_no_repeat`, `walk_repeat_returns`, `chain_length_bound` | `for _ in 0..(8 * n + 50)` (390), `if depth > 6` (462) | what the caps can be replaced with |
 | `known_region_unique_neighbour`, `known_region_skip`, `vertices_subset_polyhedron` | step 2 of branch `mplcp-case2-fix` (not yet merged) | skipping a Case-2 facet contained in a known region |
+| `relint_of_strict` | mplp_lex.rs facet point: foot of the region's Chebyshev centre (532-556), else the facet's Chebyshev LP (557-578) | the point used for the lexicographic neighbour is in the facet's relative interior |
+| `chebyshev_ball_feasible` | program.rs `ball_points` (1225), `feasible_space_chebychev_ball` (1075) with the Clarabel fallback (1240); used by `gen_optimal_active_set` and `degenerate_start` | sampled start parameters are feasible (inequality rows) |
 | `reach_least` | `pivot_solve` (1028), `pivot_solve_par` (1082), `seen` (1031, 1042, 1122) | the explored set does not depend on the visiting order |
-| `reach_skip` | `seen` check before `build_cand` (1042); mplp_lex `crossed` (mplp_lex.rs 502, 509, 524-526, 560) | skipping known neighbours is safe |
+| `reach_skip` | `seen` check before `build_cand` (1042); mplp_lex `crossed` (mplp_lex.rs 502, 509, 525-527, 592) | skipping known neighbours is safe |
 | `lp_certificate`, `basis_certificate` | mplp_lex.rs header (13-16), `Lex::solve` (264-377), `Ok(())` at 358 | a basis with no lexico-negative slack or multiplier row is optimal |
 | `rank1_inverse`, `rank1_tableau` | mplp_lex.rs `Lex::pivot` (159-181) | the rank-1 update of `binv` and `t` |
 | `dual_pivot`, `ratio_test` | mplp_lex.rs phase 1 (310-342), ratio `l / y` with `y > 1e-9` (324-338) | phase 1 keeps dual feasibility |
@@ -210,17 +215,21 @@ All of these appear as explicit hypotheses of the theorems that need them.
 - Floating point, rounding, and every tolerance listed above.
 - The sub-facet polytopes and the Chebyshev radius `> 1e-9` (pieces without interior are dropped);
   the recursion itself beyond its pointwise walk.
-- The region builder (`build_region`, `build` 14-134): vertex clipping, redundancy removal, the
-  Chebyshev center and the facet hint.
+- The region builder (`build_region`, `build` 14-137, and `gen_cr_from_prepared` in `mpqp_utils.rs`): vertex
+  clipping (now up to 5 parameters), the LP redundancy removal above that, `remove_duplicate_rows`, the
+  Chebyshev center and the facet hint. The model treats a region as the set `CR`; its row list only matters
+  through the facets that get searched.
 - Tableau refactoring and drift (`REFACTOR`, `mplp_lex` `REFRESH`), beyond the exact statement
   `tableau_unique`.
 - Start-region selection (`initial_region` 792, `degenerate_start`, `lex_feasible_start` 1579,
-  `drop_lex_infeasible` 1491, `mplp_lex` initial basis). Past bugs of this kind, such as the zero-region
+  `drop_lex_infeasible` 1491, `mplp_lex` initial basis). Only the feasibility of the sampled points is
+  covered (`chebyshev_ball_feasible`). Past bugs of this kind, such as the zero-region
   start from dependent active rows fixed in `668403e`, live at this level.
 - The enumeration method (`Method::Enumeration`) and the parallel scheduling of `pivot_solve_par`
   (only its result set, via `reach_least`).
-- In `mplp_lex`: the `γ` infinitesimal along the facet normal, the relative-interior point LP, and the
-  concrete formulas of the lexicographic rows (abstract coefficient vectors in `lexOptimal_unique`).
+- In `mplp_lex`: the `γ` infinitesimal along the facet normal and the concrete formulas of the lexicographic
+  rows (abstract coefficient vectors in `lexOptimal_unique`). The relative-interior point is covered by
+  `relint_of_strict` in exact arithmetic; the `1e-6` margin is outside.
 
 ## Findings for the implementation
 
@@ -262,6 +271,15 @@ All of these appear as explicit hypotheses of the theorems that need them.
    it equals the eager pivot, and `pivotSeq_eq_of_isTableau` makes the period irrelevant in exact arithmetic.
    The pivot element of a `Toggle` is nonzero by the fast-path test (`tve > PTOL`, 638-639), as `Case1`
    assumes. Floating-point drift, measured in `bench/results/mplcp_tableau_handling.md`, is outside the model.
+8. **Region construction and start fallback (663a59e) stay outside the model, with one caveat.** Vertex
+   clipping up to 5 parameters, the LP redundancy path above, the reuse of prepared rows
+   (`gen_cr_from_prepared`) and pairwise `remove_duplicate_rows` all describe the same set in exact
+   arithmetic, so the region theorems are unaffected. The facet theorems do assume that every facet of a
+   region is in its row list: a row dropped at the tolerance edge in a sliver is a facet whose neighbour
+   search does not run (coverage, outside the model). The doc comment of `ball_points` (program.rs 1222-1224)
+   says every sampled parameter is feasible; `chebyshev_ball_feasible` proves this for inequality rows only.
+   With equality rows the Chebyshev LP fixes them at the centre, and moving θ alone breaks them unless
+   `F_E u = 0`. Such samples are rejected by the QP solve, so this is a wording issue, not a wrong result.
 
 The measurements in findings 3 to 5 come from an uncommitted debug build run on the laptop (runs of 4
 to 30 s). They are diagnostics, not timings.

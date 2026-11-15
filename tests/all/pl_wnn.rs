@@ -160,9 +160,15 @@ fn random_mpqp_theta6() {
     check("qp:4:6:14:1", Arc::new(rpopt::problem_generator::generate_mpqp(4, 6, 14, 1)), MpqpAlgorithm::GeometricParallel, N);
 }
 
+// The two 8-parameter problems are separate tests, so a test run with one task per test (the
+// cluster gate) checks them concurrently; together they took 22 minutes, the longest of all tests.
 #[test]
-fn random_mpqp_theta8() {
+fn random_mpqp_theta8_a() {
     check("qp:3:8:10:1", Arc::new(rpopt::problem_generator::generate_mpqp(3, 8, 10, 1)), MpqpAlgorithm::GeometricParallel, N);
+}
+
+#[test]
+fn random_mpqp_theta8_b() {
     check("qp:4:8:14:1", Arc::new(rpopt::problem_generator::generate_mpqp(4, 8, 14, 1)), MpqpAlgorithm::GeometricParallel, N);
 }
 
