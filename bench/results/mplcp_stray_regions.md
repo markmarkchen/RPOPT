@@ -172,3 +172,32 @@ flagged candidates; that change touches only flagged candidates (rare).
 1-CPU task per test on the merged tree: 142 passed, 0 failed, 3 ignored, plus one long point-location test
 (`pl_wnn::random_mpqp_theta8_b`) still running when this was written. `mplcp_no_gap_pop_081` and `mplcp_no_overlap_pop_011`
 pass on the phase 3 structure (the α test sits before the empty-P return in the walk step).
+
+## Round 3: certificate mode 1 on by default (3 to 5 parameters), gates on that commit
+
+Tests on the commit with mode 1 as the default: 1-CPU task per test, 143 passed, 0 failed, 3 ignored (146 tasks, including
+the split `pl_wnn` tests, the longest 20 minutes).
+
+Serial A/B, branch (mode 1) against main b5c8f6d, with an A/A pair (main against a copy of main) in every task. 60 problems:
+the 23 of the standard set, pop_081, pop_011, and every problem of the 135 with 3 to 5 parameters and at most 12,000 regions
+(the five larger ones, masses2_N12, pop_008, pop_062, pop_083, pop_088, were not timed). One task per (problem, alternation)
+with main, a copy of main and the branch once each in a shuffled order (3 to 5 tasks per problem; the three largest, one pair
+per task). Ratio above 1 = branch faster.
+
+| group | main / branch, median (min to max) | A/A |
+|---|---|---|
+| all 60 problems | 1.010 (0.406 to 1.804) | 0.999 (0.972 to 1.078) |
+| 35 problems of 4 ms or more | 1.017 (0.925 to 1.804) | 0.999 (0.985 to 1.025) |
+| 2 parameters (di, dinv, 13 problems) | 0.96 to 1.05, median 0.985 (the tight check, no certificate) | 0.97 to 1.08 |
+| 3 parameters, sys3x2_N3 to N9 | 1.009, 1.026, 0.967, 0.976, 0.964, 0.925 (N9) | 0.985 to 1.006 |
+| 3 parameters, pop_006, pop_045, pop_009, pop_059, pop_074 | 1.169, 1.189, 1.180, 1.131, 1.094 | 0.99 to 1.03 |
+| 4 parameters, masses2_N4 to N8, N10 | 1.126, 1.125, 1.114, 1.109, 1.097, 1.076 | 0.996 to 1.003 |
+| 5 parameters, pop_001 | 1.007 | 1.023 |
+| 6 parameters (certificate off), masses3_N3, masses3_N4, pop_017, rand_t6_x5_m20_s0 and s1 | 1.005, 1.016, 0.992, 0.990, 0.991 | 0.99 to 1.00 |
+| pop_011 (no stray regions to build), pop_081 (finds 4 regions instead of 2) | 1.804, 0.406 | 1.004, 1.019 |
+
+So mode 1 gains 5 to 19% where Case-2 searches are a large share (masses2, pop_006 and 16 other POP problems at 1.03 to 1.19)
+and offsets the 1 to 2% of the tight check there, but not on the sys3x2 family (3 parameters, 3% of `adjacent` calls are Case 2):
+sys3x2_N5, N6, N7 and N9 are 2 to 8% slower than main (N9 0.925 against an A/A of 0.999), the bookkeeping (clip vertices kept,
+hash index) costing more than the few certified facets save. If that matters, restricting the default to 4 and 5 parameters would
+remove it at the price of the pop_006-type gains at 3.
