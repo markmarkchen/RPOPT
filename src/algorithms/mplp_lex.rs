@@ -576,7 +576,8 @@ pub fn solve(program: &MpProgram, seed: u64) -> Result<Vec<CriticalRegion>, Stri
                 _ => None,
             };
             if boundary {
-                // nothing beyond this facet: counts as a success of the attempt (it saved the LP)
+                // nothing beyond this facet (no inequality row can leave the basis): no neighbour, and the
+                // skip is left out of the success rates of the gate
                 continue;
             }
             // the neighbour must have the reversed facet as one of its facets; otherwise (a numerically

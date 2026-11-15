@@ -446,6 +446,9 @@ time of `graph` (119 problems solved).
   lexico-feasible. For the rank-1 enumeration of Case 2 (one vanishing slack row, zero pivot) they show that the
   members A + {c} - {j} chosen by the smallest ratio lambda_j / mu_j are exactly the neighbours across the facet,
   and that dropping known members first leaves the explored set unchanged; ties go to the walk, as in the code.
+  For `mplp_lex` they show that a facet whose direct crossing finds no inequality row able to leave the basis has
+  no feasible point beyond it (so skipping it without an LP is exact), and that the success-rate gate choosing
+  between the direct crossing and the facet LP changes only the speed, not the regions.
   Open: KKT necessity, Case-2 completeness (a Lemke-type termination statement), and the
   facet-graph connectivity behind coverage. Tolerances and floating point are not modelled. The model traced the
   pop_001 overlap to absolute tolerances in the Case-2 sign test of `pivot_facet`; that is fixed (see "Bugs found
