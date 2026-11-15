@@ -1088,7 +1088,9 @@ impl MpProgram {
         for _ in 0..500 {
             let test: Vec<f64> = center.iter().map(|c| c + rng.gen_range(-radius..=radius)).collect();
             if let Some(sol) = self.solve_theta(&test) {
-                if sol.active_set.len() <= nx {
+                // a start whose active rows are dependent (duplicate or parallel constraints binding
+                // together) has no multiplier law, so its region cannot be built
+                if sol.active_set.len() <= nx && crate::linalg::is_full_rank_rows(&self.a, &sol.active_set) {
                     return Some(sol.active_set);
                 }
             }

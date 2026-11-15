@@ -1025,7 +1025,7 @@ pub fn kkt_region_nonempty(program: &MpProgram, active_set: &[usize]) -> bool {
 
 /// Start for `geometric` when every sampled optimal active set is over-determined (the sampled
 /// ball lies inside one degenerate vertex cone): the canonical basis of a sampled active set.
-fn degenerate_start(program: &MpProgram, rng: &mut StdRng) -> Option<Vec<usize>> {
+pub(crate) fn degenerate_start(program: &MpProgram, rng: &mut StdRng) -> Option<Vec<usize>> {
     use rand::Rng;
     let s = program.feasible_space_chebychev_ball()?;
     let (nx, nt) = (program.num_x(), program.num_t());

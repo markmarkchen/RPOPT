@@ -462,6 +462,10 @@ Bugs found and fixed while porting:
   - a facet with several neighbours is stepped across only once.
   RPOPT picks a canonical basis at degenerate points and completes suspect facets (Spjøtvold et al. 2006). Results
   on non-degenerate problems are unchanged.
+- **Zero regions from a dependent start.** `mplcp` and `geometric` returned no regions on five POP problems
+  (`pop_001`, `pop_019`, `pop_031`, `pop_052`, `pop_071`) because the sampled start active set had linearly
+  dependent rows (duplicate bounds binding together), so it had no multiplier law. The start now requires full row
+  rank and falls back to a canonical basis (`degenerate_start`, now also used by `mplcp`).
 - **Dense LP on larger problems.** It reported false infeasibility (from 48 variables up) because the anti-cycling
   rule switched on too early. This is fixed: decisions now match Clarabel up to 192 variables.
 - **Parameter bounding box.** When constraint processing drops parameter bounds as redundant, the box now falls

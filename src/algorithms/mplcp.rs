@@ -691,7 +691,7 @@ struct Item {
 /// The initial region of the exploration (and its center) or `None` when the program has none.
 fn initial_region(program: &MpProgram, seed: u64) -> Option<(CriticalRegion, Option<Vec<f64>>)> {
     let mut rng = StdRng::seed_from_u64(seed);
-    let active_set = program.gen_optimal_active_set(&mut rng)?;
+    let active_set = program.gen_optimal_active_set(&mut rng).or_else(|| super::degenerate_start(program, &mut rng))?;
     let initial = crate::mpqp_utils::gen_cr_from_active_set(program, &active_set, false)?;
     let nt = program.num_t();
     let init_center = if nt > 1 { chebyshev_ball(&initial.e, &initial.f, &[]).map(|s| s.x[..nt].to_vec()) } else { None };
