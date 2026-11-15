@@ -28,6 +28,11 @@ pub struct CriticalRegion {
     /// `is_full_dimension` instead of a second LP.
     #[serde(skip)]
     pub cheb_radius: Option<f64>,
+    /// mplcp builder only: for each entry of `lambda_set`, `regular_set.1` and `omega_set` (in that order, before duplicate rows were
+    /// removed), whether its hyperplane is shared with no other row of the unreduced system (see `utils::unique_hyperplane_flags`).
+    /// Empty when not computed.
+    #[serde(skip)]
+    pub facet_single: Vec<bool>,
 }
 
 impl CriticalRegion {

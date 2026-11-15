@@ -11,6 +11,7 @@ pub mod mpmilp_bb;
 pub mod mpmiqp;
 pub mod mpmiqp_exact;
 pub mod mplcp;
+mod seen_set;
 pub mod mplp_lex;
 pub mod mpr;
 pub mod pdaqp;

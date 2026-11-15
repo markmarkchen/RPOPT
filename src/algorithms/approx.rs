@@ -360,6 +360,7 @@ pub fn solve_mpqp_approx_with(program: &Arc<MpProgram>, opts: &ApproxOptions) ->
             lambda_set,
             regular_set: (reg_pos, reg_idx),
             y_fixation: None,
+            facet_single: vec![],
             y_indices: None,
             x_indices: None,
             cheb_radius: None,

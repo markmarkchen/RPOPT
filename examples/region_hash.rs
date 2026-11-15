@@ -25,6 +25,10 @@ fn main() {
         rpopt::algorithms::mplp_lex::set_mode(v.parse().unwrap());
     }
     let alg = MpqpAlgorithm::from_name(&args[1]).expect("algorithm");
+    // RPOPT_INDEX_FIRST=0|1|2: index-first lookup off, on (default), audit
+    if let Ok(m) = std::env::var("RPOPT_INDEX_FIRST") {
+        rpopt::algorithms::mplcp::set_index_first(m.parse().unwrap());
+    }
     // MPLCP_NO_RANK1=1: the Case-2 walk only (the oracle of the region-set gates)
     if std::env::var("MPLCP_NO_RANK1").is_ok() {
         rpopt::algorithms::mplcp::set_rank1(false);
@@ -80,6 +84,9 @@ fn main() {
         let t0 = std::time::Instant::now();
         let sol = solve_mpqp(&p, alg);
         let dt = t0.elapsed().as_secs_f64();
+        if std::env::var("RPOPT_INDEX_FIRST").is_ok() {
+            eprintln!("index_first facets_skipped/audit_checks/audit_violations/regions_skipped/regions_would_skip/path_differs {:?}", rpopt::algorithms::mplcp::index_first_stats());
+        }
         let mut recs: Vec<(Vec<usize>, Vec<i64>)> = sol
             .critical_regions
             .iter()

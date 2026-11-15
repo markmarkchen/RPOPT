@@ -38,6 +38,7 @@ pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Opti
     for (p, &r) in kept_rows.iter().enumerate() {
         pos[r] = p;
     }
+    let dropped_zero = (0..e_all.rows).any(|r| pos[r] == usize::MAX && f_all[r].abs() <= 1e-8);
     let mut e = e_all.select_rows(&kept_rows);
     let mut f: Vec<f64> = kept_rows.iter().map(|&r| f_all[r]).collect();
     for i in 0..e.rows {
@@ -119,7 +120,7 @@ pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Opti
             // them would fail the same way (measured: it never succeeded after a failed first pass)
             #[cfg(feature = "lp_census")]
             let _tred = crate::census_diag::t0();
-            let prep = crate::mpqp_utils::Prepared { law, n_lambda, inactive, pos, e, f, kept_rows_len: kept_rows.len(), center, cheb_radius };
+            let prep = crate::mpqp_utils::Prepared { law, n_lambda, inactive, pos, e, f, kept_rows_len: kept_rows.len(), center, cheb_radius, dropped_zero };
             let r = if nt >= 6 && chain_on() { lp_path(program, active_set, prep, parent_box, entry) } else { crate::mpqp_utils::gen_cr_from_prepared(program, active_set, false, prep).map(|(cr, c)| (cr, c, None, None)) };
             #[cfg(feature = "lp_census")]
             {
@@ -157,6 +158,7 @@ pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Opti
     let active: Vec<usize> = active_set[neq..].to_vec();
     let relevant_lambda: Vec<usize> = kept_lambda.iter().map(|&i| active[i]).collect();
     let real_regular: Vec<usize> = kept_ineq.iter().map(|&i| inactive[i]).collect();
+    let facet_single = crate::utils::unique_hyperplane_flags(&e, &f, &non_redundant, dropped_zero);
     let e_red = e.select_rows(&non_redundant);
     let f_red: Vec<f64> = non_redundant.iter().map(|&p| f[p]).collect();
     let (e_red, f_red) = remove_duplicate_rows(&e_red, &f_red);
@@ -178,7 +180,8 @@ pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Opti
             y_indices: None,
             x_indices: None,
             cheb_radius,
-        },
+        facet_single,
+            },
         center,
         verts,
         None,
@@ -234,7 +237,7 @@ fn note_chain(regions: u64, fallbacks: u64, engine: u64, n: usize) {
 /// region, its centre and the box's 2n points (flattened) for the region's own children.
 fn lp_path(program: &MpProgram, active_set: &[usize], prep: crate::mpqp_utils::Prepared, parent_box: Option<&[f64]>, entry: Option<&(Vec<f64>, f64)>) -> Option<Built> {
     use crate::utils::remove_duplicate_rows;
-    let crate::mpqp_utils::Prepared { law, n_lambda, inactive, pos, e, f, kept_rows_len, center, cheb_radius } = prep;
+    let crate::mpqp_utils::Prepared { law, n_lambda, inactive, pos, e, f, kept_rows_len, center, cheb_radius, dropped_zero } = prep;
     let nt = program.num_t();
     let neq = program.num_equality_constraints();
     let n_inactive = inactive.len();
@@ -338,6 +341,7 @@ fn lp_path(program: &MpProgram, active_set: &[usize], prep: crate::mpqp_utils::P
     let active: Vec<usize> = active_set[neq..].to_vec();
     let relevant_lambda: Vec<usize> = kept_lambda.iter().map(|&i| active[i]).collect();
     let real_regular: Vec<usize> = kept_ineq.iter().map(|&i| inactive[i]).collect();
+    let facet_single = crate::utils::unique_hyperplane_flags(&e, &f, &non_redundant, dropped_zero);
     let e_red = e.select_rows(&non_redundant);
     let f_red: Vec<f64> = non_redundant.iter().map(|&p| f[p]).collect();
     let (e_red, f_red) = remove_duplicate_rows(&e_red, &f_red);
@@ -361,7 +365,8 @@ fn lp_path(program: &MpProgram, active_set: &[usize], prep: crate::mpqp_utils::P
             y_indices: None,
             x_indices: None,
             cheb_radius,
-        },
+        facet_single,
+            },
         center,
         None,
         boxflat,
