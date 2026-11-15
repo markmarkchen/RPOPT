@@ -167,3 +167,6 @@ import RpoptProofs
 #print axioms Rpopt.Twins.kkt_reduce
 #print axioms Rpopt.Twins.kkt_split
 #print axioms Rpopt.box_lp_gap
+-- Round 20: claimed candidates and the cold retry (62f7442)
+#print axioms Rpopt.reach_of_claims
+#print axioms Rpopt.chebyshev_radius_le
