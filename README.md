@@ -349,6 +349,9 @@ regions are identical, except for mpLP `graph`, whose old partitions had gaps an
 - **mpQP:** `mplcp` 1.27x (1.15x to 1.45x) and `geometric` 1.25x (up to 1.79x). `graph`, `combinatorial_graph` and
   `combinatorial` gain 1.03x to 1.05x: their time is in rank tests and candidate enumeration rather than LPs
   (`bench/results/lp_census.md`).
+- **LP census at 3 to 10 parameters** (`bench/results/lp_census_highdim.md`, `--features lp_census`): why `mplcp` and
+  `geometric` lose ground to `graph` as the parameter count grows (neighbour search per facet; vertex clipping is
+  compiled only for 2 to 6 parameters, and lifting that cap was measured 1.1x to 15x slower, so it is not kept).
 
 **Against the authors' implementation of Arnström-Axehill 2024** (`pdaqp` 0.7.1, ParametricDAQP.jl):
 `parametric_daqp` is 1.5x to 2.9x faster on the larger problems. `geometric` is about 14x faster than `pdaqp` on

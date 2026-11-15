@@ -62,6 +62,25 @@ macro_rules! census_keep {
     ($id:ident) => {};
 }
 
+/// Evaluates an expression and adds its wall time (ns) to a counter.
+#[cfg(feature = "lp_census")]
+#[macro_export]
+macro_rules! census_timed {
+    ($c:ident, $e:expr) => {{
+        let __t = $crate::census::begin();
+        let __r = $e;
+        $crate::census::bump($crate::census::Counter::$c, __t.elapsed().as_nanos() as u64);
+        __r
+    }};
+}
+#[cfg(not(feature = "lp_census"))]
+#[macro_export]
+macro_rules! census_timed {
+    ($c:ident, $e:expr) => {
+        $e
+    };
+}
+
 /// Times an LP/QP entry point body (`$kind` is `Lp` or `Qp`) and records whether it came back
 /// infeasible. The body may `return` and use `?`.
 #[cfg(feature = "lp_census")]
@@ -144,15 +163,81 @@ mod imp {
         BuildNanos,
         BuildLpNanos,
         BuildLpCalls,
+        /// final facet rows (rows of E) of the regions kept by a builder
+        FacetRows,
+        /// vertex clipping (`clip_flags`): calls, success, and None by reason
+        ClipCalls,
+        ClipOk,
+        ClipNtOut,
+        ClipManyHyp,
+        ClipInfBox,
+        ClipManyVerts,
+        ClipFewVerts,
+        ClipViolate,
+        /// mplcp `adjacent`: calls, no zero row (no neighbour), Case-1 fast path, Case 2 (pivot_facet)
+        /// with the time spent in each
+        AdjCalls,
+        AdjNone,
+        AdjFast,
+        AdjCase2,
+        AdjNoneNanos,
+        AdjFastNanos,
+        AdjCase2Nanos,
+        /// mplcp time split: neighbour search (`expand_candidates`), region build, tableau update
+        MplcpNbrNanos,
+        MplcpBuildNanos,
+        MplcpTabNanos,
+        /// graph-type candidates: generated and passed to the region test
+        CandGen,
+        /// mplcp: candidates returned by `adjacent` (fast path Toggle / slow path Z), how many were
+        /// already seen, and `adjacent` calls (with at least one candidate) whose candidates were all seen
+        NbrFastRet,
+        NbrFastSeen,
+        NbrSlowRet,
+        NbrSlowSeen,
+        GrpFast,
+        GrpFastAllSeen,
+        GrpSlow,
+        GrpSlowAllSeen,
+        /// rows of a mplcp region that share a hyperplane (clip bit) with a box face or an earlier row
+        ClipDupRows,
+        /// `pivot_facet`: calls, loop iterations ending in Case 1 / Case 2, Case-2 branches tried,
+        /// branches cut by `lex_nonneg`, Chebyshev LPs and those with an empty facet, branches that
+        /// reach a basis already reached in the same `adjacent` call, `depth > 6` returns, iteration
+        /// limit exits, calls per recursion depth 0..=7
+        PfCalls,
+        PfCase1,
+        PfCase2,
+        PfBranches,
+        PfLexCut,
+        PfCheb,
+        PfChebEmpty,
+        PfRepeatBasis,
+        PfDepthLimit,
+        PfIterLimit,
+        PfDepth0,
+        PfDepth1,
+        PfDepth2,
+        PfDepth3,
+        PfDepth4,
+        PfDepth5,
+        PfDepth6,
+        PfDepth7,
     }
-    pub const NC: usize = 15;
+    pub const NC: usize = 63;
 
-    #[derive(Clone, Debug, Default)]
+    #[derive(Clone, Debug)]
     pub struct Stats {
         pub calls: [[u64; NP]; 2],
         pub infeasible: [[u64; NP]; 2],
         pub nanos: [[u64; NP]; 2],
         pub counters: [u64; NC],
+    }
+
+    impl Default for Stats {
+        fn default() -> Self {
+            Stats { calls: [[0; NP]; 2], infeasible: [[0; NP]; 2], nanos: [[0; NP]; 2], counters: [0; NC] }
+        }
     }
 
     impl Stats {
@@ -251,8 +336,93 @@ mod imp {
         });
     }
 
+    thread_local! {
+        static MUTE_CLIP: Cell<bool> = const { Cell::new(false) };
+    }
+
+    /// While alive, the `Clip*` counters ignore bumps (a fallback that repeats a clip already counted).
+    pub struct MuteClip(bool);
+    impl MuteClip {
+        pub fn new() -> Self {
+            MuteClip(MUTE_CLIP.with(|c| c.replace(true)))
+        }
+    }
+    impl Default for MuteClip {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+    impl Drop for MuteClip {
+        fn drop(&mut self) {
+            MUTE_CLIP.with(|c| c.set(self.0));
+        }
+    }
+
+    /// Groups of candidates (one group per `adjacent` call) awaiting their seen/fresh verdicts.
+    struct Groups {
+        pending: std::collections::VecDeque<(u32, bool)>,
+        cur: Option<(u32, bool, u32, u32)>, // group, fast, count, seen
+    }
+    thread_local! {
+        static GROUPS: std::cell::RefCell<Groups> = const { std::cell::RefCell::new(Groups { pending: std::collections::VecDeque::new(), cur: None }) };
+        static GROUP_ID: Cell<u32> = const { Cell::new(0) };
+        static BASES: std::cell::RefCell<std::collections::HashSet<Vec<usize>>> = std::cell::RefCell::new(std::collections::HashSet::new());
+    }
+    fn finish_group(g: &mut Groups) {
+        if let Some((_, fast, cnt, seen)) = g.cur.take() {
+            let (a, b) = if fast { (Counter::GrpFast, Counter::GrpFastAllSeen) } else { (Counter::GrpSlow, Counter::GrpSlowAllSeen) };
+            bump(a, 1);
+            if cnt == seen {
+                bump(b, 1);
+            }
+        }
+    }
+    /// Starts a batch: one `(is_fast_path)` flag per candidate, in order; `adjacent` calls are
+    /// told apart by the group number.
+    pub fn batch(flags: &[(u32, bool)]) {
+        GROUPS.with(|g| {
+            let mut g = g.borrow_mut();
+            finish_group(&mut g);
+            g.pending.clear();
+            g.pending.extend(flags.iter().cloned());
+        });
+    }
+    pub fn next_group() -> u32 {
+        GROUP_ID.with(|c| {
+            c.set(c.get() + 1);
+            c.get()
+        })
+    }
+    /// The verdict (`fresh`) for the next candidate of the batch.
+    pub fn seen(fresh: bool) {
+        GROUPS.with(|g| {
+            let mut g = g.borrow_mut();
+            let Some((id, fast)) = g.pending.pop_front() else { return };
+            if g.cur.map(|c| c.0 != id).unwrap_or(false) {
+                finish_group(&mut g);
+            }
+            let cur = g.cur.get_or_insert((id, fast, 0, 0));
+            cur.2 += 1;
+            cur.3 += (!fresh) as u32;
+            bump(if fast { Counter::NbrFastSeen } else { Counter::NbrSlowSeen }, (!fresh) as u64);
+        });
+    }
+    pub fn flush_groups() {
+        GROUPS.with(|g| finish_group(&mut g.borrow_mut()));
+    }
+    /// Records the row set of a basis reached inside the current `adjacent` call; true when already seen.
+    pub fn basis_seen(key: Vec<usize>) -> bool {
+        BASES.with(|b| !b.borrow_mut().insert(key))
+    }
+    pub fn basis_reset() {
+        BASES.with(|b| b.borrow_mut().clear());
+    }
+
     #[inline]
     pub fn bump(c: Counter, n: u64) {
+        if (Counter::ClipCalls as usize..=Counter::ClipViolate as usize).contains(&(c as usize)) && MUTE_CLIP.with(|m| m.get()) {
+            return;
+        }
         MINE.with(|m| m.lock().unwrap().counters[c as usize] += n);
     }
 
@@ -283,6 +453,7 @@ mod imp {
 
     /// Zeroes every thread's statistics.
     pub fn reset() {
+        flush_groups();
         for s in REGISTRY.lock().unwrap().iter() {
             *s.lock().unwrap() = Stats::default();
         }
@@ -290,6 +461,7 @@ mod imp {
 
     /// Sum over all threads.
     pub fn snapshot() -> Stats {
+        flush_groups();
         let mut out = Stats::default();
         for s in REGISTRY.lock().unwrap().iter() {
             out.add(&s.lock().unwrap());

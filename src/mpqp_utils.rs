@@ -306,6 +306,7 @@ pub fn gen_cr_from_kkt(program: &MpProgram, active_set: &[usize], kkt: KktRegion
     let (e_red, f_red) = remove_duplicate_rows(&e_red, &f_red);
     crate::stats::region_built(active_set);
     crate::census_bump!(RedRowsKept, non_redundant.len());
+    crate::census_bump!(FacetRows, e_red.rows);
     crate::census_keep!(cbuild);
     Some(CriticalRegion {
         a: law.a_x,
@@ -575,17 +576,30 @@ fn region_bbox_pts(e: &Mat, f: &[f64], c: &[f64]) -> Option<(Vec<f64>, Vec<f64>,
 /// away), -1 undecided (in between). None when the problem does not fit (nt outside 2..=6, more
 /// than 128 hyperplanes, an infinite box, too many vertices) or a vertex violates a row.
 fn clip_flags(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &[f64]) -> Option<Vec<i8>> {
-    if lo.iter().chain(hi).any(|v| !v.is_finite()) || e.rows + 2 * e.cols > 128 {
+    crate::census_bump!(ClipCalls, 1);
+    if lo.iter().chain(hi).any(|v| !v.is_finite()) {
+        crate::census_bump!(ClipInfBox, 1);
         return None;
     }
-    match e.cols {
+    if e.rows + 2 * e.cols > 128 {
+        crate::census_bump!(ClipManyHyp, 1);
+        return None;
+    }
+    let r = match e.cols {
         2 => clip_n::<2>(e, f, order, lo, hi),
         3 => clip_n::<3>(e, f, order, lo, hi),
         4 => clip_n::<4>(e, f, order, lo, hi),
         5 => clip_n::<5>(e, f, order, lo, hi),
         6 => clip_n::<6>(e, f, order, lo, hi),
-        _ => None,
+        _ => {
+            crate::census_bump!(ClipNtOut, 1);
+            None
+        }
+    };
+    if r.is_some() {
+        crate::census_bump!(ClipOk, 1);
     }
+    r
 }
 
 #[inline(always)]
@@ -713,7 +727,12 @@ fn clip_n<const N: usize>(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &
                 }
             }
         }
-        if npts.len() > 600 || npts.len() <= N {
+        if npts.len() > 600 {
+            crate::census_bump!(ClipManyVerts, 1);
+            return None;
+        }
+        if npts.len() <= N {
+            crate::census_bump!(ClipFewVerts, 1);
             return None;
         }
         std::mem::swap(&mut pts, &mut npts);
@@ -729,6 +748,7 @@ fn clip_n<const N: usize>(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &
             smin = smin.min(fp - dotn::<N>(a, x));
         }
         if smin < -1e-7 * sc {
+            crate::census_bump!(ClipViolate, 1);
             return None;
         }
         out.push(if smin <= 1e-9 * sc {
@@ -857,6 +877,7 @@ pub fn gen_cr_from_law_hinted(program: &MpProgram, active_set: &[usize], law: cr
     let (e_red, f_red) = remove_duplicate_rows(&e_red, &f_red);
     crate::stats::region_built(active_set);
     crate::census_bump!(RedRowsKept, non_redundant.len());
+    crate::census_bump!(FacetRows, e_red.rows);
     crate::census_keep!(cbuild);
     Some((CriticalRegion {
         a: law.a_x,
@@ -881,6 +902,7 @@ pub fn gen_cr_from_law_hinted(program: &MpProgram, active_set: &[usize], law: cr
 /// exact vertex clipping of that box (no LP) with LPs only for undecided rows, or the box-screened
 /// LP path when clipping does not apply.
 fn row_flags(program: &MpProgram, e: &Mat, f: &[f64], center: &[f64]) -> Vec<bool> {
+    crate::census_purpose!(Redundancy);
     let nt = e.cols;
     let (mut blo, mut bhi) = match program.theta_bbox() {
         Some((l, h)) => (l.clone(), h.clone()),

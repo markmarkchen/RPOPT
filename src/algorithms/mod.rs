@@ -477,6 +477,7 @@ fn graph(program: &Arc<MpProgram>, opts: &SolveOptions, use_pruning: bool) -> Ve
             continue;
         }
         attempted.insert(candidate.clone());
+        crate::census_bump!(CandGen, 1);
         let mref = if use_pruning { Some(&murder) } else { None };
         // mpLP: only vertex-defining sets (size n_x) can be regions; smaller sets lead nowhere
         if is_lp && candidate.len() < nx {
@@ -691,6 +692,7 @@ fn combinatorial_graph_bits(program: &MpProgram, opts: &SolveOptions, parallel: 
     let mut regions = vec![];
     // returns (region, explore_subsets, explore_supersets, data for the supersets)
     let process = |k: u128, hint: Option<bool>, parent: Option<&incremental::ParentInfo>| -> (Option<CriticalRegion>, bool, bool, Option<std::sync::Arc<incremental::ParentInfo>>) {
+        crate::census_bump!(CandGen, 1);
         crate::stats::rank(); // PPOPT is_full_rank, answered here from the hint when available
         let a = from_bits(k);
         if hint == Some(false) {
@@ -928,6 +930,7 @@ fn combinatorial_graph_vec(program: &MpProgram, opts: &SolveOptions, parallel: b
 
     // returns (region, explore_subsets, explore_supersets)
     let process = |a: &Vec<usize>| -> (Option<CriticalRegion>, bool, bool) {
+        crate::census_bump!(CandGen, 1);
         crate::stats::rank();
         if !program.check_active_set_rank(a) {
             return (None, true, false);

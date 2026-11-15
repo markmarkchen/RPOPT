@@ -42,7 +42,7 @@ fn child(path: &str, alg: &str) {
     let (dt, regions, s) = &runs[runs.len() / 2];
     println!(
         "{}",
-        json!({"regions": regions, "solve_s": dt, "runs": runs.len(), "calls": s.calls, "infeasible": s.infeasible, "nanos": s.nanos, "counters": s.counters})
+        json!({"regions": regions, "solve_s": dt, "runs": runs.len(), "calls": s.calls, "infeasible": s.infeasible, "nanos": s.nanos, "counters": s.counters.to_vec()})
     );
 }
 
@@ -81,6 +81,9 @@ fn main() {
     }
     let mut timeout = 60.0f64;
     let mut detail = false;
+    let mut problems: Option<Vec<String>> = None;
+    let mut algs: Option<Vec<String>> = None;
+    let mut highdim = false;
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
@@ -90,19 +93,38 @@ fn main() {
             }
             "--detail" => detail = true,
             "--md" => {}
+            "--problems" => {
+                problems = Some(args[i + 1].split(',').map(|x| x.to_string()).collect());
+                i += 1;
+            }
+            "--algs" => {
+                algs = Some(args[i + 1].split(',').map(|x| x.to_string()).collect());
+                i += 1;
+            }
+            "--highdim" => highdim = true,
             other => panic!("unknown argument {other}"),
         }
         i += 1;
     }
     let mut jobs: Vec<(String, String)> = vec![];
-    for p in ["di_N10", "masses2_N6", "sys3x2_N5"] {
-        for a in QP_ALGOS {
-            jobs.push((format!("bench/problems/{p}.json"), a.into()));
+    if let Some(ps) = &problems {
+        let al: Vec<String> = algs.clone().unwrap_or_else(|| QP_ALGOS.iter().map(|x| x.to_string()).collect());
+        for p in ps {
+            let path = ["bench/problems_large", "bench/problems"].iter().map(|d| format!("{d}/{p}.json")).find(|f| std::path::Path::new(f).exists()).unwrap_or_else(|| panic!("no problem {p}"));
+            for a in &al {
+                jobs.push((path.clone(), a.clone()));
+            }
         }
-    }
-    for (p, algs) in [("diinf_N4", vec!["geometric", "mplp_lex", "combinatorial"]), ("diinf_N6", vec!["geometric", "mplp_lex"])] {
-        for a in algs {
-            jobs.push((format!("bench/problems_lp/{p}.json"), a.into()));
+    } else {
+        for p in ["di_N10", "masses2_N6", "sys3x2_N5"] {
+            for a in QP_ALGOS {
+                jobs.push((format!("bench/problems/{p}.json"), a.into()));
+            }
+        }
+        for (p, algs) in [("diinf_N4", vec!["geometric", "mplp_lex", "combinatorial"]), ("diinf_N6", vec!["geometric", "mplp_lex"])] {
+            for a in algs {
+                jobs.push((format!("bench/problems_lp/{p}.json"), a.into()));
+            }
         }
     }
     let exe = std::env::current_exe().unwrap();
@@ -269,6 +291,10 @@ fn main() {
         println!("| {} | {} | {} | {} | {} | {} | {} | {} |", r.problem, r.alg, c(Counter::CombGen), c(Counter::CombPruned), c(Counter::CombRankFail), c(Counter::CombWitness), c(Counter::CombLp), c(Counter::CombInfeasible));
     }
 
+    if highdim {
+        highdim_tables(&rows, &skipped);
+    }
+
     if detail {
         println!("\n### Detail: LP calls / infeasible / ms by purpose\n");
         print!("| problem | algorithm |");
@@ -292,5 +318,114 @@ fn main() {
             }
             println!();
         }
+    }
+}
+
+fn highdim_tables(rows: &[Row], skipped: &[(String, String)]) {
+    let c = |r: &Row, k: Counter| r.s.counter(k) as f64;
+    let per = |a: f64, b: f64| if b <= 0.0 { "-".to_string() } else { format!("{:.1}", a / b) };
+    println!("\n### High-dimension 1: cost per region\n");
+    println!("| problem | algorithm | regions | solve ms | us/region | LP/region | QP/region | LP+QP share | facets/region | build ms/region |");
+    println!("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|");
+    for r in rows {
+        let n = r.regions.max(1) as f64;
+        println!(
+            "| {} | {} | {} | {:.0} | {:.0} | {:.1} | {:.1} | {} | {} | {:.2} |",
+            r.problem, r.alg, r.regions, r.solve_s * 1e3, r.solve_s * 1e6 / n, r.s.lp_calls() as f64 / n, r.s.qp_calls() as f64 / n,
+            pct((r.s.lp_nanos() + r.s.qp_nanos()) as f64, r.solve_s * 1e9), per(c(r, Counter::FacetRows), n), (c(r, Counter::BuildNanos) + c(r, Counter::MplcpBuildNanos)) / 1e6 / n
+        );
+    }
+    println!("\n### High-dimension 2: LP calls per region by purpose (time share of solve in brackets)\n");
+    print!("| problem | algorithm |");
+    for nm in NAMES {
+        print!(" {nm} |");
+    }
+    println!();
+    print!("|---|---|");
+    for _ in 0..NP {
+        print!("---:|");
+    }
+    println!();
+    for r in rows {
+        let n = r.regions.max(1) as f64;
+        print!("| {} | {} |", r.problem, r.alg);
+        for p in 0..NP {
+            let (calls, t) = (r.s.calls[0][p] + r.s.calls[1][p], (r.s.nanos[0][p] + r.s.nanos[1][p]) as f64);
+            if calls == 0 {
+                print!(" - |");
+            } else {
+                print!(" {:.1} ({}) |", calls as f64 / n, pct(t, r.solve_s * 1e9));
+            }
+        }
+        println!();
+    }
+    println!("\n### High-dimension 3: mplcp neighbour search (per `adjacent` call) and time split\n");
+    println!("| problem | regions | adjacent/region | no zero row | Case 1 fast | Case 2 | us/call none | us/call fast | us/call Case 2 | Case 2 share of adjacent time | neighbour search | region build | tableau update | rest |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::AdjCalls) > 0.0) {
+        let (n, a) = (r.regions.max(1) as f64, c(r, Counter::AdjCalls));
+        let us = |t: Counter, k: Counter| if c(r, k) > 0.0 { format!("{:.1}", c(r, t) / 1e3 / c(r, k)) } else { "-".into() };
+        let tot = r.solve_s * 1e9;
+        let (nb, bd, tb) = (c(r, Counter::MplcpNbrNanos), c(r, Counter::MplcpBuildNanos), c(r, Counter::MplcpTabNanos));
+        let adj_t = c(r, Counter::AdjNoneNanos) + c(r, Counter::AdjFastNanos) + c(r, Counter::AdjCase2Nanos);
+        println!(
+            "| {} | {} | {:.1} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |",
+            r.problem, r.regions, a / n, pct(c(r, Counter::AdjNone), a), pct(c(r, Counter::AdjFast), a), pct(c(r, Counter::AdjCase2), a),
+            us(Counter::AdjNoneNanos, Counter::AdjNone), us(Counter::AdjFastNanos, Counter::AdjFast), us(Counter::AdjCase2Nanos, Counter::AdjCase2),
+            pct(c(r, Counter::AdjCase2Nanos), adj_t), pct(nb, tot), pct(bd, tot), pct(tb, tot), pct((tot - nb - bd - tb).max(0.0), tot)
+        );
+    }
+    println!("\n### High-dimension 3b: mplcp candidates that end at a known region\n");
+    println!("| problem | candidates/region | fast returned | fast already seen | slow returned | slow already seen | adjacent calls with candidates | all seen (fast) | all seen (slow) | clip rows sharing a hyperplane/region |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::AdjCalls) > 0.0) {
+        let n = r.regions.max(1) as f64;
+        let (fr, sr) = (c(r, Counter::NbrFastRet), c(r, Counter::NbrSlowRet));
+        println!(
+            "| {} | {:.1} | {} | {} | {} | {} | {:.1}/region | {} | {} | {} |",
+            r.problem, (fr + sr) / n, fr, pct(c(r, Counter::NbrFastSeen), fr), sr, pct(c(r, Counter::NbrSlowSeen), sr),
+            (c(r, Counter::GrpFast) + c(r, Counter::GrpSlow)) / n, pct(c(r, Counter::GrpFastAllSeen), c(r, Counter::GrpFast)), pct(c(r, Counter::GrpSlowAllSeen), c(r, Counter::GrpSlow)),
+            per(c(r, Counter::ClipDupRows), n)
+        );
+    }
+    println!("\n### High-dimension 3c: mplcp `pivot_facet` (degenerate slow path)\n");
+    println!("| problem | calls/region | Case-1 iters | Case-2 iters | branches | cut by lex_nonneg | Chebyshev LPs | empty facet | repeated basis | depth 0/1/2/3/4/5/6/7+ | depth>6 returns | iteration-limit exits |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::AdjCalls) > 0.0) {
+        let n = r.regions.max(1) as f64;
+        let ds: Vec<String> = [Counter::PfDepth0, Counter::PfDepth1, Counter::PfDepth2, Counter::PfDepth3, Counter::PfDepth4, Counter::PfDepth5, Counter::PfDepth6, Counter::PfDepth7].iter().map(|&k| format!("{}", c(r, k) as u64)).collect();
+        let br = c(r, Counter::PfBranches);
+        println!(
+            "| {} | {:.1} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |",
+            r.problem, c(r, Counter::PfCalls) / n, c(r, Counter::PfCase1), c(r, Counter::PfCase2), br, pct(c(r, Counter::PfLexCut), br), c(r, Counter::PfCheb),
+            pct(c(r, Counter::PfChebEmpty), c(r, Counter::PfCheb)), pct(c(r, Counter::PfRepeatBasis), br), ds.join("/"), c(r, Counter::PfDepthLimit), c(r, Counter::PfIterLimit)
+        );
+    }
+    println!("\n### High-dimension 4: vertex clipping (`clip_flags`) outcomes per call\n");
+    println!("| problem | algorithm | clip calls/region | ok | nt outside 2..=6 | more than 128 hyperplanes | infinite box | more than 600 vertices | too few vertices | vertex violates a row | redundancy LPs/region |");
+    println!("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+    for r in rows.iter().filter(|r| c(r, Counter::ClipCalls) > 0.0 || r.alg != "combinatorial") {
+        let (n, k) = (r.regions.max(1) as f64, c(r, Counter::ClipCalls));
+        if k == 0.0 && r.s.calls[0][0] == 0 {
+            continue;
+        }
+        println!(
+            "| {} | {} | {:.2} | {} | {} | {} | {} | {} | {} | {} | {:.1} |",
+            r.problem, r.alg, k / n, pct(c(r, Counter::ClipOk), k), pct(c(r, Counter::ClipNtOut), k), pct(c(r, Counter::ClipManyHyp), k), pct(c(r, Counter::ClipInfBox), k),
+            pct(c(r, Counter::ClipManyVerts), k), pct(c(r, Counter::ClipFewVerts), k), pct(c(r, Counter::ClipViolate), k), r.s.calls[0][0] as f64 / n
+        );
+    }
+    println!("\n### High-dimension 5: candidates and facet steps per region\n");
+    println!("| problem | algorithm | regions | candidates tried/region | duplicates/region | neighbour LP+QP/region | feasibility LP/region |");
+    println!("|---|---|---:|---:|---:|---:|---:|");
+    for r in rows.iter().filter(|r| matches!(r.alg.as_str(), "graph" | "combinatorial_graph" | "geometric" | "mplcp")) {
+        let n = r.regions.max(1) as f64;
+        println!(
+            "| {} | {} | {} | {} | {:.1} | {:.1} | {:.1} |",
+            r.problem, r.alg, r.regions, per(c(r, Counter::CandGen), n), c(r, Counter::Dup) / n, (r.s.calls[0][2] + r.s.calls[1][2]) as f64 / n, r.s.calls[0][1] as f64 / n
+        );
+    }
+    for (p, a) in skipped {
+        println!("\n(skipped: {p} {a})");
     }
 }

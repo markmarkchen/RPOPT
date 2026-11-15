@@ -13,6 +13,7 @@ use std::cmp::Ordering;
 
 pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Option<&[f64]>, law: Option<crate::program::ControlLaw>) -> Option<(CriticalRegion, Vec<f64>)> {
     use crate::mpqp_utils::kkt_region_from_law;
+    crate::census_purpose!(Chebyshev);
     use crate::utils::{numerically_nonzero_rows, remove_duplicate_rows};
     let nt = program.num_t();
     let law = match law {
@@ -71,6 +72,8 @@ pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Opti
     let flags: Vec<bool> = match clip_flags(&e, &f, &order, &blo, &bhi) {
         Some(fl) => fl.iter().enumerate().map(|(p, &v)| if v >= 0 { v == 1 } else { crate::solver::lp::lp_feasible_from(&e, &f, &[p], &center) }).collect(),
         None => {
+            #[cfg(feature = "lp_census")]
+            let _mute = crate::census::MuteClip::new();
             return crate::mpqp_utils::gen_cr_from_law_hinted(program, active_set, law.clone(), hint);
         }
     };
@@ -106,6 +109,7 @@ pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Opti
     let f_red: Vec<f64> = non_redundant.iter().map(|&p| f[p]).collect();
     let (e_red, f_red) = remove_duplicate_rows(&e_red, &f_red);
     crate::stats::region_built(active_set);
+    crate::census_bump!(FacetRows, e_red.rows);
     Some((
         CriticalRegion {
             a: law.a_x,
@@ -148,17 +152,30 @@ fn cheb_from(a: &Mat, b: &[f64], x0: &[f64]) -> Option<crate::solver::lp::LpSolu
 }
 
 fn clip_flags(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &[f64]) -> Option<Vec<i8>> {
-    if lo.iter().chain(hi).any(|v| !v.is_finite()) || e.rows + 2 * e.cols > 128 {
+    crate::census_bump!(ClipCalls, 1);
+    if lo.iter().chain(hi).any(|v| !v.is_finite()) {
+        crate::census_bump!(ClipInfBox, 1);
         return None;
     }
-    match e.cols {
+    if e.rows + 2 * e.cols > 128 {
+        crate::census_bump!(ClipManyHyp, 1);
+        return None;
+    }
+    let r = match e.cols {
         2 => clip_n::<2>(e, f, order, lo, hi),
         3 => clip_n::<3>(e, f, order, lo, hi),
         4 => clip_n::<4>(e, f, order, lo, hi),
         5 => clip_n::<5>(e, f, order, lo, hi),
         6 => clip_n::<6>(e, f, order, lo, hi),
-        _ => None,
+        _ => {
+            crate::census_bump!(ClipNtOut, 1);
+            None
+        }
+    };
+    if r.is_some() {
+        crate::census_bump!(ClipOk, 1);
     }
+    r
 }
 
 #[inline(always)]
@@ -237,7 +254,10 @@ fn clip_n<const N: usize>(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &
         ins.clear();
         outs.clear();
         match seen.get(&hkey(a, fr)) {
-            Some(&b) => bit[r] = b,
+            Some(&b) => {
+                bit[r] = b;
+                crate::census_bump!(ClipDupRows, 1);
+            }
             None => {
                 seen.insert(hkey(a, fr), r);
             }
@@ -299,7 +319,12 @@ fn clip_n<const N: usize>(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &
                 }
             }
         }
-        if npts.len() > 600 || npts.len() <= N {
+        if npts.len() > 600 {
+            crate::census_bump!(ClipManyVerts, 1);
+            return None;
+        }
+        if npts.len() <= N {
+            crate::census_bump!(ClipFewVerts, 1);
             return None;
         }
         std::mem::swap(&mut pts, &mut npts);
@@ -331,6 +356,7 @@ fn clip_n<const N: usize>(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &
             smin = smin.min(fp - dotn::<N>(a, x));
         }
         if smin < -1e-7 * sc {
+            crate::census_bump!(ClipViolate, 1);
             return None;
         }
         out.push(if smin <= 1e-9 * sc {
