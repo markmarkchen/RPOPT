@@ -408,6 +408,7 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
         }
     }
     loop {
+        crate::census_t0!(cm);
         // P: rows decreasing in the entering variable
         let a: Vec<f64> = (0..n).map(|i| -tab.tv(i, e)).collect();
         let w = tab.w;
@@ -445,6 +446,7 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
         let in_z = |i: usize| rowmax(i) <= ZTOL * fpoly.sc[tab.row_var[i]];
         let pz: Vec<usize> = pset.iter().cloned().filter(|&i| in_z(i)).collect();
         let alpha_row = tab.row_var.iter().position(|&v| v == alpha);
+        crate::census_lap!(cm, Prelude);
         // No row that vanishes on the facet blocks the entering variable and α rises: the entering
         // variable replaces α, which is the neighbour. This holds also when P is empty (nothing
         // decreases at all). Returning there, as before, lost the neighbour whenever the previous
@@ -454,7 +456,9 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
                 if tab.tv(ra, e) > PTOL {
                     // the hint of the returned neighbour is the Chebyshev centre of the sub-facet, or the witness
                     // that certified it nonempty (a sub-facet accepted without its LP has no centre)
-                    push_leaf(&fpoly, z_after(tab, n, ra, e), centre.or(witness), out);
+                    let z = z_after(tab, n, ra, e);
+                    push_leaf(&fpoly, z, centre.or(witness), out);
+                    crate::census_lap!(cm, Leaf);
                     return WalkEnd::Done;
                 }
             }
@@ -475,6 +479,7 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
                 }
             }
             let leaving = tab.row_var[l];
+            crate::census_lap!(cm, Case1);
             if leaving == alpha {
                 return WalkEnd::Done;
             }
@@ -485,6 +490,7 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
             tab.flush();
             tab.defer_pivot(l, e);
             e = tab.col_of(comp(leaving, n));
+            crate::census_lap!(cm, Pivot);
             // exact cycle check: any repeated state of the walk is a return to the state right after
             // its first pivot (Lean walk_repeat_returns)
             match &first {
@@ -495,12 +501,14 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
                 }
                 _ => {}
             }
+            crate::census_lap!(cm, Key);
             continue;
         }
         // Case 2: the leaving variable depends on θ_f
         crate::census_bump!(PfCase2, 1);
         let mut children: Vec<Frame> = vec![];
         let mut cycled = false;
+        crate::census_skip!(cm);
         for &l in &pset {
             crate::census_bump!(PfBranches, 1);
             let leaving = tab.row_var[l];
@@ -532,6 +540,7 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
                     ff.push(g[0] / nrm);
                 }
             }
+            crate::census_lap!(cm, Gamma);
             if !ok {
                 crate::census_bump!(PfLexCut, 1);
                 continue;
@@ -539,11 +548,14 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
             // a leaf branch (alpha leaves: the next basis is complementary and the walk returns it)
             // whose active set is known is dropped by the caller anyway: skip its Chebyshev LP
             let leaf_z = if leaving == alpha { Some(z_after(tab, n, l, e)) } else { None };
-            if let (Some(z), Some(seen)) = (&leaf_z, fpoly.seen) {
-                if seen.contains_key(&p.active_set(z.iter().copied())) {
-                    crate::census_bump!(LeafSkip, 1);
-                    continue;
-                }
+            let leaf_known = match (&leaf_z, fpoly.seen) {
+                (Some(z), Some(seen)) => seen.contains_key(&p.active_set(z.iter().copied())),
+                _ => false,
+            };
+            crate::census_lap!(cm, Seen);
+            if leaf_known {
+                crate::census_bump!(LeafSkip, 1);
+                continue;
             }
             if leaf_z.is_some() {
                 crate::census_bump!(LeafKept, 1);
@@ -570,12 +582,18 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
                         } else if cands.iter().any(|c| c.is_some()) {
                             crate::census_bump!(WitnessFail, 1);
                         }
+                        crate::census_lap!(cm, Wit);
                     }
                 } else if ef.rows == fpoly.ef.rows && centre.is_some() {
                     bcentre = centre.map(|c| c.to_vec());
                     bwit = witness.map(|w| w.to_vec());
                 }
-                if bwit.is_none() && bcentre.is_none() && daqp_certainly_empty(&ef, &ff, d1) {
+                crate::census_skip!(cm);
+                let dq = bwit.is_none() && bcentre.is_none() && daqp_certainly_empty(&ef, &ff, d1);
+                if bwit.is_none() && bcentre.is_none() {
+                    crate::census_lap!(cm, Daqp);
+                }
+                if dq {
                     crate::census_bump!(PfChebEmpty, 1);
                     continue;
                 }
@@ -585,6 +603,7 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
                         crate::census_purpose!(Neighbour);
                         chebyshev_ball(&ef, &ff, &[])
                     };
+                    crate::census_lap!(cm, Lp);
                     match ball {
                         Some(s) if s.x[d1] > 1e-9 => {
                             bcentre = Some(s.x[..d1].to_vec());
@@ -598,17 +617,22 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
                 }
             }
             if let Some(z) = leaf_z {
+                crate::census_skip!(cm);
                 push_leaf(&Facet { ef: &ef, ff: &ff, sc: fpoly.sc, seen: fpoly.seen, hint_f: fpoly.hint_f }, z, bcentre.as_deref(), out);
+                crate::census_lap!(cm, Leaf);
                 continue;
             }
             if *left == 0 {
                 return WalkEnd::Budget;
             }
             *left -= 1;
+            crate::census_skip!(cm);
             let mut next = tab.clone();
+            crate::census_lap!(cm, Clone);
             next.flush();
             next.defer_pivot(l, e);
             let ne = next.col_of(comp(leaving, n));
+            crate::census_lap!(cm, Pivot);
             let cfirst = match &first {
                 None => Some(walk_key(&next, ne)),
                 Some(k) if walk_key_is(k, &next, ne) => {
@@ -618,6 +642,7 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
                 }
                 Some(k) => Some(k.clone()),
             };
+            crate::census_lap!(cm, Key);
             #[cfg(feature = "lp_census")]
             {
                 let mut key = next.row_var.clone();
@@ -626,10 +651,13 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
                     crate::census_bump!(PfRepeatBasis, 1);
                 }
             }
+            crate::census_lap!(cm, Census);
             children.push(Frame { tab: next, e: ne, ef, ff, centre: bcentre, witness: bwit, depth: depth + 1, first: cfirst });
+            crate::census_lap!(cm, Stack);
         }
         // the branches are explored in order, depth first: the first one is on top of the stack
         stack.extend(children.into_iter().rev());
+        crate::census_lap!(cm, Stack);
         return if cycled { WalkEnd::Cycle } else { WalkEnd::Done };
     }
 }
@@ -687,10 +715,15 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, budget: usize, o
             return false;
         }
     }
-    while let Some(fr) = stack.pop() {
+    loop {
+        crate::census_t0!(cm);
+        let Some(fr) = stack.pop() else { break };
         let Frame { mut tab, e, ef, ff, centre, witness, depth, first } = fr;
         let facet = Facet { ef: &ef, ff: &ff, sc: fpoly.sc, seen: fpoly.seen, hint_f: fpoly.hint_f };
-        match walk_one(p, &mut tab, e, facet, depth, centre.as_deref(), witness.as_deref(), first, &mut left, &mut stack, out) {
+        crate::census_lap!(cm, Stack);
+        let end = walk_one(p, &mut tab, e, facet, depth, centre.as_deref(), witness.as_deref(), first, &mut left, &mut stack, out);
+        crate::census_skip!(cm);
+        match end {
             WalkEnd::Done => {}
             WalkEnd::Cycle => {
                 complete = false;
@@ -703,6 +736,10 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, budget: usize, o
                 return false;
             }
         }
+        drop(tab);
+        drop(ef);
+        drop(ff);
+        crate::census_lap!(cm, Stack);
     }
     complete
 }
@@ -712,6 +749,7 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, budget: usize, o
 fn push_leaf(fpoly: &Facet, z: Vec<usize>, centre: Option<&[f64]>, out: &mut Vec<(Vec<usize>, Option<Vec<f64>>)>) {
     #[cfg(feature = "lp_census")]
     {
+        crate::census_t0!(cm);
         if centre.is_some() {
             crate::census_bump!(HintCentre, 1);
         }
@@ -723,6 +761,7 @@ fn push_leaf(fpoly: &Facet, z: Vec<usize>, centre: Option<&[f64]>, out: &mut Vec
                 crate::census_bump!(HintOutside, 1);
             }
         }
+        crate::census_lap!(cm, HintCensus);
     }
     let _ = fpoly;
     out.push((z, centre.map(|c| c.to_vec())));
@@ -837,6 +876,7 @@ fn facet_polytope(nb: &[Vec<f64>], g: &[f64], b: f64, e_all: &Mat, f_all: &[f64]
 fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usize], pv: &[usize], e_all: &Mat, f_all: &[f64], seen: Option<&Seen>, region_centre: Option<&[f64]>) -> Option<Vec<Nbr>> {
     let (n, nt) = (p.n, p.nt);
     let d1 = nt - 1;
+    crate::census_t0!(cm);
     if d1 == 0 || zrows.len() != 1 || pv.len() != 1 || pv[0] != zrows[0] {
         return None;
     }
@@ -890,12 +930,15 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
         z.push(var);
         z.sort_unstable();
         z.dedup();
-        if seen.map_or(false, |s| s.contains_key(&p.active_set(z.iter().copied()))) {
+        let known = seen.map_or(false, |s| s.contains_key(&p.active_set(z.iter().copied())));
+        crate::census_lap!(cm, Seen);
+        if known {
             crate::census_bump!(R1SkipSeen, 1);
             continue;
         }
         members.push((a, z));
     }
+    crate::census_skip!(cm);
     // lambda_i on the facet, in facet coordinates: (rr0 - b gam_i, N' rr)
     let nb = null_basis(g);
     let w = 1 + d1;
@@ -922,6 +965,7 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
         }
     }
     crate::census_bump!(R1Handled, 1);
+    crate::census_lap!(cm, R1Entry);
     if members.is_empty() {
         return Some(vec![]);
     }
@@ -936,7 +980,9 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
     });
     let mut witnesses: Vec<Vec<f64>> = hint_f.into_iter().collect();
     let mut out = vec![];
+    crate::census_lap!(cm, R1Poly);
     for (a, z) in members {
+        crate::census_skip!(cm);
         let mut e2 = ef.clone();
         let mut f2 = ff.clone();
         let mut empty = false;
@@ -960,26 +1006,35 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
             e2.push_row(&d[1..].iter().map(|v| v / nrm).collect::<Vec<_>>());
             f2.push(-d[0] / nrm);
         }
+        crate::census_lap!(cm, R1Cuts);
         if empty {
             crate::census_bump!(R1EmptyMember, 1);
             #[cfg(feature = "lp_census")]
             crate::census::tested(&z, true);
+            crate::census_lap!(cm, Census);
             continue;
         }
         let clears = |pt: &[f64]| (0..e2.rows).all(|i| f2[i] - e2.row(i).iter().zip(pt).map(|(x, y)| x * y).sum::<f64>() >= WITNESS_MARGIN);
-        if let Some(pt) = witnesses.iter().find(|pt| clears(pt)).cloned() {
+        let wfound = witnesses.iter().find(|pt| clears(pt)).cloned();
+        crate::census_lap!(cm, Wit);
+        if let Some(pt) = wfound {
             crate::census_bump!(R1WitnessAcc, 1);
             crate::census_bump!(R1Emitted, 1);
             #[cfg(feature = "lp_census")]
             crate::census::tested(&z, false);
+            crate::census_lap!(cm, Census);
             out.push(Nbr::Z(z, Some(to_theta(&pt))));
+            crate::census_lap!(cm, R1Out);
             continue;
         }
-        if daqp_certainly_empty(&e2, &f2, d1) {
+        let dq = daqp_certainly_empty(&e2, &f2, d1);
+        crate::census_lap!(cm, Daqp);
+        if dq {
             crate::census_bump!(R1EmptyMember, 1);
             crate::census_bump!(PfChebEmpty, 1);
             #[cfg(feature = "lp_census")]
             crate::census::tested(&z, true);
+            crate::census_lap!(cm, Census);
             continue;
         }
         crate::census_bump!(R1LpRun, 1);
@@ -988,20 +1043,24 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
             crate::census_purpose!(Neighbour);
             chebyshev_ball(&e2, &f2, &[])
         };
+        crate::census_lap!(cm, Lp);
         match ball {
             Some(s) if s.x[d1] > 1e-9 => {
                 let cf = s.x[..d1].to_vec();
                 crate::census_bump!(R1Emitted, 1);
                 #[cfg(feature = "lp_census")]
                 crate::census::tested(&z, false);
+                crate::census_lap!(cm, Census);
                 out.push(Nbr::Z(z, Some(to_theta(&cf))));
                 witnesses.push(cf);
+                crate::census_lap!(cm, R1Out);
             }
             _ => {
                 crate::census_bump!(R1EmptyMember, 1);
                 crate::census_bump!(PfChebEmpty, 1);
                 #[cfg(feature = "lp_census")]
                 crate::census::tested(&z, true);
+                crate::census_lap!(cm, Census);
             }
         }
     }
@@ -1041,6 +1100,11 @@ const MEASURE_NONZERO: f64 = 1e-6;
 fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[f64], ws: &mut Option<Tab>, cert: Option<&dyn Fn() -> Option<usize>>, audit: bool, seen: Option<&Seen>, region_centre: Option<&[f64]>) -> (Vec<Nbr>, Option<usize>) {
     #[cfg(feature = "lp_census")]
     let _cen_t = std::time::Instant::now();
+    #[cfg(feature = "lp_census")]
+    let cm0 = crate::census::Mark::now();
+    crate::census_t0!(cm);
+    #[cfg(feature = "lp_census")]
+    crate::census::c2_reset();
     crate::census_bump!(AdjCalls, 1);
     let (n, nt) = (p.n, p.nt);
     let nrm = erow.iter().map(|v| v * v).sum::<f64>().sqrt();
@@ -1068,6 +1132,7 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         crate::census_bump!(AdjNoneNanos, _cen_t.elapsed().as_nanos());
         return (vec![], None);
     }
+    crate::census_lap!(cm, Pre);
     // Fast path of Algorithm 2: a single leaving candidate v in P ∩ Z (Case 1 without ties), after
     // which α is basic and the entering variable comp(v) makes P' ∩ Z' empty with α rising:
     // the neighbour is the principal pivot (toggle) of v. Only column entries are needed.
@@ -1105,15 +1170,24 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         crate::census_bump!(AdjCertSkipNanos, _cen_t.elapsed().as_nanos());
         return (vec![], certified);
     }
+    crate::census_lap!(cm, Gate);
     // Rank-1 Case 2: one vanishing slack row c with a zero pivot, a_c = sum mu_j a_j over the active rows.
     // The neighbours are enumerated directly, no walk (see `rank1_case2`).
     if RANK1.load(std::sync::atomic::Ordering::Relaxed) {
+        #[cfg(feature = "lp_census")]
+        let snap = crate::census::c2_snapshot();
         if let Some(nbrs) = rank1_case2(p, tab, g.as_slice(), b, &gam, &zrows, &pv, e_all, f_all, seen, region_centre) {
             crate::census_bump!(AdjCase2, 1);
             crate::census_bump!(AdjCase2Nanos, _cen_t.elapsed().as_nanos());
+            #[cfg(feature = "lp_census")]
+            crate::census::c2_commit(2, &cm0, 0);
             return (nbrs, certified);
         }
         crate::census_bump!(R1Fallback, 1);
+        // the failed attempt is walk overhead: its inner laps are dropped, its whole time is one lap
+        #[cfg(feature = "lp_census")]
+        crate::census::c2_restore(snap);
+        crate::census_lap!(cm, R1Try);
     }
     #[cfg(feature = "lp_census")]
     let (r1_class, r1_kk, r1_pminus, r1_mu, r1_c, r1_overhead) = {
@@ -1121,6 +1195,7 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         let (cl, kk, pm, mu, cc) = rank1_probe(p, tab, &zrows, &pv, &gam);
         (cl, kk, pm, mu, cc, t0.elapsed().as_nanos())
     };
+    crate::census_lap!(cm, Census);
     #[cfg(feature = "lp_census")]
     crate::census::depth_reset();
     let nb = null_basis(&g);
@@ -1159,10 +1234,12 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         }
     }
     let mut out = vec![];
+    crate::census_lap!(cm, Setup);
     #[cfg(feature = "lp_census")]
     crate::census::basis_reset();
     #[cfg(feature = "lp_census")]
     let r1_overhead = if r1_class == 0 { r1_overhead + rank1_census(p, tab, &work, &ef, &ff, d1, seen, &r1_pminus, &r1_mu, r1_c, r1_kk) } else { r1_overhead };
+    crate::census_lap!(cm, Census);
     // the old hint (parent centre on the row) in facet coordinates: N' hint (N is orthogonal to g)
     let hint_f: Option<Vec<f64>> = region_centre.map(|c| {
         let sft = frhs - erow.iter().zip(c).map(|(x, y)| x * y).sum::<f64>();
@@ -1178,9 +1255,11 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
     // pop_005, while the time grows 10-fold at 300 and 300-fold at 3,000). 2n pivots (at least 64) keeps the
     // cost of the old caps, and a spent budget is not silent: the facet also gets the QP just across it.
     let budget = (WALK_BUDGET_PER_ROW * n).max(WALK_BUDGET_MIN);
+    crate::census_lap!(cm, Setup);
     let mut lost: Vec<Vec<f64>> = vec![];
     let complete = pivot_facet(p, &mut work, n, Facet { ef: &ef, ff: &ff, sc: &rowsc, seen, hint_f: hint_f.as_deref() }, budget, &mut out, &mut lost);
     *ws = Some(work);
+    crate::census_skip!(cm);
     crate::census_bump!(AdjCase2, 1);
     crate::census_bump!(AdjCase2Nanos, _cen_t.elapsed().as_nanos());
     #[cfg(feature = "lp_census")]
@@ -1211,6 +1290,7 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         })
         .collect();
     let mut nbrs: Vec<Nbr> = nbrs;
+    crate::census_lap!(cm, Post);
     if !complete {
         // a repeated state or the budget stopped the walk: also look across the facet by a QP at a
         // point just beyond its Chebyshev centre (resolved by the caller, which has the program)
@@ -1231,6 +1311,9 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
             nbrs.push(Nbr::Across(on.iter().zip(&g).map(|(x, gk)| x + delta * gk).collect()));
         }
     }
+    crate::census_lap!(cm, Post);
+    #[cfg(feature = "lp_census")]
+    crate::census::c2_commit(3, &cm0, 0);
     (nbrs, certified)
 }
 
