@@ -577,7 +577,8 @@ mod imp {
     /// slots of the time-profile counters of `census_diag` (PF_*) follow the refined-multiplier block
     /// pivot-in-gap calls (exact dependency residual): [0] calls, [1] decided zero, [2] decided nonzero (left to the walk), [3..44) decade histogram of rho = squared relative residual
     pub const PG_BASE: usize = MD_BASE + 340;
-    pub const NC: usize = PG_BASE + 48;
+    /// [48 + r] calls the rank-1 enumeration refused with reason r (1 shape, 2 slack row, 3 pivot, 4 z column of row c, 5 symmetry, 6 band multiplier, 9 empty P-)
+    pub const NC: usize = PG_BASE + 64;
     pub fn bump_slot(i: usize, n: u64) {
         MINE.with(|m| m.lock().unwrap().counters[i] += n);
     }
@@ -857,6 +858,9 @@ mod imp {
     }
     pub fn reason_set(k: u8) {
         REASON.with(|c| c.set(k));
+    }
+    pub fn reason_peek() -> u8 {
+        REASON.with(|c| c.get())
     }
     pub fn reason_take() -> u8 {
         REASON.with(|c| c.replace(0))

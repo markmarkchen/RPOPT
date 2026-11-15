@@ -739,6 +739,13 @@ fn highdim_tables(rows: &[Row], skipped: &[(String, String)]) {
         let h: Vec<String> = (0..41usize).filter(|&d| r.s.counters[census::PG_BASE + 3 + d] > 0).map(|d| format!("{}: {}", d, r.s.counters[census::PG_BASE + 3 + d])).collect();
         println!("| {} | {} | {} | {} | {} |", r.problem, r.s.counters[census::PG_BASE], r.s.counters[census::PG_BASE + 1], r.s.counters[census::PG_BASE + 2], h.join(", "));
     }
+    println!("\n### High-dimension 3w: Case-2 calls refused by the rank-1 enumeration, by reason (1 shape, 2 slack row, 3 pivot, 4 z column of row c, 5 symmetry, 6 band multiplier, 9 empty P-, 0 none recorded)\n");
+    println!("| problem | refused | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 9 |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::R1Fallback) > 0.0) {
+        let g = |k: usize| r.s.counters[census::PG_BASE + 48 + k];
+        println!("| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |", r.problem, c(r, Counter::R1Fallback), g(0), g(1), g(2), g(3), g(4), g(5), g(6), g(9));
+    }
     println!("\n### High-dimension 4: vertex clipping (`clip_flags`) outcomes per call\n");
     println!("| problem | algorithm | clip calls/region | ok | nt outside 2..=6 | more than 128 hyperplanes | infinite box | more than 600 vertices | too few vertices | vertex violates a row | redundancy LPs/region |");
     println!("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|");

@@ -2039,6 +2039,8 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         let audit = MU_AUDIT.load(std::sync::atomic::Ordering::Relaxed);
         #[cfg(not(feature = "lp_census"))]
         let audit = false;
+        #[cfg(feature = "lp_census")]
+        crate::census::reason_set(0);
         if let Some(nbrs) = rank1_case2(p, tab, g.as_slice(), b, &gam, &zrows, &pv, e_all, f_all, seen, region_centre, refine && !audit) {
             crate::census_bump!(AdjCase2, 1);
             crate::census_bump!(AdjCase2Nanos, _cen_t.elapsed().as_nanos());
@@ -2047,6 +2049,8 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
             return (nbrs, certified);
         }
         crate::census_bump!(R1Fallback, 1);
+        #[cfg(feature = "lp_census")]
+        crate::census::bump_slot(crate::census::PG_BASE + 48 + (crate::census::reason_peek() as usize).min(15), 1);
         // audit: a call refused for a gap-band multiplier is also answered by the refined enumeration, and compared with the walk below
         #[cfg(feature = "lp_census")]
         if audit {
@@ -2244,6 +2248,7 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
                     // the walk has sets the enumeration lacks, though a real positive multiplier exists
                     crate::census_bump!(AuditExtraWalk, 1);
                     if std::env::var("AUDIT_DBG").is_ok() {
+                        eprintln!("audit facet parent {:?} c {:?}", p.active_set(zjs.iter().copied()), p.active_set(std::iter::once(var)));
                         eprintln!("audit EXTRA-WALK: refined {:?} walk-only {:?}", a, w.difference(&a).collect::<Vec<_>>());
                         if let Some(mu_r) = refined_multipliers(p, &zjs, var) {
                             let mcc = p.m[var * p.n + var].max(1e-300);
@@ -2257,6 +2262,7 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
                     // the enumeration has a set the walk lacks
                     crate::census_bump!(AuditDiff, 1);
                     if std::env::var("AUDIT_DBG").is_ok() {
+                        eprintln!("audit facet parent {:?} c {:?}", p.active_set(zjs.iter().copied()), p.active_set(std::iter::once(var)));
                         eprintln!("audit diff: refined-only {:?} walk-only {:?}", a.difference(&w).collect::<Vec<_>>(), w.difference(&a).collect::<Vec<_>>());
                         if let Some(mu_r) = refined_multipliers(p, &zjs, var) {
                             let mcc = p.m[var * p.n + var].max(1e-300);
