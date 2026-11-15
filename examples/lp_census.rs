@@ -665,7 +665,104 @@ fn highdim_tables(rows: &[Row], skipped: &[(String, String)]) {
             r.problem, r.alg, r.regions, per(c(r, Counter::CandGen), n), c(r, Counter::Dup) / n, (r.s.calls[0][2] + r.s.calls[1][2]) as f64 / n, r.s.calls[0][1] as f64 / n
         );
     }
+    build_study(rows);
     for (p, a) in skipped {
         println!("\n(skipped: {p} {a})");
+    }
+}
+
+/// mplcp region-build study (needs `RPOPT_DIAG=1`; see `src/census_diag.rs`).
+fn build_study(rows: &[Row]) {
+    use rpopt::census_diag::{s as d, slot};
+    let rs: Vec<&Row> = rows.iter().filter(|r| r.alg == "mplcp" && slot(&r.s, d::REG) > 0.0).collect();
+    if rs.is_empty() {
+        return;
+    }
+    let g = |r: &Row, i: usize| slot(&r.s, i);
+    let pc = |a: f64, b: f64| if b > 0.0 { format!("{:.1}%", 100.0 * a / b) } else { "-".into() };
+    println!("\n### Build study 1: time split of the mplcp region build (diagnostic time removed)\n");
+    println!("| problem | regions | solve ms | build share | law | rows (KKT + normalise) | Chebyshev stage | gen_cr_from_prepared | of which box LPs | per-row LPs | tab rows (diag) us/region | KKT rows us/region |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+    for r in &rs {
+        let tot = r.solve_s * 1e9 - g(r, d::DIAG_NS);
+        let dg = g(r, d::DIAG_NS);
+        let n = r.regions.max(1) as f64;
+        let nano = |p: usize| (r.s.nanos[0][p] + r.s.nanos[1][p]) as f64;
+        println!(
+            "| {} | {} | {:.1} | {} | {} | {} | {} | {} | {} | {} | {:.2} | {:.2} |",
+            r.problem, r.regions, tot / 1e6, pc(g(r, d::BUILD_NS) - dg, tot), pc(g(r, d::LAW_NS), tot), pc(g(r, d::ROWS_NS), tot), pc(g(r, d::CHEB_NS), tot), pc(g(r, d::RED_NS) - dg, tot),
+            pc(nano(4), tot), pc(nano(0), tot), g(r, d::TAB_ROWS_NS) / 1e3 / n, g(r, d::ROWS_NS) / 1e3 / n
+        );
+    }
+    println!("\n### Build study 2: what decides each row (per region), and the entry facet\n");
+    println!("| problem | rows | facets | propagated box | exact box | box vertex | projection | LP kept | LP dropped | children with entry | entry located | entry by box vertex | by projection | by LP (saved LP) |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+    for r in &rs {
+        let n = g(r, d::REG);
+        let ps = |i: usize| format!("{:.1}", g(r, i) / n);
+        println!(
+            "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |",
+            r.problem, ps(d::ROWS), ps(d::FACETS), ps(d::PROP_REJ), ps(d::BOX_REJ), ps(d::VERT_KEEP), ps(d::PROJ_KEEP), ps(d::LP_KEEP), ps(d::LP_DROP),
+            pc(g(r, d::HAS_ENTRY), n), pc(g(r, d::ENTRY_FOUND), g(r, d::HAS_ENTRY)), pc(g(r, d::ENTRY_VERT), g(r, d::ENTRY_FOUND)), pc(g(r, d::ENTRY_PROJ), g(r, d::ENTRY_FOUND)), pc(g(r, d::ENTRY_LPKEEP), g(r, d::ENTRY_FOUND))
+        );
+    }
+    println!("\n### Build study 3: parent verdicts as hints\n");
+    println!("| problem | children with parent | rows with counterpart | agree | parent kept, child kept | parent kept, child dropped | parent dropped, child kept | parent dropped, child dropped | rows at LP stage with counterpart (per region) | agree | LP-dropped where parent dropped | LP-kept where parent kept |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+    for r in &rs {
+        let n = g(r, d::REG);
+        let cr = g(r, d::CMP_ROWS);
+        println!(
+            "| {} | {} | {:.1} | {} | {} | {} | {} | {} | {:.2} | {} | {} | {} |",
+            r.problem, pc(g(r, d::HAS_PARENT), n), cr / g(r, d::HAS_PARENT).max(1.0), pc(g(r, d::PK_CK) + g(r, d::PD_CD), cr), pc(g(r, d::PK_CK), cr), pc(g(r, d::PK_CD), cr), pc(g(r, d::PD_CK), cr), pc(g(r, d::PD_CD), cr),
+            g(r, d::LPS_CMP) / g(r, d::HAS_PARENT).max(1.0), pc(g(r, d::LPS_AGREE), g(r, d::LPS_CMP)), pc(g(r, d::LPS_DROP_PD), g(r, d::LP_DROP)), pc(g(r, d::LPS_KEEP_PK), g(r, d::LP_KEEP))
+        );
+    }
+    println!("\n### Build study 4: the bounding box (child against parent's exact box, and rows an outer box decides)\n");
+    println!("| problem | box bounds equal to parent's | parent box points feasible in child | of which optimal for the child | vertex-kept rows hit by a feasible parent point | propagated box (6 rounds) rejects /region | 30 rounds rejects /region | exact box rejects /region |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|");
+    for r in &rs {
+        let n = g(r, d::REG);
+        println!(
+            "| {} | {} | {} | {} | {} | {:.1} | {:.1} | {:.1} |",
+            r.problem, pc(g(r, d::BOX_EQ_PARENT), g(r, d::BOX_COORDS)), pc(g(r, d::PT_FEAS), g(r, d::PT_TOTAL)), pc(g(r, d::PT_OPT), g(r, d::PT_TOTAL)), pc(g(r, d::VK_COVERED), g(r, d::VK_ROWS)),
+            g(r, d::PROP_REJ) / n, g(r, d::PROP30_REJ) / n, g(r, d::BOX_REJ) / n
+        );
+    }
+    println!("\n### Build study 5: tableau rows against KKT rows, hints, and a Clarkson-style redundancy removal (per region)\n");
+    println!("| problem | regions compared | max row difference above 1e-10 | 1e-8 | 1e-6 | 1e-4 | rows missing | hint margin > 0 | > 1e-9 | > 1e-6 | > 1e-4 |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+    for r in &rs {
+        let t = g(r, d::TABC_REG);
+        println!(
+            "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |",
+            r.problem, t, pc(g(r, d::TABC_T0 + 1), t), pc(g(r, d::TABC_T0 + 2), t), pc(g(r, d::TABC_T0 + 3), t), pc(g(r, d::TABC_T0 + 4), t), pc(g(r, d::TABC_MISSING), g(r, d::TABC_ROWS)),
+            pc(g(r, d::HINT_M0), g(r, d::HINT_N)), pc(g(r, d::HINT_M1), g(r, d::HINT_N)), pc(g(r, d::HINT_M2), g(r, d::HINT_N)), pc(g(r, d::HINT_M3), g(r, d::HINT_N))
+        );
+    }
+    println!("\n### Build study 6: Clarkson-style removal, per region, against the present LPs (A seed = parameter-set rows, B = A + entry + parent's kept rows)\n");
+    println!("| problem | present: box LPs | per-row LPs | Chebyshev | present LP rows (live) | A: LPs | avg LP rows | rays | decided by ray alone | LP time us | ray time us | final S | verdict mismatches | B: LPs | avg LP rows | rays | LP time us | final S | mismatches | present LP time us (box+row+Cheb) |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+    for r in &rs {
+        let n = g(r, d::REG);
+        let nano = |p: usize| (r.s.nanos[0][p] + r.s.nanos[1][p]) as f64;
+        let a = d::SIM_A;
+        let b = d::SIM_B;
+        let live = (g(r, d::ROWS) - g(r, d::PROP_REJ)) / n;
+        println!(
+            "| {} | {:.1} | {:.1} | 1 | {:.1} | {:.1} | {:.1} | {:.1} | {:.1} | {:.1} | {:.1} | {:.1} | {} | {:.1} | {:.1} | {:.1} | {:.1} | {:.1} | {} | {:.1} |",
+            r.problem, 2.0 * 0.0 + (r.s.calls[0][4] + r.s.calls[1][4]) as f64 / n, (g(r, d::LP_KEEP) + g(r, d::LP_DROP)) / n, live,
+            g(r, a + d::O_LPS) / n, g(r, a + d::O_LPROWS) / g(r, a + d::O_LPS).max(1.0), g(r, a + d::O_RAYS) / n, g(r, a + d::O_RAYPROOF) / n, g(r, a + d::O_LP_NS) / 1e3 / n, g(r, a + d::O_RAY_NS) / 1e3 / n, g(r, a + d::O_SFINAL) / n, g(r, a + d::O_MISMATCH),
+            g(r, b + d::O_LPS) / n, g(r, b + d::O_LPROWS) / g(r, b + d::O_LPS).max(1.0), g(r, b + d::O_RAYS) / n, g(r, b + d::O_LP_NS) / 1e3 / n, g(r, b + d::O_SFINAL) / n, g(r, b + d::O_MISMATCH),
+            (nano(4) + nano(0) + nano(3)) / 1e3 / n
+        );
+    println!("\n### Build study 7: Clarkson-style removal with a ray phase first (rays along every row normal and +-e_k, then LPs for the rest), per region\n");
+    println!("| problem | LPs | avg LP rows | rays | LP time us | ray time us | final S | mismatches |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|");
+    for r in &rs {
+        let n = g(r, d::REG);
+        let cc = d::SIM_C;
+        println!("| {} | {:.1} | {:.1} | {:.1} | {:.1} | {:.1} | {:.1} | {} |", r.problem, g(r, cc + d::O_LPS) / n, g(r, cc + d::O_LPROWS) / g(r, cc + d::O_LPS).max(1.0), g(r, cc + d::O_RAYS) / n, g(r, cc + d::O_LP_NS) / 1e3 / n, g(r, cc + d::O_RAY_NS) / 1e3 / n, g(r, cc + d::O_SFINAL) / n, g(r, cc + d::O_MISMATCH));
+    }
     }
 }

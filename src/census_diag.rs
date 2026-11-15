@@ -1,0 +1,536 @@
+//! Counters for the mplcp region-build study (feature `lp_census`, switched on by the environment
+//! variable `RPOPT_DIAG=1`): where the redundancy step spends its rows, how much a child shares with
+//! its parent, and what an output-sensitive (Clarkson style) redundancy removal would need. Counts
+//! only: nothing here changes a decision of the solver.
+//!
+//! The slots live in `census::MD_BASE..` (read them with `slot`). The diagnostic's own work is
+//! timed in `DIAG_NS` so that it can be subtracted from the solve time.
+
+use crate::census::{bump_slot, MD_BASE};
+use crate::linalg::{dot, Mat};
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
+use std::time::Instant;
+
+pub mod s {
+    pub const REG: usize = 0;
+    pub const ROWS: usize = 1;
+    pub const FACETS: usize = 2;
+    pub const PROP_REJ: usize = 3; // rows rejected by the propagated parameter box (free)
+    pub const BOX_REJ: usize = 4; // rejected by the exact box (2n LPs)
+    pub const VERT_KEEP: usize = 5; // kept by an exact-box vertex
+    pub const PROJ_KEEP: usize = 6; // kept by the projection test
+    pub const LP_KEEP: usize = 7; // kept by a per-row LP
+    pub const LP_DROP: usize = 8; // dropped by a per-row LP
+    pub const HAS_ENTRY: usize = 9; // children built with an entry facet
+    pub const ENTRY_FOUND: usize = 10; // entry row located among the rows
+    pub const ENTRY_BOXREJ: usize = 11;
+    pub const ENTRY_VERT: usize = 12;
+    pub const ENTRY_PROJ: usize = 13;
+    pub const ENTRY_LPKEEP: usize = 14;
+    pub const HAS_PARENT: usize = 16;
+    pub const CMP_ROWS: usize = 17; // rows with a counterpart (same kind and constraint) in the parent
+    pub const PK_CK: usize = 18;
+    pub const PK_CD: usize = 19;
+    pub const PD_CK: usize = 20;
+    pub const PD_CD: usize = 21;
+    pub const LPS_CMP: usize = 22; // rows that reach the per-row LP stage and have a counterpart
+    pub const LPS_AGREE: usize = 23;
+    pub const LPS_DROP_PD: usize = 24; // child LP-dropped, parent dropped
+    pub const LPS_KEEP_PK: usize = 25; // child LP-kept, parent kept
+    pub const LPS_ALL: usize = 26; // rows that reach the per-row LP stage
+    pub const LAW_NS: usize = 27;
+    pub const ROWS_NS: usize = 28;
+    pub const CHEB_NS: usize = 29;
+    pub const RED_NS: usize = 30;
+    pub const BUILD_NS: usize = 31;
+    pub const DIAG_NS: usize = 32;
+    pub const BOX_COORDS: usize = 35;
+    pub const BOX_EQ_PARENT: usize = 36;
+    pub const PT_TOTAL: usize = 37;
+    pub const PT_FEAS: usize = 38;
+    pub const PT_OPT: usize = 39;
+    pub const VK_ROWS: usize = 40;
+    pub const VK_COVERED: usize = 41;
+    pub const PROP30_REJ: usize = 42;
+    pub const ROWS_REMAINING_AFTER_PROP: usize = 43;
+    pub const HINT_N: usize = 44;
+    pub const HINT_M0: usize = 45; // margin > 0
+    pub const HINT_M1: usize = 46; // > 1e-9
+    pub const HINT_M2: usize = 47; // > 1e-6
+    pub const HINT_M3: usize = 48; // > 1e-4
+    pub const TIGHT_NS: usize = 49;
+    pub const TABC_REG: usize = 75;
+    pub const TABC_T0: usize = 76; // 6 slots: regions whose max row difference exceeds 1e-12, 1e-10, 1e-8, 1e-6, 1e-4, 1e-2
+    pub const TABC_ROWS: usize = 82;
+    pub const TABC_MISSING: usize = 83;
+    pub const TAB_ROWS_NS: usize = 84;
+    pub const TAB_NOPIV: usize = 85;
+    // Clarkson simulation, variant A (seed: parameter-set rows) at SIM_A, variant B (A + entry + parent's kept rows) at SIM_B
+    pub const SIM_A: usize = 50;
+    pub const SIM_B: usize = 62;
+    pub const SIM_C: usize = 90;
+    // offsets inside a variant
+    pub const O_LPS: usize = 0;
+    pub const O_LPROWS: usize = 1;
+    pub const O_RAYS: usize = 2;
+    pub const O_LP_NS: usize = 3;
+    pub const O_RAY_NS: usize = 4;
+    pub const O_MISMATCH: usize = 5;
+    pub const O_SFINAL: usize = 6;
+    pub const O_RAYPROOF: usize = 7; // rows decided by the projection ray alone (no LP)
+    pub const O_FACET_RAY: usize = 8; // rows proven kept by an LP-violating point + ray
+    pub const O_REDUND: usize = 9; // rows dropped (LP)
+    pub const O_LPS_PER_KEEP: usize = 10; // LPs spent on rows that end up kept
+}
+
+pub fn on() -> bool {
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| std::env::var("RPOPT_DIAG").map_or(false, |v| v == "1"))
+}
+
+pub fn add(i: usize, n: u64) {
+    bump_slot(MD_BASE + i, n);
+}
+
+pub fn t0() -> Instant {
+    Instant::now()
+}
+pub fn lap(i: usize, t: Instant) {
+    add(i, t.elapsed().as_nanos() as u64);
+}
+
+struct Rec {
+    verdict: HashMap<(u8, usize), bool>,
+    bx: Option<(Vec<f64>, Vec<f64>, Vec<Vec<f64>>)>,
+}
+
+static STORE: OnceLock<Mutex<HashMap<Vec<usize>, Rec>>> = OnceLock::new();
+
+thread_local! {
+    static PARENT: RefCell<Option<Vec<usize>>> = const { RefCell::new(None) };
+    static ENTRY: RefCell<Option<(Vec<f64>, f64)>> = const { RefCell::new(None) };
+    static HINT: RefCell<Option<Vec<f64>>> = const { RefCell::new(None) };
+    static CLASSES: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+    static TABROWS: RefCell<Option<HashMap<(u8, usize), (Vec<f64>, f64)>>> = const { RefCell::new(None) };
+    static BOX: RefCell<Option<(Vec<f64>, Vec<f64>, Vec<Vec<f64>>)>> = const { RefCell::new(None) };
+}
+
+pub fn set_tab_rows(m: Option<HashMap<(u8, usize), (Vec<f64>, f64)>>) {
+    TABROWS.with(|p| *p.borrow_mut() = m);
+}
+pub fn set_parent(a: &[usize]) {
+    PARENT.with(|p| *p.borrow_mut() = Some(a.to_vec()));
+}
+pub fn set_entry(e: Option<&(Vec<f64>, f64)>, hint: Option<&[f64]>) {
+    ENTRY.with(|p| *p.borrow_mut() = e.cloned());
+    HINT.with(|p| *p.borrow_mut() = hint.map(|h| h.to_vec()));
+}
+/// Called by `lp_flags`: the decision class of every row (0 propagated-box reject, 1 exact-box reject,
+/// 2 box vertex, 3 projection, 4 LP kept, 5 LP dropped) and the exact box with its 2n points.
+pub fn set_classes(c: Vec<u8>, bx: Option<(Vec<f64>, Vec<f64>, Vec<Vec<f64>>)>) {
+    CLASSES.with(|p| *p.borrow_mut() = c);
+    BOX.with(|p| *p.borrow_mut() = bx);
+}
+
+fn first_hit(e: &Mat, f: &[f64], c: &[f64], d: &[f64]) -> Option<(usize, f64, bool)> {
+    let mut best = (usize::MAX, f64::INFINITY);
+    let mut second = f64::INFINITY;
+    for i in 0..e.rows {
+        let a = e.row(i);
+        let ad = dot(a, d);
+        if ad <= 1e-12 {
+            continue;
+        }
+        let t = (f[i] - dot(a, c)) / ad;
+        if t < best.1 {
+            second = best.1;
+            best = (i, t);
+        } else if t < second {
+            second = t;
+        }
+    }
+    if best.0 == usize::MAX {
+        return None;
+    }
+    Some((best.0, best.1, second - best.1 > 1e-9 * (1.0 + best.1.abs())))
+}
+
+/// Clarkson-style redundancy removal from the interior point `c`, with the given seed rows; returns
+/// the verdicts and bumps the counters of the variant at `base`.
+fn sim(e: &Mat, f: &[f64], c: &[f64], seed: &[usize], flags: &[bool], base: usize, pre: bool) {
+    let m = e.rows;
+    let n = e.cols;
+    let mut in_s = vec![false; m];
+    let mut s_list: Vec<usize> = vec![];
+    for &p in seed {
+        if !in_s[p] {
+            in_s[p] = true;
+            s_list.push(p);
+        }
+    }
+    let mut known = vec![false; m];
+    let slack: Vec<f64> = (0..m).map(|i| f[i] - dot(e.row(i), c)).collect();
+    let mut order: Vec<usize> = (0..m).collect();
+    order.sort_by(|&a, &b| slack[a].partial_cmp(&slack[b]).unwrap_or(std::cmp::Ordering::Equal));
+    let (mut lps, mut lprows, mut rays, mut lpns, mut rayns, mut mism) = (0u64, 0u64, 0u64, 0u64, 0u64, 0u64);
+    let (mut rayproof, mut facet_ray, mut redund, mut lps_keep) = (0u64, 0u64, 0u64, 0u64);
+    if pre {
+        // phase 1: rays along every row normal and along +-e_k find facets without an LP
+        let mut dirs: Vec<Vec<f64>> = (0..m).map(|i| e.row(i).to_vec()).collect();
+        for k in 0..n {
+            for sg in [1.0, -1.0] {
+                let mut d = vec![0.0; n];
+                d[k] = sg;
+                dirs.push(d);
+            }
+        }
+        for d in &dirs {
+            let t = Instant::now();
+            let hit = first_hit(e, f, c, d);
+            rays += 1;
+            rayns += t.elapsed().as_nanos() as u64;
+            if let Some((j, _, true)) = hit {
+                known[j] = true;
+                if !in_s[j] {
+                    in_s[j] = true;
+                    s_list.push(j);
+                }
+            }
+        }
+    }
+    for &r in &order {
+        let mut row_lps = 0u64;
+        let verdict: bool;
+        if known[r] {
+            verdict = true;
+            rayproof += 1;
+        } else {
+            let t = Instant::now();
+            let hit = first_hit(e, f, c, e.row(r));
+            rays += 1;
+            rayns += t.elapsed().as_nanos() as u64;
+            let mut decided = None;
+            if let Some((j, _, uniq)) = hit {
+                if uniq {
+                    known[j] = true;
+                    if j == r {
+                        decided = Some(true);
+                        rayproof += 1;
+                    } else if !in_s[j] {
+                        in_s[j] = true;
+                        s_list.push(j);
+                    }
+                }
+            }
+            verdict = match decided {
+                Some(v) => v,
+                None => {
+                    let mut out = false;
+                    for _ in 0..(m + 2) {
+                        let rows: Vec<usize> = s_list.iter().copied().filter(|&i| i != r).collect();
+                        let mut mat = Mat::zeros(rows.len() + 1, n);
+                        let mut b = Vec::with_capacity(rows.len() + 1);
+                        for (k, &i) in rows.iter().enumerate() {
+                            mat.row_mut(k).copy_from_slice(e.row(i));
+                            b.push(f[i]);
+                        }
+                        mat.row_mut(rows.len()).copy_from_slice(e.row(r));
+                        b.push(f[r] + 1.0);
+                        let obj: Vec<f64> = e.row(r).iter().map(|v| -v).collect();
+                        let t = Instant::now();
+                        let x = crate::solver::lp::lp_point_from(Some(&obj), &mat, &b, &[], c);
+                        lpns += t.elapsed().as_nanos() as u64;
+                        lps += 1;
+                        row_lps += 1;
+                        lprows += mat.rows as u64;
+                        let Some(x) = x else {
+                            out = false;
+                            break;
+                        };
+                        if dot(e.row(r), &x) <= f[r] + 1e-9 * (1.0 + f[r].abs()) {
+                            redund += 1;
+                            out = false;
+                            break;
+                        }
+                        let viol = (0..m).any(|i| i != r && dot(e.row(i), &x) > f[i] + 1e-9 * (1.0 + f[i].abs()));
+                        if !viol {
+                            facet_ray += 1;
+                            out = true;
+                            break;
+                        }
+                        let d: Vec<f64> = x.iter().zip(c).map(|(a, b)| a - b).collect();
+                        let t = Instant::now();
+                        let hit = first_hit(e, f, c, &d);
+                        rays += 1;
+                        rayns += t.elapsed().as_nanos() as u64;
+                        match hit {
+                            Some((j, _, _)) if j == r => {
+                                facet_ray += 1;
+                                out = true;
+                                break;
+                            }
+                            Some((j, _, uniq)) if !in_s[j] => {
+                                in_s[j] = true;
+                                s_list.push(j);
+                                if uniq {
+                                    known[j] = true;
+                                }
+                            }
+                            _ => {
+                                out = true; // cannot happen unless degenerate; counted as a mismatch if wrong
+                                break;
+                            }
+                        }
+                    }
+                    out
+                }
+            };
+        }
+        if verdict {
+            lps_keep += row_lps;
+        }
+        if verdict != flags[r] {
+            mism += 1;
+        }
+    }
+    let b = base;
+    add(b + s::O_LPS, lps);
+    add(b + s::O_LPROWS, lprows);
+    add(b + s::O_RAYS, rays);
+    add(b + s::O_LP_NS, lpns);
+    add(b + s::O_RAY_NS, rayns);
+    add(b + s::O_MISMATCH, mism);
+    add(b + s::O_SFINAL, s_list.len() as u64);
+    add(b + s::O_RAYPROOF, rayproof);
+    add(b + s::O_FACET_RAY, facet_ray);
+    add(b + s::O_REDUND, redund);
+    add(b + s::O_LPS_PER_KEEP, lps_keep);
+}
+
+/// Called at the end of a region build on the LP path.
+pub fn on_built(program: &crate::program::MpProgram, active_set: &[usize], e: &Mat, f: &[f64], center: &[f64], pos: &[usize], n_lambda: usize, inactive: &[usize], flags: &[bool]) {
+    if !on() {
+        return;
+    }
+    crate::census_purpose!(Other);
+    let t_all = Instant::now();
+    let m = e.rows;
+    let n = e.cols;
+    let neq = program.num_equality_constraints();
+    let n_inactive = inactive.len();
+    add(s::REG, 1);
+    add(s::ROWS, m as u64);
+    add(s::FACETS, flags.iter().filter(|&&v| v).count() as u64);
+    let classes = CLASSES.with(|c| std::mem::take(&mut *c.borrow_mut()));
+    let bx = BOX.with(|c| c.borrow_mut().take());
+    let have_classes = classes.len() == m;
+    // row p -> (kind, id)
+    let mut key: Vec<(u8, usize)> = vec![(9, 0); m];
+    for (r, &p) in pos.iter().enumerate() {
+        if p == usize::MAX {
+            continue;
+        }
+        key[p] = if r < n_lambda {
+            (0, active_set[neq + r])
+        } else if r < n_lambda + n_inactive {
+            (1, inactive[r - n_lambda])
+        } else {
+            (2, r - n_lambda - n_inactive)
+        };
+    }
+    if have_classes {
+        let mut cnt = [0u64; 6];
+        for &c in &classes {
+            cnt[c as usize] += 1;
+        }
+        add(s::PROP_REJ, cnt[0]);
+        add(s::BOX_REJ, cnt[1]);
+        add(s::VERT_KEEP, cnt[2]);
+        add(s::PROJ_KEEP, cnt[3]);
+        add(s::LP_KEEP, cnt[4]);
+        add(s::LP_DROP, cnt[5]);
+        add(s::LPS_ALL, cnt[4] + cnt[5]);
+        add(s::ROWS_REMAINING_AFTER_PROP, m as u64 - cnt[0]);
+        // propagated box with 30 rounds
+        if let Some((l, h)) = program.theta_bbox() {
+            let (mut lo, mut hi) = (l.clone(), h.clone());
+            crate::mpqp_utils::propagate_box_pub(e, f, &mut lo, &mut hi, 30);
+            let rej = (0..m).filter(|&p| crate::mpqp_utils::box_max_pub(e.row(p), &lo, &hi) < f[p] - 1e-7 * (1.0 + f[p].abs())).count();
+            add(s::PROP30_REJ, rej as u64);
+        }
+    }
+    // entry facet
+    let entry = ENTRY.with(|c| c.borrow().clone());
+    let mut entry_p = None;
+    if let Some((ea, ef)) = &entry {
+        add(s::HAS_ENTRY, 1);
+        for p in 0..m {
+            let a = e.row(p);
+            let same = a.iter().zip(ea).all(|(x, y)| (x - y).abs() < 1e-7) && (f[p] - ef).abs() < 1e-7 * (1.0 + ef.abs());
+            let rev = a.iter().zip(ea).all(|(x, y)| (x + y).abs() < 1e-7) && (f[p] + ef).abs() < 1e-7 * (1.0 + ef.abs());
+            if same || rev {
+                entry_p = Some(p);
+                break;
+            }
+        }
+        if let Some(p) = entry_p {
+            add(s::ENTRY_FOUND, 1);
+            if have_classes {
+                match classes[p] {
+                    1 => add(s::ENTRY_BOXREJ, 1),
+                    2 => add(s::ENTRY_VERT, 1),
+                    3 => add(s::ENTRY_PROJ, 1),
+                    4 => add(s::ENTRY_LPKEEP, 1),
+                    _ => {}
+                }
+            }
+        }
+    }
+    // tableau rows against the KKT rows
+    if let Some(tm) = TABROWS.with(|c| c.borrow_mut().take()) {
+        add(s::TABC_REG, 1);
+        let mut worst = 0.0f64;
+        for p in 0..m {
+            if key[p].0 > 1 {
+                continue;
+            }
+            add(s::TABC_ROWS, 1);
+            match tm.get(&key[p]) {
+                None => add(s::TABC_MISSING, 1),
+                Some((te, tf)) => {
+                    let mut d = (f[p] - tf).abs() / (1.0 + f[p].abs());
+                    for k in 0..n {
+                        d = d.max((e[(p, k)] - te[k]).abs());
+                    }
+                    worst = worst.max(d);
+                }
+            }
+        }
+        for (i, th) in [1e-12, 1e-10, 1e-8, 1e-6, 1e-4, 1e-2].iter().enumerate() {
+            if worst > *th {
+                add(s::TABC_T0 + i, 1);
+            }
+        }
+    }
+    // hint margin
+    if let Some(h) = HINT.with(|c| c.borrow().clone()) {
+        if h.len() == n {
+            let mg = (0..m).map(|i| f[i] - dot(e.row(i), &h)).fold(f64::INFINITY, f64::min);
+            add(s::HINT_N, 1);
+            if mg > 0.0 {
+                add(s::HINT_M0, 1);
+            }
+            if mg > 1e-9 {
+                add(s::HINT_M1, 1);
+            }
+            if mg > 1e-6 {
+                add(s::HINT_M2, 1);
+            }
+            if mg > 1e-4 {
+                add(s::HINT_M3, 1);
+            }
+        }
+    }
+    // parent comparison
+    let store = STORE.get_or_init(|| Mutex::new(HashMap::new()));
+    let parent_key = PARENT.with(|c| c.borrow().clone());
+    let mut parent_kept_rows: Vec<usize> = vec![];
+    {
+        let st = store.lock().unwrap();
+        if let Some(pr) = parent_key.as_ref().and_then(|k| st.get(k)) {
+            add(s::HAS_PARENT, 1);
+            for p in 0..m {
+                let Some(&pv) = pr.verdict.get(&key[p]) else { continue };
+                let cv = flags[p];
+                add(s::CMP_ROWS, 1);
+                match (pv, cv) {
+                    (true, true) => add(s::PK_CK, 1),
+                    (true, false) => add(s::PK_CD, 1),
+                    (false, true) => add(s::PD_CK, 1),
+                    (false, false) => add(s::PD_CD, 1),
+                }
+                if pv {
+                    parent_kept_rows.push(p);
+                }
+                if have_classes && classes[p] >= 4 {
+                    add(s::LPS_CMP, 1);
+                    if pv == cv {
+                        add(s::LPS_AGREE, 1);
+                    }
+                    if !pv && !cv {
+                        add(s::LPS_DROP_PD, 1);
+                    }
+                    if pv && cv {
+                        add(s::LPS_KEEP_PK, 1);
+                    }
+                }
+            }
+            if let (Some((lo, hi, _)), Some((plo, phi, ppts))) = (&bx, &pr.bx) {
+                for k in 0..n {
+                    add(s::BOX_COORDS, 2);
+                    if (lo[k] - plo[k]).abs() <= 1e-9 * (1.0 + lo[k].abs()) {
+                        add(s::BOX_EQ_PARENT, 1);
+                    }
+                    if (hi[k] - phi[k]).abs() <= 1e-9 * (1.0 + hi[k].abs()) {
+                        add(s::BOX_EQ_PARENT, 1);
+                    }
+                }
+                let mut feas_pts: Vec<&Vec<f64>> = vec![];
+                for (j, x) in ppts.iter().enumerate() {
+                    add(s::PT_TOTAL, 1);
+                    let ok = (0..m).all(|i| dot(e.row(i), x) <= f[i] + 1e-9 * (1.0 + f[i].abs()));
+                    if ok {
+                        add(s::PT_FEAS, 1);
+                        feas_pts.push(x);
+                        let k = j / 2;
+                        let tgt = if j % 2 == 0 { lo[k] } else { hi[k] };
+                        if (x[k] - tgt).abs() <= 1e-9 * (1.0 + tgt.abs()) {
+                            add(s::PT_OPT, 1);
+                        }
+                    }
+                }
+                if have_classes {
+                    for p in 0..m {
+                        if classes[p] == 2 {
+                            add(s::VK_ROWS, 1);
+                            if feas_pts.iter().any(|x| (dot(e.row(p), x) - f[p]).abs() <= 1e-9 * (1.0 + f[p].abs())) {
+                                add(s::VK_COVERED, 1);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Clarkson simulation
+    let omega: Vec<usize> = (0..m).filter(|&p| key[p].0 == 2).collect();
+    sim(e, f, center, &omega, flags, MD_SIM(s::SIM_A), false);
+    sim(e, f, center, &omega, flags, MD_SIM(s::SIM_C), true);
+    let mut seed_b = omega.clone();
+    if let Some(p) = entry_p {
+        seed_b.push(p);
+    }
+    seed_b.extend(parent_kept_rows);
+    sim(e, f, center, &seed_b, flags, MD_SIM(s::SIM_B), false);
+    // store this region as a possible parent
+    let mut verdict = HashMap::new();
+    for p in 0..m {
+        if key[p].0 != 9 {
+            verdict.insert(key[p], flags[p]);
+        }
+    }
+    store.lock().unwrap().insert(active_set.to_vec(), Rec { verdict, bx });
+    lap(s::DIAG_NS, t_all);
+}
+
+#[allow(non_snake_case)]
+fn MD_SIM(b: usize) -> usize {
+    b
+}
+
+/// Reads a slot of a snapshot.
+pub fn slot(st: &crate::census::Stats, i: usize) -> f64 {
+    st.counters[MD_BASE + i] as f64
+}

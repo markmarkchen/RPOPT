@@ -519,7 +519,9 @@ mod imp {
     /// walk Chebyshev LPs by outcome (0 empty at radius 1e-9, 1 nonempty); fields: calls, cold pivots, cold ns, shifted-start calls, shifted pivots,
     /// shifted ns, phase-1 pivots, phase-1 ns
     pub const EO_BASE: usize = WK_BASE + NWK * 5;
-    pub const NC: usize = EO_BASE + 16;
+    /// build-study slots (see `census_diag`)
+    pub const MD_BASE: usize = EO_BASE + 16;
+    pub const NC: usize = MD_BASE + 128;
     pub fn bump_slot(i: usize, n: u64) {
         MINE.with(|m| m.lock().unwrap().counters[i] += n);
     }

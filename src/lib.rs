@@ -16,6 +16,8 @@
 
 pub mod algorithms;
 pub mod census;
+#[cfg(feature = "lp_census")]
+pub mod census_diag;
 pub mod critical_region;
 pub mod fxhash;
 pub mod io;

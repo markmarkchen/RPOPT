@@ -18,6 +18,8 @@ pub(super) type Built = (CriticalRegion, Vec<f64>, Option<Vec<f64>>);
 pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Option<&[f64]>, law: Option<crate::program::ControlLaw>, want_verts: bool) -> Option<Built> {
     use crate::mpqp_utils::kkt_region_from_law;
     crate::census_purpose!(Chebyshev);
+    #[cfg(feature = "lp_census")]
+    let _tb = crate::census_diag::t0();
     use crate::utils::{numerically_nonzero_rows, remove_duplicate_rows};
     let nt = program.num_t();
     let law = match law {
@@ -25,6 +27,8 @@ pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Opti
         None => program.optimal_control_law_dual(active_set)?,
     };
     let neq = program.num_equality_constraints();
+    #[cfg(feature = "lp_census")]
+    let _tr = crate::census_diag::t0();
     let crate::mpqp_utils::KktRegion { mut law, e: e_all, f: f_all, n_lambda, inactive, point: _ } = kkt_region_from_law(program, active_set, law);
     let n_inactive = inactive.len();
     let n_omega = program.a_t.rows;
@@ -43,6 +47,8 @@ pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Opti
         }
         f[i] /= nrm;
     }
+    #[cfg(feature = "lp_census")]
+    crate::census_diag::lap(crate::census_diag::s::ROWS_NS, _tr);
     crate::stats::lp(1);
     for r in 0..e_all.rows {
         if pos[r] == usize::MAX && f_all[r] < -1e-8 {
@@ -53,12 +59,16 @@ pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Opti
         Some(h) => h.to_vec(),
         None => crate::solver::lp::lp_feasible_point(&e, &f, &[], None)?,
     };
+    #[cfg(feature = "lp_census")]
+    let _tc = crate::census_diag::t0();
     let mut start_r = start;
     start_r.push(0.0);
     let s = cheb_from(&e, &f, &start_r)?;
     if s.x[nt] <= 1e-8 {
         return None;
     }
+    #[cfg(feature = "lp_census")]
+    crate::census_diag::lap(crate::census_diag::s::CHEB_NS, _tc);
     let cheb_radius = Some(s.x[nt]);
     let center: Vec<f64> = s.x[..nt].to_vec();
     // after the radius test: only the output fields need the primal law
@@ -85,7 +95,15 @@ pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Opti
             let _mute = crate::census::MuteClip::new();
             // the same rows and centre go to the shared redundancy step; its own clipping of
             // them would fail the same way (measured: it never succeeded after a failed first pass)
-            return crate::mpqp_utils::gen_cr_from_prepared(program, active_set, false, crate::mpqp_utils::Prepared { law, n_lambda, inactive, pos, e, f, kept_rows_len: kept_rows.len(), center, cheb_radius }).map(|(cr, c)| (cr, c, None));
+            #[cfg(feature = "lp_census")]
+            let _tred = crate::census_diag::t0();
+            let r = crate::mpqp_utils::gen_cr_from_prepared(program, active_set, false, crate::mpqp_utils::Prepared { law, n_lambda, inactive, pos, e, f, kept_rows_len: kept_rows.len(), center, cheb_radius }).map(|(cr, c)| (cr, c, None));
+            #[cfg(feature = "lp_census")]
+            {
+                crate::census_diag::lap(crate::census_diag::s::RED_NS, _tred);
+                crate::census_diag::lap(crate::census_diag::s::BUILD_NS, _tb);
+            }
+            return r;
         }
     };
     let mut kept_lambda = vec![];

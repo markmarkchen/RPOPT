@@ -2616,8 +2616,54 @@ fn tight_residual(program: &MpProgram, cr: &CriticalRegion, centre: &[f64]) -> f
 }
 
 
+#[cfg(feature = "lp_census")]
+fn diag_tab_rows(plcp: &Plcp, parent: &Tab, c: &Cand) {
+    let Some((r, col)) = c.piv else {
+        crate::census_diag::add(crate::census_diag::s::TAB_NOPIV, 1);
+        crate::census_diag::set_tab_rows(None);
+        return;
+    };
+    let t = crate::census_diag::t0();
+    let (n, w) = (plcp.n, 1 + plcp.nt);
+    let inv = 1.0 / parent.tv(r, col);
+    let rrow: Vec<f64> = (0..w).map(|k| parent.rv(r, k) * -inv).collect();
+    let mut rows: Vec<(u8, usize, Vec<f64>)> = Vec::with_capacity(n);
+    for i in 0..n {
+        let (var, row): (usize, Vec<f64>) = if i == r {
+            (parent.col_var[col], rrow.clone())
+        } else {
+            let f = parent.tv(i, col);
+            (parent.row_var[i], (0..w).map(|j| parent.rv(i, j) + f * rrow[j]).collect())
+        };
+        let (kind, k) = if var < n { (1u8, var) } else { (0u8, var - n) };
+        let nrm = crate::linalg::norm(&row[1..]);
+        if !(nrm > 1e-12) {
+            continue;
+        }
+        let mut e: Vec<f64> = row[1..].iter().map(|v| -v / nrm).collect();
+        e.push(row[0] / nrm);
+        rows.push((kind, plcp.ineq[k], e));
+    }
+    crate::census_diag::lap(crate::census_diag::s::TAB_ROWS_NS, t);
+    let m: std::collections::HashMap<(u8, usize), (Vec<f64>, f64)> = rows
+        .into_iter()
+        .map(|(k, id, mut e)| {
+            let f = e.pop().unwrap();
+            ((k, id), (e, f))
+        })
+        .collect();
+    crate::census_diag::set_tab_rows(Some(m));
+}
+
 fn build_cand(program: &MpProgram, plcp: &Plcp, parent: &Tab, c: &Cand, want_verts: bool) -> Option<(CriticalRegion, Option<Vec<f64>>, Option<Tab>, Option<Vec<f64>>)> {
     if program.num_t() > 1 {
+        #[cfg(feature = "lp_census")]
+        if crate::census_diag::on() {
+            crate::census_diag::set_entry(c.entry.as_ref(), c.hint.as_deref());
+            diag_tab_rows(plcp, parent, c);
+        }
+        #[cfg(feature = "lp_census")]
+        let _tlaw = crate::census_diag::t0();
         let (law, own) = if TABLEAU_LAW.load(std::sync::atomic::Ordering::Relaxed) {
             match candidate_law(plcp, parent, c) {
                 Some((l, t)) => (Some(l), t),
@@ -2626,6 +2672,8 @@ fn build_cand(program: &MpProgram, plcp: &Plcp, parent: &Tab, c: &Cand, want_ver
         } else {
             (None, None)
         };
+        #[cfg(feature = "lp_census")]
+        crate::census_diag::lap(crate::census_diag::s::LAW_NS, _tlaw);
         let (cr, ce, verts) = build::build_region(program, &c.aset, c.hint.as_deref(), law, want_verts)?;
         // A basis that is singular in exact arithmetic (parallel rows both active) can pass every
         // other test with a garbage law; its region then overlaps the true ones (pop_005, pop_007,
@@ -2681,6 +2729,10 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
         let Some(tab) = crate::census_timed!(MplcpTabNanos, tab.resolve(plcp, cur)) else { continue };
         let cx = CertCtx::new(cmode, verts.as_deref(), &known, &regions, plcp.nt, wave_limit);
         let cands = crate::census_timed!(MplcpNbrNanos, expand_candidates(plcp, cur, center.as_ref(), &tab, depth, entry.as_ref(), cx.as_ref(), Some(&seen), program, &mut ws));
+        #[cfg(feature = "lp_census")]
+        if crate::census_diag::on() {
+            crate::census_diag::set_parent(&cur.active_set);
+        }
         for c in cands {
             if c.cert.is_some() {
                 AUDIT_CERTIFIED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
