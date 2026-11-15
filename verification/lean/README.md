@@ -9,7 +9,7 @@ Lean 4 and Mathlib proofs of the mathematics behind two RPOPT solvers:
 
 The proofs are at the model level, in exact real arithmetic. They justify the steps the Rust code
 takes, not its floating point execution. Every result listed as proved has no `sorry`, and
-`Audit.lean` prints the axioms of all 91 main theorems: each uses only `propext`,
+`Audit.lean` prints the axioms of all 104 main theorems: each uses only `propext`,
 `Classical.choice` and `Quot.sound` (two use none). Modelling assumptions are explicit hypotheses,
 never axioms.
 
@@ -44,6 +44,7 @@ lake env lean Audit.lean    # one line per main theorem: the axioms it depends o
 | `Facet.lean` | Case 1 of Algorithm 2 (the fast path of `adjacent`) |
 | `Algorithm2.lean` | the Case-2 lexicographic test of `pivot_facet` |
 | `FacetWalk.lean` | Case 2 at a facet point: walk invariant, terminal soundness, cover, dependent rows |
+| `DependentFacet.lean` | the dependent-row facet: the neighbours across it are `T \ {j}`, `j ∈ P⁻` (direct enumeration) |
 | `Termination.lean` | no repeated state on the facet walk; what the two caps can be replaced with |
 | `Coverage.lean` | breadth-first exploration as a reachability closure, skipping rules |
 | `Optimizations/EntryFacetSkip.lean` | safety of the entry-facet skip (merged) |
@@ -86,6 +87,11 @@ lake env lean Audit.lean    # one line per main theorem: the axioms it depends o
 | Alg. 2 | `case2_lexmin_accepted` | **cover**: at every facet point the lexicographic minimum candidate passes all its inequalities (16), so the Case-2 sub-facets cover the facet | proved |
 | Alg. 2 | `neighbour_unique_on_ray` | the basis lexico-feasible just across a facet point is unique | proved |
 | Alg. 2 | `lcp_multipliers_dependent`, `case2_needs_dependent_rows` | two multiplier vectors at one `θ` differ in `ker Aᵀ` on the active rows: a Case-2 step that keeps α fixed needs dependent active rows | proved |
+| Dep. facet | `DepFacet.of_dependency` | `a_c = Σ_{j∈A} μ_j a_j` (row and column relations of `M`) with independent active rows gives row `c` of the tableau `w_c = ρ_c + Σ μ_j w_j` and column `c` equal to `-μ` on `A`, 0 elsewhere; so `T c c = 0` | proved |
+| Dep. facet | `identity`, `slack_side`, `needs_pos` | `w_c = -D + Σ μ_j w_j` for every solution; a basis with slacks zero on `T \ {j}` has `μ_j w_j = D`, so across `F` only `j ∈ P⁻` can work | proved |
+| Dep. facet | `no_solution_of_empty`, `qp_infeasible_of_empty` | with `P⁻` empty no parameter with `D > 0` is feasible | proved |
+| Dep. facet | `on_facet` | **(c)** on `F`, `T \ {j}` is valid exactly where `λ_j/μ_j ≤ λ_k/μ_k` for all `k ∈ P⁻` | proved |
+| Dep. facet | `across`, `unique_across`, `returned_mem_S` | **(a), (b)** at a relative-interior point where `j` is the strict argmin, `T \ {j}` is valid across and is the only valid complementary basis just across; every basis the walk can return lies in `S` | proved (ties excluded) |
 | Alg. 2 | completeness | every lexico-feasible neighbour across `F` is returned | **conditional** on `WalkEndsWithPush` and the work-tableau link (below), and on no cap firing |
 | Caps | `walk_no_repeat` | **3a**: from a start basis that is lexico-feasible at the facet point, no walk state repeats | proved |
 | Caps | `walk_repeat_returns` | in general, the only possible repetition is a return to the state after the first pivot | proved |
@@ -405,6 +411,25 @@ All of these appear as explicit hypotheses of the theorems that need them.
       - completeness of `F`'s clip vertices.
       The 48 of 48 identical runs and 0 overlaps and 0 gaps on 135 problems support these but do not prove
       them. The masses3_N4 loss at 6 parameters is outside mode 1's range.
+13. **The dependent-row facet, before the code (round 7, `DependentFacet.lean`).** Setting: region `R`
+    with active set `A` (independent rows), facet `F` where exactly one slack row `c` vanishes and the pivot
+    element on `c`'s complement is zero because `a_c = Σ_{j∈A} μ_j a_j`; `T = A ∪ {c}`,
+    `P⁻ = {j ∈ A : μ_j > 0}`, `D = -ρ_c` (zero on `F`'s hyperplane, positive across).
+    - `of_dependency` derives the tableau structure the lemma uses from the dependency. Row `c` of `R`'s
+      tableau is `w_c = ρ_c + Σ μ_j w_j`, with no `z` column; column `c` is `-μ` on `A` and 0 elsewhere.
+    - (a) and (b) are proved at every relative-interior point `θ₀` of `F` where the argmin of `λ_j/μ_j`
+      over `P⁻` is unique (`unique_across`, `returned_mem_S`). The hypotheses are a symmetric positive
+      semidefinite `M` and independent rows of `T \ {j}` (`hinj`). With `P⁻` empty, nothing across `F` is
+      feasible (`no_solution_of_empty`, `qp_infeasible_of_empty`).
+    - (c): `on_facet`. `T \ {j}` borders `F` exactly on `F ∩ {λ_j/μ_j ≤ λ_k/μ_k for all k ∈ P⁻}`.
+    - The explicit candidate (`candidate_solves`): from `R`'s tableau, set `w_j = D/μ_j` and
+      `z_c = (λ_j + T_jj w_j)/μ_j`, with the other nonbasic variables at 0. Its slack side is exactly the
+      identity `μ_j w_j = D` (`slack_side`).
+    - Ties are excluded. Where several `j` attain the minimum (a lower-dimensional part of `F` when the
+      ratios are distinct affine functions on `F`), the statement is not made; the lexicographic rule would
+      decide there.
+    - Skipping explored members of `S` keeps the explored set by `reach_skip`. The code correspondence
+      will be added when the enumeration lands.
 
 The measurements in findings 3 to 5 come from an uncommitted debug build run on the laptop (runs of 4
 to 30 s). They are diagnostics, not timings.
