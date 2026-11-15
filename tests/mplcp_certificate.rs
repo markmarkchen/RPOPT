@@ -44,6 +44,6 @@ fn certificate_changes_no_region() {
         assert_eq!(audited, off, "{name}: audit mode changed the regions");
         certified_total += certificate_audit().0 - c0;
     }
-    set_certificate(0);
+    set_certificate(1); // the default mode
     assert!(certified_total > 0, "no facet was ever certified");
 }

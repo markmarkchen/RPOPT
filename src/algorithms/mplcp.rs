@@ -440,12 +440,13 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
         };
         let rowmax = |i: usize| (0..1 + d1).fold(0.0f64, |m, k| m.max(tab.rv(i, k).abs()));
         let pset: Vec<usize> = (0..n).filter(|&i| a[i] > PTOL).collect();
-        if pset.is_empty() {
-            return WalkEnd::Done;
-        }
         let in_z = |i: usize| rowmax(i) <= ZTOL * fpoly.sc[tab.row_var[i]];
         let pz: Vec<usize> = pset.iter().cloned().filter(|&i| in_z(i)).collect();
         let alpha_row = tab.row_var.iter().position(|&v| v == alpha);
+        // No row that vanishes on the facet blocks the entering variable and α rises: the entering
+        // variable replaces α, which is the neighbour. This holds also when P is empty (nothing
+        // decreases at all). Returning there, as before, lost the neighbour whenever the previous
+        // pivot had exchanged a dependent pair (pop_081: parallel rows of a one-variable program).
         if pz.is_empty() {
             if let Some(ra) = alpha_row {
                 if tab.tv(ra, e) > PTOL {
@@ -453,6 +454,9 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
                     return WalkEnd::Done;
                 }
             }
+        }
+        if pset.is_empty() {
+            return WalkEnd::Done;
         }
         if !pz.is_empty() {
             // Case 1: leaving variable independent of θ_f
@@ -1048,7 +1052,7 @@ struct Cand {
 /// 4 (audit) apply to every count the vertex clip covers (2 to 6). At 2 parameters the problems are
 /// too small to repay the bookkeeping, and at 6 the check (many vertices per facet) can cost more
 /// than the search it saves (rand_t6_x5_m20_s0: 0.74x).
-static CERT: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+static CERT: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(1);
 
 /// Sets the facet-certificate mode of `Method::Pivot` and `Method::PivotParallel`: 0 off (the
 /// default: at 6 parameters it lost a real region on masses3_N4, and the stray overlapping regions of
@@ -1437,6 +1441,57 @@ fn candidate_law(plcp: &Plcp, parent: &Tab, c: &Cand) -> Option<(crate::program:
 
 /// Region of a candidate (`None` when it is empty or lower dimensional), plus the candidate's own
 /// tableau when it had to be formed from scratch for the law.
+/// Largest relative residual of the active constraints under a region's law, above which the
+/// candidate basis is rejected (see `build_cand`).
+const TIGHT_TOL: f64 = 1e-3;
+
+/// Diagnostic: the tightness residual of `cr` at `centre` and whether the QP agrees with it.
+pub fn tight_diagnostic(program: &MpProgram, cr: &CriticalRegion, centre: &[f64]) -> (f64, bool) {
+    (tight_residual(program, cr, centre), qp_agrees(program, cr, centre))
+}
+
+static TIGHT_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// Switches the tightness flag of `build_cand` (default on); off reproduces the walk without it,
+/// for the comparison tools.
+pub fn set_tight_check(on: bool) {
+    TIGHT_ON.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Does the direct QP at the region's centre agree with the region: same active set, or the same
+/// primal solution as the region's law (to 1e-6 relative)?
+fn qp_agrees(program: &MpProgram, cr: &CriticalRegion, centre: &[f64]) -> bool {
+    let Some(out) = program.solve_theta(centre) else { return false };
+    let mut qa = out.active_set.clone();
+    qa.sort_unstable();
+    let mut ca = cr.active_set.clone();
+    ca.sort_unstable();
+    if qa == ca {
+        return true;
+    }
+    let x = cr.evaluate(centre);
+    x.len() == out.sol.len() && x.iter().zip(&out.sol).all(|(a, b)| (a - b).abs() <= 1e-6 * (1.0 + b.abs()))
+}
+
+/// Largest relative violation, at the region's centre, of "the active constraints are tight under
+/// the region's primal law". A basis that is singular in exact arithmetic (two parallel rows both
+/// active) gets a garbage law that cannot satisfy both, whatever size its coefficients have.
+fn tight_residual(program: &MpProgram, cr: &CriticalRegion, centre: &[f64]) -> f64 {
+    let x = cr.evaluate(centre);
+    let nx = program.num_x();
+    let nt = program.num_t();
+    let mut worst = 0.0f64;
+    for &i in &cr.active_set {
+        let ai = program.a.row(i);
+        let ax: f64 = (0..nx).map(|j| ai[j] * x[j]).sum();
+        let rhs: f64 = program.b[i] + (0..nt).map(|t| program.f[(i, t)] * centre[t]).sum::<f64>();
+        let sc = 1.0 + rhs.abs() + (0..nx).map(|j| (ai[j] * x[j]).abs()).sum::<f64>();
+        worst = worst.max((ax - rhs).abs() / sc);
+    }
+    worst
+}
+
+
 fn build_cand(program: &MpProgram, plcp: &Plcp, parent: &Tab, c: &Cand, want_verts: bool) -> Option<(CriticalRegion, Option<Vec<f64>>, Option<Tab>, Option<Vec<f64>>)> {
     if program.num_t() > 1 {
         let (law, own) = if TABLEAU_LAW.load(std::sync::atomic::Ordering::Relaxed) {
@@ -1448,6 +1503,22 @@ fn build_cand(program: &MpProgram, plcp: &Plcp, parent: &Tab, c: &Cand, want_ver
             (None, None)
         };
         let (cr, ce, verts) = build::build_region(program, &c.aset, c.hint.as_deref(), law, want_verts)?;
+        // A basis that is singular in exact arithmetic (parallel rows both active) can pass every
+        // other test with a garbage law; its region then overlaps the true ones (pop_005, pop_007,
+        // pop_011). Legitimate regions have residuals up to 1e-5 (masses5_N3), garbage ones 1e-1. The
+        // residual only flags a candidate; a direct QP at the region's centre decides, so a genuine
+        // sliver in an ill-conditioned problem is kept.
+        if TIGHT_ON.load(std::sync::atomic::Ordering::Relaxed) && tight_residual(program, &cr, &ce) > TIGHT_TOL {
+            crate::census_bump!(TightFlagged, 1);
+            // the builder's centre comes from an LP started at a hint; a region of radius 1e-8 can have
+            // the QP flip at that point, so the centre of the final rows is tried as well
+            let c2: Option<Vec<f64>> = crate::utils::chebyshev_ball(&cr.e, &cr.f, &[]).map(|sol| sol.x[..ce.len()].to_vec());
+            if !qp_agrees(program, &cr, &ce) && !c2.map_or(false, |c| qp_agrees(program, &cr, &c)) {
+                crate::census_bump!(TightRejected, 1);
+                return None;
+            }
+            crate::census_bump!(TightKeptByQp, 1);
+        }
         Some((cr, Some(ce), own, verts))
     } else {
         Some((gen_cr_from_active_set_lambda_first(program, &c.aset, true)?, None, None, None))

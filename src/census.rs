@@ -232,6 +232,10 @@ mod imp {
         CertExtra,
         AdjCertSkip,
         AdjCertSkipNanos,
+        /// candidate regions rejected because their active constraints are not tight under their law
+        TightFlagged,
+        TightKeptByQp,
+        TightRejected,
         /// `pivot_facet` leaf branches (the next basis is complementary): skipped without their
         /// Chebyshev LP because the active set is already in the `Seen` map, and not skipped
         LeafSkip,
@@ -249,7 +253,7 @@ mod imp {
         FallbackAcross,
         FallbackFail,
     }
-    pub const NC: usize = 78;
+    pub const NC: usize = 80;
 
     #[derive(Clone, Debug)]
     pub struct Stats {
