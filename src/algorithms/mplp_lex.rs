@@ -48,9 +48,6 @@ use std::cmp::Ordering;
 use std::collections::VecDeque;
 
 const TOL: f64 = 1e-9;
-/// The direct facet crossing is trusted only between regions with a Chebyshev radius above this:
-/// thinner regions are numerically marginal (ties inside the tolerance) and take the LP path.
-const FAT: f64 = 1e-4;
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -504,11 +501,8 @@ pub fn solve(program: &MpProgram, seed: u64) -> Result<Vec<CriticalRegion>, Stri
     // neighbour is known (each facet is shared by exactly two regions, Corollary 20)
     let mut crossed: crate::fxhash::FxHashMap<Vec<usize>, Vec<(Vec<f64>, f64)>> = Default::default();
     let mut queue: VecDeque<(usize, Vec<usize>)> = VecDeque::new();
-    let mut index: crate::fxhash::FxHashMap<Vec<usize>, usize> = Default::default();
-    index.insert(basis0.clone(), 0);
     regions.push(cr0);
     queue.push_back((0, basis0));
-    let h_zero = program.h.data.iter().all(|v| *v == 0.0);
     let mut parent = Work { b: vec![], binv: vec![], t: vec![] };
     let mut wk = parent.clone();
     while let Some((ri, basis)) = queue.pop_front() {
@@ -522,7 +516,6 @@ pub fn solve(program: &MpProgram, seed: u64) -> Result<Vec<CriticalRegion>, Stri
             (0..cr.e.rows).filter_map(|k| unit(cr.e.row(k), cr.f[k])).collect()
         };
         let mut centre: Option<Option<Vec<f64>>> = None;
-        let (dctx, dctx_rows, zset) = if h_zero && regions[ri].cheb_radius.is_some_and(|r| r > FAT) { region_context(&lex, program, &regions[ri], &basis) } else { (false, vec![], vec![]) };
         for k in 0..facets.len() {
             let (nk, fk) = (&facets[k].0, facets[k].1);
             // facet on the boundary of Θ
@@ -532,239 +525,81 @@ pub fn solve(program: &MpProgram, seed: u64) -> Result<Vec<CriticalRegion>, Stri
             if known.iter().any(|(t, ft)| t.iter().zip(nk).all(|(a, b)| (a - b).abs() < 1e-7) && (ft - fk).abs() < 1e-6 * (1.0 + fk.abs())) {
                 continue;
             }
-            // direct crossing (no LP): H = 0 and the facet comes from exactly one inactive constraint
-            let mut direct = match (&dctx, direct_row(&dctx_rows, nk, fk)) {
-                (true, Some(j)) => direct_cross(&lex, &parent, &mut wk, &mut sc, program, &zset, &basis, j, nk),
-                _ => None,
-            };
-            // the neighbour must have the reversed facet as one of its facets; otherwise (a numerically
-            // marginal region) the LP path decides
-            let mut prebuilt: Option<CriticalRegion> = None;
-            let mut cached: Option<(Vec<usize>, Option<CriticalRegion>)> = None;
-            if let Some(nb) = &direct {
-                let has_reverse = |cr: &CriticalRegion| {
-                    cr.cheb_radius.is_some_and(|r| r > FAT) && (0..cr.e.rows).filter_map(|r| unit(cr.e.row(r), cr.f[r])).any(|(n, f)| n.iter().zip(nk).all(|(a, b)| (a + b).abs() < 1e-7) && (f + fk).abs() < 1e-6 * (1.0 + fk.abs()))
-                };
-                let ok = if let Some(&r2) = index.get(nb) {
-                    has_reverse(&regions[r2])
-                } else if seen.contains(nb) {
-                    false
-                } else {
-                    let built = gen_cr_from_active_set_lambda_first(program, nb, true);
-                    if built.as_ref().is_some_and(|cr| has_reverse(cr)) {
-                        prebuilt = built;
-                        true
-                    } else {
-                        cached = Some((nb.clone(), built));
-                        false
+            // relative interior point θ0 of the facet. First try the foot of the region's Chebyshev
+            // center on the facet plane: it is in the relative interior when it satisfies every other
+            // facet row with a margin (no LP). Otherwise the facet's own Chebyshev center (rows on the
+            // same plane are dropped).
+            if centre.is_none() {
+                let rows: Vec<Vec<f64>> = facets.iter().map(|(n, _)| n.clone()).collect();
+                let rhs: Vec<f64> = facets.iter().map(|(_, f)| *f).collect();
+                centre = Some({
+                    crate::census_purpose!(Neighbour);
+                    chebyshev_ball(&Mat::from_rows(&rows), &rhs, &[]).map(|b| b.x[..nt].to_vec())
+                });
+            }
+            let mut foot: Option<Vec<f64>> = None;
+            if let Some(Some(c)) = &centre {
+                let d = fk - nk.iter().zip(c).map(|(a, b)| a * b).sum::<f64>();
+                let p: Vec<f64> = c.iter().zip(nk).map(|(c, n)| c + d * n).collect();
+                let ok = facets.iter().enumerate().all(|(i, (ni, fi))| {
+                    if i == k || (ni.iter().zip(nk).all(|(a, b)| (a - b).abs() < 1e-7) && (fi - fk).abs() < 1e-7 * (1.0 + fk.abs())) {
+                        return true;
                     }
-                };
-                if !ok {
-                    direct = None;
+                    fi - ni.iter().zip(&p).map(|(a, b)| a * b).sum::<f64>() > 1e-6 * (1.0 + fi.abs())
+                });
+                if ok {
+                    foot = Some(p);
                 }
             }
-            let nb: Vec<usize> = if let Some(nb) = &direct {
-                nb.clone()
+            let ball_x: Vec<f64>;
+            if let Some(p) = foot {
+                ball_x = p;
             } else {
-                // relative interior point θ0 of the facet. First try the foot of the region's Chebyshev
-                // center on the facet plane: it is in the relative interior when it satisfies every other
-                // facet row with a margin (no LP). Otherwise the facet's own Chebyshev center (rows on the
-                // same plane are dropped).
-                if centre.is_none() {
-                    let rows: Vec<Vec<f64>> = facets.iter().map(|(n, _)| n.clone()).collect();
-                    let rhs: Vec<f64> = facets.iter().map(|(_, f)| *f).collect();
-                    centre = Some({
-                        crate::census_purpose!(Neighbour);
-                        chebyshev_ball(&Mat::from_rows(&rows), &rhs, &[]).map(|b| b.x[..nt].to_vec())
-                    });
-                }
-                let mut foot: Option<Vec<f64>> = None;
-                if let Some(Some(c)) = &centre {
-                    let d = fk - nk.iter().zip(c).map(|(a, b)| a * b).sum::<f64>();
-                    let p: Vec<f64> = c.iter().zip(nk).map(|(c, n)| c + d * n).collect();
-                    let ok = facets.iter().enumerate().all(|(i, (ni, fi))| {
-                        if i == k || (ni.iter().zip(nk).all(|(a, b)| (a - b).abs() < 1e-7) && (fi - fk).abs() < 1e-7 * (1.0 + fk.abs())) {
-                            return true;
-                        }
-                        fi - ni.iter().zip(&p).map(|(a, b)| a * b).sum::<f64>() > 1e-6 * (1.0 + fi.abs())
-                    });
-                    if ok {
-                        foot = Some(p);
-                    }
-                }
-                let ball_x: Vec<f64>;
-                if let Some(p) = foot {
-                    ball_x = p;
-                } else {
-                    let mut rows: Vec<Vec<f64>> = vec![];
-                    let mut rhs: Vec<f64> = vec![];
-                    for (i, (ni, fi)) in facets.iter().enumerate() {
-                        if i != k && ni.iter().zip(nk).all(|(a, b)| (a - b).abs() < 1e-7) && (fi - fk).abs() < 1e-7 * (1.0 + fk.abs()) {
-                            continue;
-                        }
-                        rows.push(ni.clone());
-                        rhs.push(*fi);
-                    }
-                    let kk = rows.iter().position(|r| r == nk).unwrap_or(0);
-                    let ball = {
-                        crate::census_purpose!(Neighbour);
-                        chebyshev_ball(&Mat::from_rows(&rows), &rhs, &[kk])
-                    };
-                    let Some(ball) = ball else { continue };
-                    if ball.x[nt] <= 1e-9 {
+                let mut rows: Vec<Vec<f64>> = vec![];
+                let mut rhs: Vec<f64> = vec![];
+                for (i, (ni, fi)) in facets.iter().enumerate() {
+                    if i != k && ni.iter().zip(nk).all(|(a, b)| (a - b).abs() < 1e-7) && (fi - fk).abs() < 1e-7 * (1.0 + fk.abs()) {
                         continue;
                     }
-                    ball_x = ball.x;
+                    rows.push(ni.clone());
+                    rhs.push(*fi);
                 }
-                let th0 = &ball_x[..nt];
-                // lex data: value at θ0 and coefficient of γ along the outward normal
-                let q0 = rhs_at(program, th0);
-                let q1 = program.f.matvec(nk);
-                let d0 = cost_at(program, th0);
-                let d1 = program.h.matvec(nk);
-                let cp = artificial(&mut rng, &basis);
-                wk.clone_from(&parent);
-                let r = lex.solve(&mut wk, &mut sc, &q0, &q1, &d0, &d1, &cp);
-                if r.is_err() {
+                let kk = rows.iter().position(|r| r == nk).unwrap_or(0);
+                let ball = {
+                    crate::census_purpose!(Neighbour);
+                    chebyshev_ball(&Mat::from_rows(&rows), &rhs, &[kk])
+                };
+                let Some(ball) = ball else { continue };
+                if ball.x[nt] <= 1e-9 {
                     continue;
                 }
-                let mut nb = wk.b.clone();
-                nb.sort_unstable();
-                nb
-            };
-            crossed.entry(nb.clone()).or_default().push((nk.iter().map(|v| -v).collect(), -fk));
-            if let Some(ncr) = prebuilt {
-                seen.insert(nb.clone());
-                index.insert(nb.clone(), regions.len());
-                regions.push(ncr);
-                queue.push_back((regions.len() - 1, nb));
+                ball_x = ball.x;
+            }
+            let th0 = &ball_x[..nt];
+            // lex data: value at θ0 and coefficient of γ along the outward normal
+            let q0 = rhs_at(program, th0);
+            let q1 = program.f.matvec(nk);
+            let d0 = cost_at(program, th0);
+            let d1 = program.h.matvec(nk);
+            let cp = artificial(&mut rng, &basis);
+            wk.clone_from(&parent);
+            let r = lex.solve(&mut wk, &mut sc, &q0, &q1, &d0, &d1, &cp);
+            if r.is_err() {
                 continue;
             }
+            let mut nb = wk.b.clone();
+            nb.sort_unstable();
+            crossed.entry(nb.clone()).or_default().push((nk.iter().map(|v| -v).collect(), -fk));
             if !seen.insert(nb.clone()) {
                 continue;
             }
-            let built = match cached {
-                Some((cb, cr)) if cb == nb => cr,
-                _ => gen_cr_from_active_set_lambda_first(program, &nb, true),
-            };
-            if let Some(ncr) = built {
-                index.insert(nb.clone(), regions.len());
+            if let Some(ncr) = gen_cr_from_active_set_lambda_first(program, &nb, true) {
                 regions.push(ncr);
                 queue.push_back((regions.len() - 1, nb));
             }
         }
     }
     Ok(regions)
-}
-
-/// Per region: whether the direct crossing applies (no multiplier facets), the unit rows of the
-/// region's inactive-constraint facets with their constraint index, and the nonbasic constraints
-/// whose slack is identically zero in θ (their lexicographic sign is decided by the ε columns).
-fn region_context(lex: &Lex, program: &MpProgram, cr: &CriticalRegion, basis: &[usize]) -> (bool, Vec<(usize, Vec<f64>, f64)>, Vec<bool>) {
-    if !cr.lambda_set.is_empty() {
-        return (false, vec![], vec![]);
-    }
-    let nt = program.num_t();
-    let slack_fn = |k: usize| -> (Vec<f64>, f64) {
-        // A_k x(θ) - b_k - F_k θ  =  e θ - f  with  e = A_k a - F_k,  f = b_k - A_k b
-        let ak = program.a.row(k);
-        let mut e = vec![0.0; nt];
-        let mut f = program.b[k];
-        for i in 0..lex.nx {
-            for t in 0..nt {
-                e[t] += ak[i] * cr.a[(i, t)];
-            }
-            f -= ak[i] * cr.b[i];
-        }
-        for t in 0..nt {
-            e[t] -= program.f[(k, t)];
-        }
-        (e, f)
-    };
-    let rows: Vec<(usize, Vec<f64>, f64)> = cr
-        .regular_set
-        .1
-        .iter()
-        .filter_map(|&j| {
-            let (e, f) = slack_fn(j);
-            unit(&e, f).map(|(n, f)| (j, n, f))
-        })
-        .collect();
-    let mut inb = vec![false; lex.m];
-    for &i in basis {
-        inb[i] = true;
-    }
-    let mut z = vec![false; lex.m];
-    for k in 0..lex.m {
-        if inb[k] {
-            continue;
-        }
-        let (e, f) = slack_fn(k);
-        z[k] = e.iter().all(|v| v.abs() <= 1e-8) && f.abs() <= 1e-8;
-    }
-    (true, rows, z)
-}
-
-/// The inactive constraint whose facet is (nk, fk), if exactly one row of the region matches.
-fn direct_row(rows: &[(usize, Vec<f64>, f64)], nk: &[f64], fk: f64) -> Option<usize> {
-    let mut found = None;
-    for (j, n, f) in rows {
-        if n.iter().zip(nk).all(|(a, b)| (a - b).abs() < 1e-7) && (f - fk).abs() < 1e-6 * (1.0 + fk.abs()) {
-            if found.is_some() {
-                return None;
-            }
-            found = Some(*j);
-        }
-    }
-    found
-}
-
-/// Crosses the facet where the inactive constraint j becomes active (H = 0): one dual
-/// lexicographic ratio test with the true cost picks the constraint that leaves. At a relative
-/// interior point θ0 of the facet every other nonbasic slack is positive except the identically
-/// zero ones, so the pivoted basis is primal feasible at θ0 + γ n and dual feasible (dual simplex),
-/// hence the neighbour. The check runs the lexicographic simplex on the pivoted basis with
-/// synthetic slack values (1 for ordinary nonbasic rows, 0 for basic rows, j and the zero rows) and
-/// accepts only if it does not pivot. A tie in the ratio test returns None (LP path).
-#[allow(clippy::too_many_arguments)]
-fn direct_cross(lex: &Lex, parent: &Work, wk: &mut Work, sc: &mut Scratch, program: &MpProgram, zset: &[bool], basis: &[usize], j: usize, nk: &[f64]) -> Option<Vec<usize>> {
-    let nx = lex.nx;
-    let d0 = &program.c;
-    let d1 = vec![0.0; nx];
-    let mut best: Option<(usize, Vec<f64>)> = None;
-    let mut tmp = vec![0.0; nx + 2];
-    for p in lex.neq..nx {
-        let y = parent.t[j * nx + p];
-        if y > 1e-9 {
-            lex.lam_row(parent, p, d0, &d1, &mut tmp);
-            let r: Vec<f64> = tmp.iter().map(|v| v / y).collect();
-            match &best {
-                None => best = Some((p, r)),
-                Some((_, br)) => match lex_cmp(&r, br) {
-                    Ordering::Less => best = Some((p, r)),
-                    Ordering::Equal => return None,
-                    Ordering::Greater => {}
-                },
-            }
-        }
-    }
-    let (p, _) = best?;
-    wk.clone_from(parent);
-    lex.pivot(wk, p, j);
-    let mut pivoted = wk.b.clone();
-    pivoted.sort_unstable();
-    let mut q0 = vec![0.0; lex.m];
-    for k in 0..lex.m {
-        if !(basis.contains(&k) || k == j || zset[k]) {
-            q0[k] = 1.0;
-        }
-    }
-    let q1 = program.f.matvec(nk);
-    let cp = vec![0.0; nx];
-    lex.solve(wk, sc, &q0, &q1, d0, &d1, &cp).ok()?;
-    let mut nb = wk.b.clone();
-    nb.sort_unstable();
-    (nb == pivoted).then_some(nb)
 }
 
 fn rhs_at(p: &MpProgram, th: &[f64]) -> Vec<f64> {
