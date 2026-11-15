@@ -1369,7 +1369,7 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
         if cv >= n && cv < 2 * n {
             // after a structural zero was decided from the original rows the entries of row c on the z columns are rounding of the tableau (up to
             // 1e-6 on masses4_N5), not a different structure
-            if tab.t[c * n + col].abs() > if forced { 1e-5 } else { 1e-8 } {
+            if tab.t[c * n + col].abs() > if forced && ZCOL_RELAX.load(std::sync::atomic::Ordering::Relaxed) { 1e-5 } else { 1e-8 } {
                 { crate::census_reason!(4); return None; }
             }
         }
@@ -1431,7 +1431,7 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
                 crate::census_bump!(MuGap, 1);
             }
         }
-        if !all_ref && (tab.t[c * n + colw] - mi).abs() > 1e-8 * (ujj + mi.abs()) {
+        if !forced && (tab.t[c * n + colw] - mi).abs() > 1e-8 * (ujj + mi.abs()) {
             { crate::census_reason!(5); return None; }
         }
         let nu_tab = nu;
@@ -1446,6 +1446,9 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
                 crate::census_bump!(MuRefinedBand, 1);
                 #[cfg(feature = "lp_census")]
                 crate::census::bump_slot(crate::census::PG_BASE + 64 + ((-nu.log10()).floor().max(0.0) as usize).min(15), 1);
+                if !BAND_REAL.load(std::sync::atomic::Ordering::Relaxed) {
+                    { crate::census_reason!(6); return None; }
+                }
             }
         } else if nu > MU_ZERO && nu <= MU_NONZERO {
             let Some(v) = &mu_ref else {
@@ -1468,7 +1471,7 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
                 crate::census_bump!(MuRefinedReal, 1);
             }
         }
-        if mi > 0.0 && nu > (if all_ref { REFINED_ZERO } else { MU_NONZERO }) {
+        if mi > 0.0 && nu > (if all_ref && BAND_REAL.load(std::sync::atomic::Ordering::Relaxed) { REFINED_ZERO } else { MU_NONZERO }) {
             pm.push(i);
             pm_mu.push(mi);
         } else if !all_ref && nu_tab > ZERO_GUARD_MIN && nu_tab <= MU_ZERO {
@@ -1950,6 +1953,13 @@ const RHO_ZERO: f64 = 1e-19;
 /// A pivot in the undecided band is nonzero when rho is at least this. Measured on the masses problems: the gap-band calls fall in two clusters,
 /// rho <= 1e-20 (structural zeros, the square of the rounding of the rows) and rho in 1e-18 .. 1e-12 (small but real pivots), with nothing between.
 const RHO_NONZERO: f64 = 1e-18;
+static ZCOL_RELAX: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+static BAND_REAL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+/// Switches for the two rank-1 relaxations after a structural zero (`MPLCP_ZCOL=0`, `MPLCP_BANDREAL=0` in the examples).
+pub fn set_rank1_relaxations(zcol: bool, band_real: bool) {
+    ZCOL_RELAX.store(zcol, std::sync::atomic::Ordering::Relaxed);
+    BAND_REAL.store(band_real, std::sync::atomic::Ordering::Relaxed);
+}
 static PIVDD_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 /// Switch for the exact decision of pivots in the undecided band (`MPLCP_PIVDD=0` in the examples turns it off).
 pub fn set_pivot_dd(on: bool) {
