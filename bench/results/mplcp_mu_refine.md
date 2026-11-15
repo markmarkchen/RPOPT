@@ -89,5 +89,4 @@ The recomputation does what was hoped: every gap-band entry on the five problems
 decide instead of 0.8 to 3 ms of walk. It is exact on the region sets of 149 of 158 problems and costs one overlapping sliver on masses3_N6 and masses3_N7, so by the
 rule set for this change (zero mismatches or each one explained) it is not ready to be the default: the sliver is explained as a kind (a candidate with a dependent
 active set that the region builder accepts), not one by one, and the audit still has calls where the walk returns sets the enumeration does not. The gain on top of
-the multiplier rule is 1.39x on masses4_N3, 1.24x on rand_t12, 1.06x on pop_005 and nothing elsewhere in the timing set. `set_refine_multipliers(false)` (and
-`MPLCP_NO_REFINE=1` in the examples) restores the walk for the band.
+the multiplier rule is 1.39x on masses4_N3, 1.24x on rand_t12, 1.06x on pop_005 and nothing elsewhere in the timing set. The refined rule is off by default (`set_refine_multipliers(true)`, `MPLCP_REFINE=1` in the examples turns it on); the empty-P- safeguard and the comment fixes are on.
