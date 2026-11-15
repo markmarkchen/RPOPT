@@ -920,12 +920,14 @@ fn adjacent_case2(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_a
         let h: Vec<f64> = c.iter().zip(erow).map(|(ci, ai)| ci + sft * ai).collect();
         nb.iter().map(|v| h.iter().zip(v).map(|(a, b)| a * b).sum()).collect()
     });
-    // Pivot budget of one facet walk. The exact cycle check makes the walk finite (distinct states, so at
-    // most 2^n pivots, Lean walk_no_repeat), but that bound is no use as a cost limit: walks of thousands
-    // of pivots exist and never find a region the shorter ones miss (measured on masses3_N3 to masses8_N2,
-    // pop_005, rand_t12 and rand_t14: 30 to 20,000 pivots give the same regions apart from 3 on pop_005,
-    // while the time grows 10-fold at 300 and 300-fold at 3,000). 2n pivots (at least 64) keeps the cost
-    // of the old caps, and a spent budget is not silent: the facet also gets the QP just across it.
+    // Pivot budget of one facet walk. Finiteness: from a lexico-feasible start no state repeats (Lean
+    // walk_no_repeat); in general a repeated state must be the state right after the first pivot
+    // (walk_repeat_returns), which the cycle check catches. The number of states is the number of reachable
+    // label configurations, about n 2^n (chain_length_bound), which is no use as a cost limit: walks of
+    // thousands of pivots exist and never find a region the shorter ones miss (measured on masses3_N3 to
+    // masses8_N2, pop_005, rand_t12 and rand_t14: 30 to 20,000 pivots give the same regions apart from 3 on
+    // pop_005, while the time grows 10-fold at 300 and 300-fold at 3,000). 2n pivots (at least 64) keeps the
+    // cost of the old caps, and a spent budget is not silent: the facet also gets the QP just across it.
     let budget = (WALK_BUDGET_PER_ROW * n).max(WALK_BUDGET_MIN);
     let mut lost: Vec<Vec<f64>> = vec![];
     let complete = pivot_facet(p, &mut work, n, Facet { ef: &ef, ff: &ff, sc: rowsc, seen, hint_f: hint_f.as_deref() }, budget, &mut out, &mut lost);
