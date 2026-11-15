@@ -252,8 +252,62 @@ mod imp {
         WalkBudget,
         FallbackAcross,
         FallbackFail,
+        /// non-leaf Case-2 branches accepted as nonempty by a witness point (no Chebyshev LP), of which
+        /// the ones whose piece equals the parent polytope; branches where candidates were tried and
+        /// none cleared the margin (the LP then runs)
+        WitnessAccept,
+        WitnessNoCuts,
+        WitnessFail,
+        /// rank-1 Case-2 census: calls and ns by class, |P-| histogram, members of S and their Seen / empty status, ties, walk depth
+        R1Calls0,
+        R1Calls1,
+        R1Calls2,
+        R1Calls3,
+        R1Calls4,
+        R1Calls5,
+        R1Nanos0,
+        R1Nanos1,
+        R1Nanos2,
+        R1Nanos3,
+        R1Nanos4,
+        R1Nanos5,
+        R1P0,
+        R1P1,
+        R1P2,
+        R1P3,
+        R1P4,
+        R1P5,
+        R1P6,
+        R1P7,
+        R1Members,
+        R1Unseen,
+        R1AllSeen,
+        R1UnseenEmpty,
+        R1UnseenNonEmpty,
+        R1Ties,
+        R1D0,
+        R1D1,
+        R1D2,
+        R1D3to5,
+        R1D6p,
+        R1Out,
+        /// rank-1 enumeration (Case 2 with one vanishing slack row and a zero pivot): calls it answered, calls it
+        /// handed back to the walk, candidates emitted, members dropped as known, sub-facet LPs run, members
+        /// accepted by a witness, members whose sub-facet is empty
+        R1Handled,
+        R1Fallback,
+        R1Emitted,
+        R1SkipSeen,
+        R1LpRun,
+        R1WitnessAcc,
+        R1EmptyMember,
+        /// members of S whose sub-facet test (witness, LP or empty cut) was already done for the same active set earlier, and the
+        /// distinct active sets tested; of the empty ones, the repeats
+        R1TestRepeat,
+        R1TestDistinct,
+        R1EmptyRepeat,
     }
-    pub const NC: usize = 80;
+    pub const NC: usize = 125;
 
     #[derive(Clone, Debug)]
     pub struct Stats {
@@ -447,6 +501,38 @@ mod imp {
         BASES.with(|b| b.borrow_mut().clear());
     }
 
+    thread_local! {
+        static CALL_MAXD: Cell<usize> = const { Cell::new(0) };
+    }
+    thread_local! {
+        static TESTED: std::cell::RefCell<std::collections::HashMap<Vec<usize>, bool>> = std::cell::RefCell::new(std::collections::HashMap::new());
+    }
+    /// Records a sub-facet test of the active set `z` (and whether it was empty); counts repeats.
+    pub fn tested(z: &[usize], empty: bool) {
+        let prev = TESTED.with(|t| t.borrow_mut().insert(z.to_vec(), empty));
+        match prev {
+            Some(_) => {
+                bump(Counter::R1TestRepeat, 1);
+                if empty {
+                    bump(Counter::R1EmptyRepeat, 1);
+                }
+            }
+            None => bump(Counter::R1TestDistinct, 1),
+        }
+    }
+    pub fn tested_reset() {
+        TESTED.with(|t| t.borrow_mut().clear());
+    }
+    pub fn depth_reset() {
+        CALL_MAXD.with(|c| c.set(0));
+    }
+    pub fn depth_note(d: usize) {
+        CALL_MAXD.with(|c| c.set(c.get().max(d)));
+    }
+    pub fn depth_take() -> usize {
+        CALL_MAXD.with(|c| c.get())
+    }
+
     #[inline]
     pub fn bump(c: Counter, n: u64) {
         if (Counter::ClipCalls as usize..=Counter::ClipViolate as usize).contains(&(c as usize)) && MUTE_CLIP.with(|m| m.get()) {
@@ -483,6 +569,7 @@ mod imp {
     /// Zeroes every thread's statistics.
     pub fn reset() {
         flush_groups();
+        tested_reset();
         for s in REGISTRY.lock().unwrap().iter() {
             *s.lock().unwrap() = Stats::default();
         }

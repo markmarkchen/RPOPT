@@ -107,3 +107,17 @@ import RpoptProofs
 #print axioms Rpopt.EnumBasis.fullDim_iff
 #print axioms Rpopt.EnumBasis.lexOpt_unique
 #print axioms Rpopt.enum_interiors_disjoint
+-- Round 7: the dependent-row facet (direct enumeration of the Case-2 neighbours)
+#print axioms Rpopt.qp_infeasible_of_empty
+#print axioms Rpopt.DepFacet.of_dependency
+#print axioms Rpopt.DepFacet.identity
+#print axioms Rpopt.DepFacet.no_solution_of_empty
+#print axioms Rpopt.DepFacet.slack_side
+#print axioms Rpopt.DepFacet.needs_pos
+#print axioms Rpopt.DepFacet.candidate_solves
+#print axioms Rpopt.DepFacet.candidate_support
+#print axioms Rpopt.DepFacet.candidate_pos
+#print axioms Rpopt.DepFacet.on_facet
+#print axioms Rpopt.DepFacet.across
+#print axioms Rpopt.DepFacet.unique_across
+#print axioms Rpopt.DepFacet.returned_mem_S

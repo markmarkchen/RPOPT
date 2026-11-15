@@ -201,3 +201,64 @@ and offsets the 1 to 2% of the tight check there, but not on the sys3x2 family (
 sys3x2_N5, N6, N7 and N9 are 2 to 8% slower than main (N9 0.925 against an A/A of 0.999), the bookkeeping (clip vertices kept,
 hash index) costing more than the few certified facets save. If that matters, restricting the default to 4 and 5 parameters would
 remove it at the price of the pop_006-type gains at 3.
+
+## Round 4: the 2 to 8% slowdown at 3 parameters (sys3x2), split and removed
+
+Cause analysis with `examples/split_bench.rs` (one process, five configurations alternating, 21 rounds, 1 CPU on Negishi,
+release build). A: baseline (certificate off, tight check off); B: tight check only; C: vertices and hyperplane index only
+(mode 5, nothing looked up); F: vertices only (mode 6); D: certificate without the tight check; E: the default (mode 1,
+tight check on). Ratio to A, median of 21.
+
+| problem | B tight check | F vertices only | C vertices + index (old index) | D certificate | E default |
+|---|---:|---:|---:|---:|---:|
+| sys3x2_N3 | 1.005 | 1.000 | 1.082 | 1.012 | 1.019 |
+| sys3x2_N5 | 0.997 | 0.999 | 1.062 | 1.035 | 1.048 |
+| sys3x2_N7 | 1.005 | 1.001 | 1.082 | 1.082 | 1.098 |
+| sys3x2_N9 | 1.003 | 0.995 | 1.057 to 1.084 | 1.048 to 1.077 | 1.079 to 1.102 |
+| masses2_N4 | 1.004 | 1.001 | 1.028 | 0.869 | 0.872 |
+| masses2_N8 | 1.002 | 0.998 | 1.032 | 0.902 | 0.904 |
+| pop_006 | 1.002 | 1.002 | 1.050 | 0.867 | 0.873 |
+
+- The tight check costs 0 to 1.4% (the residual evaluation per candidate; a QP is solved only for the rare flagged candidates).
+- Collecting vertices for every region is free (F = 1.000): the clip already has them.
+- **The cost was the hash index of the known regions** (`Known::add`, one `HashMap` entry with its own `Vec` per facet row of
+  every region): 6 to 8% on sys3x2, 2 to 5% on masses2 and pop_006. The lookup itself (D minus C) is small.
+
+Fix: the index keys are one `u64` hash of the rounded hyperplane and the entries are chained in one `Vec<(region, next)>`
+(no allocation per row; candidates are still checked exactly, a collision only adds a candidate). Same split afterwards:
+
+| problem | C vertices + index | D certificate | E default (before) |
+|---|---:|---:|---:|
+| sys3x2_N3 | 1.021 | 0.949 | 0.957 (1.019) |
+| sys3x2_N5 | 1.016 | 0.979 | 0.989 (1.048) |
+| sys3x2_N7 | 1.015 | 1.009 | 1.022 (1.098) |
+| sys3x2_N9 | 1.010 | 1.010 | 1.026 (1.079 to 1.102) |
+| masses2_N4 | 1.008 | 0.849 | 0.853 (0.872) |
+| masses2_N8 | 1.005 | 0.871 | 0.873 (0.904) |
+| pop_006 | 1.011 | 0.829 | 0.834 (0.873) |
+
+The remaining cost on the largest sys3x2 is about 1% for the index and 1% for the tight check; the gains on masses2 and
+pop_006 grew (the index also costs less there). Not done: switching the certificate off adaptively when the Case-2 share
+stays low (it would save at most the 1% of the index on sys3x2); restricting the tight check to candidates that came from Case 2
+(it costs 0 to 1.4%, and whether singular bases also arise from Case 1 was not tested).
+
+### Gates on the merged tree (main f0e1084)
+
+- Coverage, 135 problems, 4000 samples, certificate on (default): regions 1,097,810, lexico-infeasible 0, samples in two regions 0,
+  samples in no region 0 (identical to round 3).
+- `cert_diff` (mode 1 against off), 48 problems (41 of 3 to 5 parameters, seven of 12 to 16): **48 of 48 identical active sets.**
+- Serial A/B (1 CPU, release; per (problem, alternation) task, old main b5c8f6d, a copy of it, current main f0e1084 and the
+  branch once each, shuffled; 5 alternations; the 23-problem set plus sys3x2_N9, pop_006, masses2_N10):
+
+| group | b5c8f6d / branch | main f0e1084 / branch | A/A (b5c8f6d / copy) |
+|---|---|---|---|
+| all 26 problems | 0.996 (0.899 to 1.175) | 1.018 (0.944 to 1.124) | 1.000 (0.885 to 1.119) |
+| 12 problems of 4 ms or more | 1.126 (0.899 to 1.175) | 1.031 (1.012 to 1.124) | 0.999 (0.885 to 1.119) |
+| sys3x2_N3, N4, N6 | 1.043, 1.052, 1.011 | 1.045, 1.023, 1.032 | 1.00 |
+| sys3x2_N7, N9 | 0.973, 0.976 | 1.020, 1.106 | 0.999, 0.991 |
+| masses2_N4 to N10 | 1.165, 1.161, 1.175, 1.147, 1.129, 1.123 | 1.031, 1.021, 1.048, 1.024, 1.038, 1.117 | 0.99 to 1.12 |
+| pop_006 | 1.133 | 1.012 | 1.033 |
+
+  (sys3x2_N5 and masses2_N10 were measured on noisy nodes: A/A 0.885 and 1.119; read them against it.) Against old main the
+  sys3x2 regression of round 3 (0.925 to 0.967) is down to 0.973 to 0.976 at N7 and N9 and gone below (1.01 to 1.05); against
+  current main the branch is faster everywhere at 4 ms or more (median 1.031, 1.012 to 1.124).
