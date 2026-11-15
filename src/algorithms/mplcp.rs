@@ -1662,11 +1662,16 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
         }
         crate::census_bump!(R1LpRun, 1);
         crate::census_bump!(PfCheb, 1);
-        let ball = {
+        let (ball, lp_status) = {
             crate::census_purpose!(Neighbour);
-            chebyshev_ball(&e2, &f2, &[])
+            crate::utils::chebyshev_ball_status(&e2, &f2, &[])
         };
         crate::census_lap!(cm, Lp);
+        // an LP without a verified answer is not a proof that the piece is empty: the walk decides the facet
+        if ball.is_none() && lp_status != crate::solver::lp::LpStatus::Infeasible {
+            crate::census_bump!(R1LpUndecided, 1);
+            { crate::census_reason!(10); return None; }
+        }
         match ball {
             Some(s) if s.x[d1] > 1e-9 => {
                 let cf = s.x[..d1].to_vec();

@@ -746,6 +746,12 @@ fn highdim_tables(rows: &[Row], skipped: &[(String, String)]) {
         let g = |k: usize| r.s.counters[census::PG_BASE + 48 + k];
         println!("| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |", r.problem, c(r, Counter::R1Fallback), g(0), g(1), g(2), g(3), g(4), g(5), g(6), g(9));
     }
+    println!("\n### High-dimension 3y: rank-1 member LPs that ended undecided (the call goes to the walk)\n");
+    println!("| problem | undecided member LPs |");
+    println!("|---|---:|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::AdjCase2) > 0.0) {
+        println!("| {} | {} |", r.problem, c(r, Counter::R1LpUndecided));
+    }
     println!("\n### High-dimension 3x: refined multipliers left in the band (nu between 1e-12 and 1e-6), by decade of nu\n");
     println!("| problem | 6 | 7 | 8 | 9 | 10 | 11 | 12 | below |");
     println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|");
