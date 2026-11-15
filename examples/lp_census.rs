@@ -466,6 +466,17 @@ fn highdim_tables(rows: &[Row], skipped: &[(String, String)]) {
             c(r, Counter::R1UnseenEmpty), c(r, Counter::R1UnseenNonEmpty), c(r, Counter::R1Ties), d.join(" / ")
         );
     }
+    println!("\n### High-dimension 3i: mplcp rank-1 enumeration of Case 2\n");
+    println!("| problem | Case-2 calls | answered by the enumeration | handed to the walk | candidates emitted | members dropped as known | emitted on a witness | sub-facet LPs | members with an empty sub-facet | neighbour LPs/region |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::AdjCase2) > 0.0) {
+        let n = r.regions.max(1) as f64;
+        println!(
+            "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {:.1} |",
+            r.problem, c(r, Counter::AdjCase2), c(r, Counter::R1Handled), c(r, Counter::R1Fallback), c(r, Counter::R1Emitted), c(r, Counter::R1SkipSeen),
+            c(r, Counter::R1WitnessAcc), c(r, Counter::R1LpRun), c(r, Counter::R1EmptyMember), c(r, Counter::PfCheb) / n
+        );
+    }
     println!("\n### High-dimension 4: vertex clipping (`clip_flags`) outcomes per call\n");
     println!("| problem | algorithm | clip calls/region | ok | nt outside 2..=6 | more than 128 hyperplanes | infinite box | more than 600 vertices | too few vertices | vertex violates a row | redundancy LPs/region |");
     println!("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|");

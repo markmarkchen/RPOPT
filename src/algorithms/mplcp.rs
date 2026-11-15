@@ -792,6 +792,180 @@ enum Nbr {
     Across(Vec<f64>),
 }
 
+/// The rank-1 enumeration of `adjacent` (on by default; `set_rank1(false)` restores the walk).
+static RANK1: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+pub fn set_rank1(on: bool) {
+    RANK1.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The facet polytope F = region ∩ Θ restricted to the hyperplane, in the coordinates θ = N θ_f - g b.
+fn facet_polytope(nb: &[Vec<f64>], g: &[f64], b: f64, e_all: &Mat, f_all: &[f64], d1: usize) -> (Mat, Vec<f64>) {
+    let mut ef = Mat::zeros(0, d1);
+    let mut ff = vec![];
+    if d1 > 0 {
+        for i in 0..e_all.rows {
+            let r = e_all.row(i);
+            let row: Vec<f64> = nb.iter().map(|v| r.iter().zip(v).map(|(a, b)| a * b).sum()).collect();
+            let nr = row.iter().map(|v| v * v).sum::<f64>().sqrt();
+            if nr < 1e-12 {
+                continue;
+            }
+            let eg: f64 = r.iter().zip(g).map(|(a, b)| a * b).sum();
+            ef.push_row(&row.iter().map(|v| v / nr).collect::<Vec<_>>());
+            ff.push((f_all[i] + b * eg) / nr);
+        }
+    }
+    (ef, ff)
+}
+
+/// Case 2 with exactly one row c vanishing on the facet, a slack row (w_c = 0 on the facet) whose pivot
+/// T[c,kk] (kk the column of its complement z_c) is zero. Then a_c = sum_j mu_j a_j over the active rows,
+/// column kk holds -mu_j on the z rows and zero on every slack row, and the active set T = A + {c} has rank
+/// deficiency one. Across the facet z_c rises and the multipliers move as lambda_j - mu_j z_c; the basis that
+/// is lexicographically feasible drops j* = argmin lambda_j / mu_j over P- = {j : mu_j > 0}, unique at a generic
+/// facet point. So the neighbours are A + {c} - {j}, one per j in P- whose piece F ∩ {lambda_j / mu_j <=
+/// lambda_k / mu_k, k in P-} of the facet is nonempty (a witness, or the Chebyshev LP); P- empty means no
+/// neighbour (boundary of the feasible set). A known set is dropped. Returns None when the case does not apply
+/// (several vanishing rows, a multiplier row, a nonzero pivot or slack column, ties between two ratios as
+/// affine functions on F, nt = 1), and the walk runs instead.
+#[allow(clippy::too_many_arguments)]
+fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usize], pv: &[usize], e_all: &Mat, f_all: &[f64], seen: Option<&Seen>, region_centre: Option<&[f64]>) -> Option<Vec<Nbr>> {
+    let (n, nt) = (p.n, p.nt);
+    let d1 = nt - 1;
+    if d1 == 0 || zrows.len() != 1 || pv.len() != 1 || pv[0] != zrows[0] {
+        return None;
+    }
+    let c = zrows[0];
+    let var = tab.row_var[c];
+    if var >= n {
+        return None;
+    }
+    let kk = tab.col_of(comp(var, n));
+    if tab.t[c * n + kk].abs() > PTOL * gam[c].abs().max(1.0) {
+        return None;
+    }
+    if (0..n).any(|i| i != c && tab.row_var[i] < n && tab.t[i * n + kk].abs() > 1e-8) {
+        return None;
+    }
+    let pm: Vec<usize> = (0..n).filter(|&i| tab.row_var[i] >= n && tab.row_var[i] < 2 * n && -tab.t[i * n + kk] > PTOL).collect();
+    let mu: Vec<f64> = pm.iter().map(|&i| -tab.t[i * n + kk]).collect();
+    if pm.is_empty() {
+        crate::census_bump!(R1Handled, 1);
+        return Some(vec![]);
+    }
+    // the members A + {c} - {j}, minus the known ones
+    let zc = z_rows(tab, n);
+    let mut members: Vec<(usize, Vec<usize>)> = vec![];
+    for (a, &ia) in pm.iter().enumerate() {
+        let zj = tab.row_var[ia] - n;
+        let mut z: Vec<usize> = zc.iter().cloned().filter(|&x| x != zj).collect();
+        z.push(var);
+        z.sort_unstable();
+        z.dedup();
+        if seen.map_or(false, |s| s.contains_key(&p.active_set(z.iter().copied()))) {
+            crate::census_bump!(R1SkipSeen, 1);
+            continue;
+        }
+        members.push((a, z));
+    }
+    // lambda_i on the facet, in facet coordinates: (rr0 - b gam_i, N' rr)
+    let nb = null_basis(g);
+    let w = 1 + d1;
+    let lam: Vec<Vec<f64>> = pm
+        .iter()
+        .map(|&i| {
+            let rr = &tab.rho[i * tab.w..(i + 1) * tab.w];
+            let mut v = vec![rr[0] - b * gam[i]];
+            for vv in nb.iter() {
+                v.push((0..nt).map(|k| rr[1 + k] * vv[k]).sum());
+            }
+            v
+        })
+        .collect();
+    // mu_k lambda_j - mu_j lambda_k as (g0, g_q) for the pair (a, b)
+    let cut = |a: usize, bb: usize| -> Vec<f64> { (0..w).map(|k| mu[bb] * lam[a][k] - mu[a] * lam[bb][k]).collect() };
+    let scale = |a: usize, bb: usize| 1.0 + (0..w).fold(0.0f64, |m, k| m.max((mu[bb] * lam[a][k]).abs()).max((mu[a] * lam[bb][k]).abs()));
+    for a in 0..pm.len() {
+        for bb in a + 1..pm.len() {
+            let d = cut(a, bb);
+            if d.iter().all(|v| v.abs() <= ZTOL * scale(a, bb)) {
+                return None; // two ratios identical on F: the lexicographic tie-break decides, the walk handles it
+            }
+        }
+    }
+    crate::census_bump!(R1Handled, 1);
+    if members.is_empty() {
+        return Some(vec![]);
+    }
+    let (ef, ff) = facet_polytope(&nb, g, b, e_all, f_all, d1);
+    let to_theta = |cf: &[f64]| -> Vec<f64> { (0..nt).map(|k| nb.iter().zip(cf).map(|(v, x)| v[k] * x).sum::<f64>() - g[k] * b).collect() };
+    // the region centre projected onto the facet, in facet coordinates, as a first witness candidate
+    let hint_f: Option<Vec<f64>> = region_centre.map(|c| {
+        // g is the unit normal of the row: the projection onto the hyperplane g.theta + b = 0
+        let sft = -(g.iter().zip(c).map(|(x, y)| x * y).sum::<f64>() + b);
+        let h: Vec<f64> = c.iter().zip(g).map(|(ci, gi)| ci + sft * gi).collect();
+        nb.iter().map(|v| h.iter().zip(v).map(|(a, b)| a * b).sum()).collect()
+    });
+    let mut witnesses: Vec<Vec<f64>> = hint_f.into_iter().collect();
+    let mut out = vec![];
+    for (a, z) in members {
+        let mut e2 = ef.clone();
+        let mut f2 = ff.clone();
+        let mut empty = false;
+        for bb in 0..pm.len() {
+            if bb == a {
+                continue;
+            }
+            // lambda_j / mu_j <= lambda_k / mu_k  <=>  mu_k lambda_j - mu_j lambda_k <= 0
+            let d = cut(a, bb);
+            let nrm = d[1..].iter().map(|v| v * v).sum::<f64>().sqrt();
+            let sc = scale(a, bb);
+            if nrm <= ZTOL * sc {
+                if d[0] > ZTOL * sc {
+                    empty = true;
+                    break;
+                } else if d[0] >= -ZTOL * sc {
+                    return None; // a tie as a constant: the walk decides
+                }
+                continue;
+            }
+            e2.push_row(&d[1..].iter().map(|v| v / nrm).collect::<Vec<_>>());
+            f2.push(-d[0] / nrm);
+        }
+        if empty {
+            crate::census_bump!(R1EmptyMember, 1);
+            continue;
+        }
+        let clears = |pt: &[f64]| (0..e2.rows).all(|i| f2[i] - e2.row(i).iter().zip(pt).map(|(x, y)| x * y).sum::<f64>() >= WITNESS_MARGIN);
+        if let Some(pt) = witnesses.iter().find(|pt| clears(pt)).cloned() {
+            crate::census_bump!(R1WitnessAcc, 1);
+            crate::census_bump!(R1Emitted, 1);
+            out.push(Nbr::Z(z, Some(to_theta(&pt))));
+            continue;
+        }
+        crate::census_bump!(R1LpRun, 1);
+        crate::census_bump!(PfCheb, 1);
+        let ball = {
+            crate::census_purpose!(Neighbour);
+            chebyshev_ball(&e2, &f2, &[])
+        };
+        match ball {
+            Some(s) if s.x[d1] > 1e-9 => {
+                let cf = s.x[..d1].to_vec();
+                crate::census_bump!(R1Emitted, 1);
+                out.push(Nbr::Z(z, Some(to_theta(&cf))));
+                witnesses.push(cf);
+            }
+            _ => {
+                crate::census_bump!(R1EmptyMember, 1);
+                crate::census_bump!(PfChebEmpty, 1);
+            }
+        }
+    }
+    Some(out)
+}
+
 /// Neighbouring z-row sets across the facet {e_k θ = f_k} of the region with tableau `tab`.
 ///
 /// `cert` is asked only when the fast path has failed, that is, when the slow path (Case 2) would
@@ -851,6 +1025,16 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         crate::census_bump!(AdjCertSkip, 1);
         crate::census_bump!(AdjCertSkipNanos, _cen_t.elapsed().as_nanos());
         return (vec![], certified);
+    }
+    // Rank-1 Case 2: one vanishing slack row c with a zero pivot, a_c = sum mu_j a_j over the active rows.
+    // The neighbours are enumerated directly, no walk (see `rank1_case2`).
+    if RANK1.load(std::sync::atomic::Ordering::Relaxed) {
+        if let Some(nbrs) = rank1_case2(p, tab, g.as_slice(), b, &gam, &zrows, &pv, e_all, f_all, seen, region_centre) {
+            crate::census_bump!(AdjCase2, 1);
+            crate::census_bump!(AdjCase2Nanos, _cen_t.elapsed().as_nanos());
+            return (nbrs, certified);
+        }
+        crate::census_bump!(R1Fallback, 1);
     }
     #[cfg(feature = "lp_census")]
     let (r1_class, r1_kk, r1_pminus, r1_mu, r1_c, r1_overhead) = {

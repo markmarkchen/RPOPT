@@ -291,8 +291,18 @@ mod imp {
         R1D3to5,
         R1D6p,
         R1Out,
+        /// rank-1 enumeration (Case 2 with one vanishing slack row and a zero pivot): calls it answered, calls it
+        /// handed back to the walk, candidates emitted, members dropped as known, sub-facet LPs run, members
+        /// accepted by a witness, members whose sub-facet is empty
+        R1Handled,
+        R1Fallback,
+        R1Emitted,
+        R1SkipSeen,
+        R1LpRun,
+        R1WitnessAcc,
+        R1EmptyMember,
     }
-    pub const NC: usize = 115;
+    pub const NC: usize = 122;
 
     #[derive(Clone, Debug)]
     pub struct Stats {
