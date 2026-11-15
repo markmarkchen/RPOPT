@@ -344,7 +344,7 @@ fn chebyshev_ball_from_or_cold(a: &Mat, b: &[f64], x0: &[f64]) -> Option<crate::
 }
 
 /// Chebyshev ball LP started at `x0` = (θ0, r0).
-fn chebyshev_ball_from(a: &Mat, b: &[f64], x0: &[f64]) -> Option<crate::solver::lp::LpSolution> {
+pub(crate) fn chebyshev_ball_from(a: &Mat, b: &[f64], x0: &[f64]) -> Option<crate::solver::lp::LpSolution> {
     let n = a.cols;
     let m = a.rows;
     let mut ab = Mat::zeros(m + 1, n + 1);
@@ -364,7 +364,7 @@ fn chebyshev_ball_from(a: &Mat, b: &[f64], x0: &[f64]) -> Option<crate::solver::
 }
 
 /// Bounding box of {Eθ <= f} (2n LPs started at the interior point `c`); None if unbounded.
-fn region_bbox(e: &Mat, f: &[f64], c: &[f64]) -> Option<(Vec<f64>, Vec<f64>)> {
+pub(crate) fn region_bbox(e: &Mat, f: &[f64], c: &[f64]) -> Option<(Vec<f64>, Vec<f64>)> {
     crate::census_purpose!(Bbox);
     let n = e.cols;
     let mut lo = vec![0.0; n];

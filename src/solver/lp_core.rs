@@ -99,6 +99,8 @@ impl Tab<'_> {
 
     #[inline]
     fn pivot(&mut self, pr: usize, pc: usize) {
+        #[cfg(feature = "lp_census")]
+        crate::census::piv_bump();
         let w = self.width;
         {
             let row = &mut self.t[pr * w..(pr + 1) * w];

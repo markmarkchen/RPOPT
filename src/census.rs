@@ -81,6 +81,46 @@ macro_rules! census_timed {
     };
 }
 
+/// Case-2 cost census: `census_t0!(m)` starts a lap, `census_lap!(m, Comp)` ends it and adds time, count and
+/// allocations since `m` to the component (see `census::Comp`). Laps never nest, so the components add up.
+#[cfg(feature = "lp_census")]
+#[macro_export]
+macro_rules! census_t0 {
+    ($m:ident) => {
+        let mut $m = $crate::census::Mark::now();
+    };
+}
+#[cfg(not(feature = "lp_census"))]
+#[macro_export]
+macro_rules! census_t0 {
+    ($m:ident) => {};
+}
+#[cfg(feature = "lp_census")]
+#[macro_export]
+macro_rules! census_lap {
+    ($m:ident, $c:ident) => {
+        $m.lap($crate::census::Comp::$c)
+    };
+}
+#[cfg(not(feature = "lp_census"))]
+#[macro_export]
+macro_rules! census_lap {
+    ($m:ident, $c:ident) => {};
+}
+/// Restarts a lap without recording (time to skip).
+#[cfg(feature = "lp_census")]
+#[macro_export]
+macro_rules! census_skip {
+    ($m:ident) => {
+        $m = $crate::census::Mark::now()
+    };
+}
+#[cfg(not(feature = "lp_census"))]
+#[macro_export]
+macro_rules! census_skip {
+    ($m:ident) => {};
+}
+
 /// Times an LP/QP entry point body (`$kind` is `Lp` or `Qp`) and records whether it came back
 /// infeasible. The body may `return` and use `?`.
 #[cfg(feature = "lp_census")]
@@ -333,8 +373,146 @@ mod imp {
         DqEmpty,
         DqFallback,
         DqNanos,
+        /// simplex pivots of every LP (all three solver paths)
+        LpPivots,
+        /// walk Chebyshev LPs (PfCheb): rows of the child piece, rows added to the parent's polytope (sum and histogram 0 / 1 / 2 / 3+),
+        /// pivots of the cold LP, calls with a parent point (centre, witness or hint), rows of the child that the parent point violates
+        /// (all rows / added rows, sum over calls with a point), calls where the parent point is in the child piece, pivots of the
+        /// cold LP on those calls, and an extra primal-shifted solve from the parent point (calls, pivots, ns; census only)
+        ChebRows,
+        ChebAdded,
+        ChebAdd0,
+        ChebAdd1,
+        ChebAdd2,
+        ChebAdd3p,
+        ChebPivots,
+        ChebHasPt,
+        ChebViolAll,
+        ChebViolNew,
+        ChebPtInside,
+        ChebPivotsPt,
+        ChebShiftCalls,
+        ChebShiftPivots,
+        ChebShiftNs,
+        ChebShiftSame,
+        ChebDims,
+        /// walk Chebyshev LPs split by leaf / non-leaf branch: calls, ns, cold pivots; phase-1 feasibility LP on the rows shifted by
+        /// 1e-9 ||a|| for the non-leaf ones (calls, pivots, ns, same verdict as the Chebyshev LP)
+        LpLeafCalls,
+        LpLeafNs,
+        LpLeafPiv,
+        LpNlCalls,
+        LpNlNs,
+        LpNlPiv,
+        P1Calls,
+        P1Pivots,
+        P1Ns,
+        P1Same,
+        /// box prefilter on the pieces that reach the DAQP / LP stage: tests, pieces the region box proves empty, of those the ones DAQP
+        /// answered empty / the LP answered empty / the LP found nonempty (must be 0), polytope rows, rows redundant over the box,
+        /// rows added to the parent piece and of those the redundant ones
+        BoxTests,
+        BoxEmpty,
+        BoxEmptyDaqp,
+        BoxEmptyLp,
+        BoxEmptyNonempty,
+        BoxRows,
+        BoxRedRows,
+        BoxCutRows,
+        BoxRedCut,
+        /// exact row redundancy on every 8th walk LP: samples, rows, non-redundant rows
+        RedSamples,
+        RedRows,
+        RedNonRed,
+        /// walks by facet hyperplane: walks, walks on a hyperplane walked before, of those from the other side, ns of the repeats and of all walks
+        HyperWalks,
+        HyperRepeat,
+        HyperOther,
+        HyperRepeatNs,
+        HyperNs,
+        /// DAQP test: calls (including paused), ns building the rows, ns in the solve, ns in the certificate check
+        DqTests,
+        DqBuildNs,
+        DqSolveNs,
+        DqCertNs,
+        /// end marker: the Case-2 component block starts here
+        CounterEnd,
     }
-    pub const NC: usize = 146;
+    /// Case-2 cost components (see `Mark::lap`): per component and per case (2 rank-1, 3 walk) four counters:
+    /// ns, laps, allocation calls, allocated bytes.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    #[repr(usize)]
+    pub enum Comp {
+        /// whole `adjacent` call (ns, calls), allocations of the whole call
+        Total = 0,
+        /// `adjacent` before the case is known: normalisation, vanishing-row scan (all calls)
+        Pre,
+        /// fast-path test and certificate check, between the scan and the rank-1 attempt
+        Gate,
+        /// walk only: the failed rank-1 attempt (whole call of `rank1_case2` that returned None)
+        R1Try,
+        /// walk: work tableau copy, null basis, facet polytope, hint
+        Setup,
+        /// rank-1: entry tests (zero pivot, zero columns, multipliers), members and Seen lookups, lambda rows, tie checks
+        R1Entry,
+        /// rank-1: facet polytope and hint
+        R1Poly,
+        /// rank-1: per-member cut rows (polytope copy, row pushes, empty-by-constant tests)
+        R1Cuts,
+        /// rank-1: output vectors (to_theta, push)
+        R1Out,
+        /// walk_one: per-iteration prelude (a, wcol, wrow, P and P-cap-Z sets, alpha row)
+        Prelude,
+        /// walk_one Case 1: lexicographic choice of the leaving row
+        Case1,
+        /// walk_one Case 2: Gamma_j lexicographic and cut tests per branch
+        Gamma,
+        /// tableau pivot (flush, defer_pivot, column lookup)
+        Pivot,
+        /// tableau clone for a branch
+        Clone,
+        /// walk-state key and the exact cycle check
+        Key,
+        /// leaf active-set computation and Seen lookup
+        Seen,
+        /// witness acceptance test of a sub-facet
+        Wit,
+        /// DAQP emptiness test
+        Daqp,
+        /// Chebyshev LP
+        Lp,
+        /// leaf output (push_leaf)
+        Leaf,
+        /// stack handling: Frame push and pop, children vector, frame drop
+        Stack,
+        /// after the walk: neighbour conversion, probes of an incomplete walk
+        Post,
+        /// census-only work (basis_seen, rank-1 probe), excluded from the totals in the report
+        Census,
+        /// census-only hint check inside `push_leaf`; nested in the Leaf laps, subtracted from them in the report
+        HintCensus,
+    }
+    pub const NCOMP: usize = 24;
+    pub const COMP_NAMES: [&str; NCOMP] = ["total", "pre", "gate", "rank-1 try (failed)", "walk setup", "rank-1 entry/members/lambda", "rank-1 facet polytope", "rank-1 member cuts", "rank-1 output", "walk prelude (P, Z sets)", "Case-1 lex choice", "Case-2 Gamma tests", "pivots", "tableau clones", "cycle key", "Seen lookups (leaf)", "witness tests", "DAQP tests", "Chebyshev LPs", "leaf output", "stack handling", "post-walk", "census overhead", "census in leaf output"];
+    pub const C2_BASE: usize = Counter::CounterEnd as usize;
+    /// slot of component `c` for case index `ci` (0 rank-1, 1 walk), field `f` (0 ns, 1 laps, 2 allocs, 3 bytes)
+    pub fn c2_slot(c: usize, ci: usize, f: usize) -> usize {
+        C2_BASE + (c * 2 + ci) * 4 + f
+    }
+    /// timer calibration: ns per lap, and laps counted (set by the driver)
+    pub const CALIB: usize = C2_BASE + NCOMP * 8;
+    /// walk classes (by vanishing rows): 0 one slack row, zero pivot; 1 one slack row, pivot in the gap; 2 one slack row, nonzero pivot;
+    /// 3 one z row; 4 two slack rows; 5 one slack one z; 6 two z rows; 7 three or more. Fields: calls, ns, LP ns, DAQP ns, Gamma ns
+    pub const NWK: usize = 8;
+    pub const WK_BASE: usize = CALIB + 4;
+    pub const WK_NAMES: [&str; NWK] = ["1 slack, zero pivot", "1 slack, pivot in gap", "1 slack, nonzero pivot", "1 z row", "2 slack", "1 slack + 1 z", "2 z", "3 or more"];
+    /// walk Chebyshev LPs by outcome (0 empty at radius 1e-9, 1 nonempty); fields: calls, cold pivots, cold ns, shifted-start calls, shifted pivots,
+    /// shifted ns, phase-1 pivots, phase-1 ns
+    pub const EO_BASE: usize = WK_BASE + NWK * 5;
+    pub const NC: usize = EO_BASE + 16;
+    pub fn bump_slot(i: usize, n: u64) {
+        MINE.with(|m| m.lock().unwrap().counters[i] += n);
+    }
 
     #[derive(Clone, Debug)]
     pub struct Stats {
@@ -591,6 +769,125 @@ mod imp {
             bump(Counter::BuildNanos, self.1.elapsed().as_nanos() as u64);
             bump(if self.0 { Counter::Kept } else { Counter::Empty }, 1);
         }
+    }
+
+    thread_local! {
+        static PIV: Cell<u64> = const { Cell::new(0) };
+    }
+    /// Counts one simplex pivot (thread-local, no lock).
+    #[inline]
+    pub fn piv_bump() {
+        PIV.with(|c| c.set(c.get() + 1));
+    }
+    pub fn piv_get() -> u64 {
+        PIV.with(|c| c.get())
+    }
+
+    thread_local! {
+        static A_CALLS: Cell<u64> = const { Cell::new(0) };
+        static A_BYTES: Cell<u64> = const { Cell::new(0) };
+        static ACC: [Cell<u64>; NCOMP * 4] = const { [const { Cell::new(0) }; NCOMP * 4] };
+    }
+
+    /// Global allocator wrapper that counts allocation calls and bytes per thread (feature `lp_census`).
+    pub struct CountingAlloc<A>(pub A);
+    unsafe impl<A: std::alloc::GlobalAlloc> std::alloc::GlobalAlloc for CountingAlloc<A> {
+        unsafe fn alloc(&self, l: std::alloc::Layout) -> *mut u8 {
+            let _ = A_CALLS.try_with(|c| c.set(c.get() + 1));
+            let _ = A_BYTES.try_with(|c| c.set(c.get() + l.size() as u64));
+            unsafe { self.0.alloc(l) }
+        }
+        unsafe fn dealloc(&self, p: *mut u8, l: std::alloc::Layout) {
+            unsafe { self.0.dealloc(p, l) }
+        }
+        unsafe fn alloc_zeroed(&self, l: std::alloc::Layout) -> *mut u8 {
+            let _ = A_CALLS.try_with(|c| c.set(c.get() + 1));
+            let _ = A_BYTES.try_with(|c| c.set(c.get() + l.size() as u64));
+            unsafe { self.0.alloc_zeroed(l) }
+        }
+        unsafe fn realloc(&self, p: *mut u8, l: std::alloc::Layout, n: usize) -> *mut u8 {
+            let _ = A_CALLS.try_with(|c| c.set(c.get() + 1));
+            let _ = A_BYTES.try_with(|c| c.set(c.get() + n as u64));
+            unsafe { self.0.realloc(p, l, n) }
+        }
+    }
+
+    /// A lap start: clock and allocation counters.
+    pub struct Mark(Instant, u64, u64);
+    impl Mark {
+        #[inline]
+        pub fn now() -> Mark {
+            Mark(Instant::now(), A_CALLS.with(|c| c.get()), A_BYTES.with(|c| c.get()))
+        }
+        /// Adds the time, one lap and the allocations since the last lap (or start) to `c`, and restarts.
+        #[inline]
+        pub fn lap(&mut self, c: Comp) {
+            let ns = self.0.elapsed().as_nanos() as u64;
+            let (a, b) = (A_CALLS.with(|c| c.get()), A_BYTES.with(|c| c.get()));
+            ACC.with(|acc| {
+                let i = c as usize * 4;
+                acc[i].set(acc[i].get() + ns);
+                acc[i + 1].set(acc[i + 1].get() + 1);
+                acc[i + 2].set(acc[i + 2].get() + a - self.1);
+                acc[i + 3].set(acc[i + 3].get() + b - self.2);
+            });
+            *self = Mark::now();
+        }
+    }
+    pub fn c2_reset() {
+        ACC.with(|a| a.iter().for_each(|x| x.set(0)));
+    }
+    pub fn c2_snapshot() -> [u64; NCOMP * 4] {
+        ACC.with(|a| std::array::from_fn(|i| a[i].get()))
+    }
+    pub fn c2_restore(s: [u64; NCOMP * 4]) {
+        ACC.with(|a| a.iter().zip(s).for_each(|(x, v)| x.set(v)));
+    }
+    /// Moves the accumulated laps into the statistics under case `case` (2 rank-1, 3 walk), with the call's
+    /// total time and allocations (from the mark `m0` taken at its start), and clears them.
+    pub fn c2_commit(case: usize, m0: &Mark, class: usize) {
+        let ns = m0.0.elapsed().as_nanos() as u64;
+        let (a, b) = (A_CALLS.with(|c| c.get()) - m0.1, A_BYTES.with(|c| c.get()) - m0.2);
+        let mut v = c2_snapshot();
+        c2_reset();
+        let t = Comp::Total as usize * 4;
+        v[t] += ns;
+        v[t + 1] += 1;
+        v[t + 2] += a;
+        v[t + 3] += b;
+        let ci = case - 2;
+        MINE.with(|m| {
+            let mut s = m.lock().unwrap();
+            for c in 0..NCOMP {
+                for f in 0..4 {
+                    s.counters[c2_slot(c, ci, f)] += v[c * 4 + f];
+                }
+            }
+            if case == 3 {
+                let b = WK_BASE + class * 5;
+                s.counters[b] += 1;
+                s.counters[b + 1] += v[Comp::Total as usize * 4] - v[Comp::Census as usize * 4] - v[Comp::HintCensus as usize * 4];
+                s.counters[b + 2] += v[Comp::Lp as usize * 4];
+                s.counters[b + 3] += v[Comp::Daqp as usize * 4];
+                s.counters[b + 4] += v[Comp::Gamma as usize * 4];
+            }
+        });
+    }
+    /// ns per lap (clock reads and counter updates), measured on an empty lap loop.
+    pub fn calibrate() -> f64 {
+        c2_reset();
+        let n = 200_000u32;
+        let mut m = Mark::now();
+        let t = Instant::now();
+        for _ in 0..n {
+            m.lap(Comp::Pre);
+        }
+        let ns = t.elapsed().as_nanos() as f64 / n as f64;
+        c2_reset();
+        ns
+    }
+    pub fn set_calib(ns: f64) {
+        MINE.with(|m| m.lock().unwrap().counters[CALIB] = (ns * 1000.0) as u64);
     }
 
     /// Zeroes every thread's statistics.
