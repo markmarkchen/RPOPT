@@ -1261,6 +1261,9 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
     }
     let kk = tab.col_of(comp(var, n));
     // zero pivot and zero slack columns, in the scale-free measure (see `pivot_measure`)
+    // a pivot decided zero by the dependency residual: the tableau of that call carries rounding of up to 1e-6 in its multipliers (pop_005: a tableau
+    // multiplier of 1.1e-6 whose recomputed value is 1e-22), so every multiplier is taken from the original data
+    let mut forced = false;
     if pivot_part(p, tab, c, kk) > MEASURE_ZERO || pivot_measure(p, tab, c, kk) > MEASURE_ZERO {
         // a measure in the undecided band (the tableau pivot, a difference of Gram entries, only resolves 1e-9) is decided by the dependency
         // residual of the original rows (`refined_dependency`): zero when rho is at most RHO_ZERO
@@ -1283,6 +1286,7 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
         if !(zero && refine && PIVDD_ON.load(std::sync::atomic::Ordering::Relaxed)) {
             { crate::census_reason!(3); return None; }
         }
+        forced = true;
     }
     // Hypotheses of the rank-1 lemma (Lean DependentFacet): row c of the tableau is w_c = rho_c + sum_j mu_j w_j with
     // no z column, and column kk is -mu_j on the active rows and 0 elsewhere (checked above for the slack rows).
@@ -1307,11 +1311,17 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
             let nu = tab.t[i * n + kk].abs() / (mcc / p.m[j * n + j].max(1e-300)).sqrt();
             nu > MU_ZERO && nu <= MU_NONZERO
         };
-        if zrows_all.iter().any(|&i| in_band(i)) {
+        if forced || zrows_all.iter().any(|&i| in_band(i)) {
             let zj: Vec<usize> = zrows_all.iter().map(|&i| tab.row_var[i] - n).collect();
             mu_ref = refined_multipliers(p, &zj, var);
+            if forced && mu_ref.is_none() {
+                { crate::census_reason!(3); return None; }
+            }
         }
     }
+    // a call with a multiplier in the undecided band has a noisy tableau altogether (pop_005: a band entry of 7e-9 next to an entry of 1.1e-6 whose
+    // recomputed value is 1e-22), so every multiplier of the call is then taken from the original data
+    let all_ref = mu_ref.is_some();
     let mut pm: Vec<usize> = vec![];
     let mut pm_mu: Vec<f64> = vec![];
     let mut zeroed_pos: Vec<usize> = vec![];
@@ -1345,12 +1355,20 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
                 crate::census_bump!(MuGap, 1);
             }
         }
-        if (tab.t[c * n + colw] - mi).abs() > 1e-8 * (ujj + mi.abs()) {
+        if !all_ref && (tab.t[c * n + colw] - mi).abs() > 1e-8 * (ujj + mi.abs()) {
             { crate::census_reason!(5); return None; }
         }
         let nu_tab = nu;
         let mut nu = nu;
-        if nu > MU_ZERO && nu <= MU_NONZERO {
+        if all_ref {
+            let v = mu_ref.as_ref().unwrap();
+            mi = v[ai];
+            nu = mi.abs() / ujj;
+            if nu > REFINED_ZERO && nu < MU_NONZERO {
+                crate::census_bump!(MuRefinedBand, 1);
+                { crate::census_reason!(6); return None; }
+            }
+        } else if nu > MU_ZERO && nu <= MU_NONZERO {
             let Some(v) = &mu_ref else {
                 // neither zero nor safely nonzero, in the scale of the dependency: the walk decides
                 #[cfg(feature = "lp_census")]
@@ -1372,7 +1390,7 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
         if mi > 0.0 && nu > MU_NONZERO {
             pm.push(i);
             pm_mu.push(mi);
-        } else if mi > 0.0 && nu_tab > ZERO_GUARD_MIN && nu_tab <= MU_ZERO {
+        } else if mi > 0.0 && !all_ref && nu_tab > ZERO_GUARD_MIN && nu_tab <= MU_ZERO {
             // a positive tableau multiplier decided zero without a recomputation (a rounded zero, or a tiny true positive)
             zeroed_pos.push(ai);
         }
