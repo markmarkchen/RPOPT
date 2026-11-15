@@ -1440,8 +1440,9 @@ fn pivot_part(p: &Plcp, tab: &Tab, c: usize, kk: usize) -> f64 {
 /// Measure at or below which the pivot is zero (rank-1 case), and above which it is nonzero (Case 1). Between them
 /// the walk decides; `PivotGap` counts those calls.
 /// The same thresholds for a multiplier mu_j of the dependency a_c = sum mu_j a_j, in the scale sqrt(M_cc / M_jj): zero below
-/// `MU_ZERO`, nonzero above `MU_NONZERO`, left to the walk between them.
-const MU_ZERO: f64 = 1e-9;
+/// `MU_ZERO`, nonzero above `MU_NONZERO`, left to the walk between them. Measured on masses4_N3 the multipliers of an exact zero come out at
+/// nu = 1e-8 and below (rounding of the tableau) and every real one at 1e-4 or more, nothing between 1e-5 and 1e-8.
+const MU_ZERO: f64 = 1e-7;
 const MU_NONZERO: f64 = 1e-6;
 const MEASURE_ZERO: f64 = 1e-9;
 const MEASURE_NONZERO: f64 = 1e-6;
