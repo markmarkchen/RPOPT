@@ -435,6 +435,14 @@ mod imp {
         DqBuildNs,
         DqSolveNs,
         DqCertNs,
+        /// rank-1 multiplier rule (scale-free): multipliers the old guard refused that are now members of P-, ones the old guard refused that are
+        /// now zero (noise), multipliers at or below PTOL that are now members, multipliers in the gap (left to the walk), and calls whose
+        /// absolute mismatch refusal is now passed
+        MuAccepted,
+        MuNoiseZero,
+        MuNewPositive,
+        MuGap,
+        MuMismatchFreed,
         /// end marker: the Case-2 component block starts here
         CounterEnd,
     }
@@ -509,7 +517,11 @@ mod imp {
     /// walk Chebyshev LPs by outcome (0 empty at radius 1e-9, 1 nonempty); fields: calls, cold pivots, cold ns, shifted-start calls, shifted pivots,
     /// shifted ns, phase-1 pivots, phase-1 ns
     pub const EO_BASE: usize = WK_BASE + NWK * 5;
-    pub const NC: usize = EO_BASE + 16;
+    /// rank-1 multiplier census: nu = |mu_j| sqrt(M_jj / M_cc) of every active row with mu_j > PTOL, by decade 10^-k (k = 0..=15, 15 holds
+    /// everything smaller), in four classes: [0] refused by the old guard (mu <= 1e-7 mu_max), [1] not refused, each split by whether the
+    /// reason-5 mismatch test passed (+2 when it failed)
+    pub const NU_BASE: usize = EO_BASE + 16;
+    pub const NC: usize = NU_BASE + 16 * 4;
     pub fn bump_slot(i: usize, n: u64) {
         MINE.with(|m| m.lock().unwrap().counters[i] += n);
     }

@@ -628,6 +628,15 @@ fn highdim_tables(rows: &[Row], skipped: &[(String, String)]) {
             c(r, Counter::DqTests), c(r, Counter::DqBuildNs) / dq / 1e3, c(r, Counter::DqSolveNs) / dq / 1e3, c(r, Counter::DqCertNs) / dq / 1e3
         );
     }
+    println!("\n### High-dimension 3s: rank-1 multipliers under the scale-free rule (nu = |mu_j| sqrt(M_jj / M_cc), zero below 1e-9, nonzero above 1e-6)\n");
+    println!("| problem | Case-2 calls | answered by the enumeration | handed to the walk | members the old guard refused, now in P- | refused by the old guard, now zero | tiny (<= PTOL) now in P- | in the gap | mismatch refusals now passed |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::AdjCase2) > 0.0) {
+        println!(
+            "| {} | {} | {} | {} | {} | {} | {} | {} | {} |",
+            r.problem, c(r, Counter::AdjCase2), c(r, Counter::R1Handled), c(r, Counter::R1Fallback), c(r, Counter::MuAccepted), c(r, Counter::MuNoiseZero), c(r, Counter::MuNewPositive), c(r, Counter::MuGap), c(r, Counter::MuMismatchFreed)
+        );
+    }
     println!("\n### High-dimension 4: vertex clipping (`clip_flags`) outcomes per call\n");
     println!("| problem | algorithm | clip calls/region | ok | nt outside 2..=6 | more than 128 hyperplanes | infinite box | more than 600 vertices | too few vertices | vertex violates a row | redundancy LPs/region |");
     println!("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
