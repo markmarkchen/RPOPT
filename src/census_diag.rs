@@ -146,6 +146,9 @@ pub mod s {
     pub const PF_CLIP_NS: usize = 230; // clip_flags, all calls (nt <= 5)
     pub const PF_CLIP_FAIL_NS: usize = 231; // clip_flags calls that returned None
     pub const PF_CLIP_FAILS: usize = 232;
+    pub const PF_WORK_OK: usize = 233; // 28 log2 buckets of the work of successful clips (nt <= 5)
+    pub const PF_WORK_FAIL: usize = 262; // the same for clips that returned None
+    pub const PF_CLIP_BUDGET_ABORTS: usize = 291;
     // Clarkson simulation, variant A (seed: parameter-set rows) at SIM_A, variant B (A + entry + parent's kept rows) at SIM_B
     pub const SIM_A: usize = 50;
     pub const SIM_B: usize = 62;

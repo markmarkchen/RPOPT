@@ -2680,6 +2680,12 @@ pub fn box_chain_stats() -> (u64, u64, u64, bool) {
     build::chain_stats()
 }
 
+/// Work budget of one vertex clip in mplcp's region builder (2 to 5 parameters): a clip that exceeds it gives up and
+/// the region takes the LP path. `u64::MAX` switches the budget off.
+pub fn set_clip_budget(budget: u64) {
+    build::set_clip_budget(budget);
+}
+
 /// Switches the chained bounding-box LPs of the LP-path region builder (6 or more parameters; default on).
 /// Off sends every region to the shared builder, the previous behaviour; for comparisons.
 pub fn set_box_chain(on: bool) {

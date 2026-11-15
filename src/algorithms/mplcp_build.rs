@@ -387,11 +387,13 @@ fn clip_flags(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &[f64], want:
         crate::census_bump!(ClipManyHyp, 1);
         return None;
     }
+    let budget = CLIP_BUDGET.load(AO::Relaxed);
+    let mut work = 0u64;
     let r = match e.cols {
-        2 => clip_n::<2>(e, f, order, lo, hi, want),
-        3 => clip_n::<3>(e, f, order, lo, hi, want),
-        4 => clip_n::<4>(e, f, order, lo, hi, want),
-        5 => clip_n::<5>(e, f, order, lo, hi, want),
+        2 => clip_n::<2>(e, f, order, lo, hi, want, budget, &mut work),
+        3 => clip_n::<3>(e, f, order, lo, hi, want, budget, &mut work),
+        4 => clip_n::<4>(e, f, order, lo, hi, want, budget, &mut work),
+        5 => clip_n::<5>(e, f, order, lo, hi, want, budget, &mut work),
         // 6 parameters and more take the LP path: on 6 parameters the clip needs hundreds of vertices
         // (up to 40 ms per region on masses3_N4, and as much again when it hits the 600-vertex guard
         // and fails), while the LP path takes about 0.1 ms; at 5 parameters the clip is still faster.
@@ -403,7 +405,21 @@ fn clip_flags(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &[f64], want:
     if r.is_some() {
         crate::census_bump!(ClipOk, 1);
     }
+    #[cfg(feature = "lp_census")]
+    if e.cols <= 5 {
+        let b = (64 - work.leading_zeros()) as usize;
+        let base = if r.is_some() { crate::census_diag::s::PF_WORK_OK } else { crate::census_diag::s::PF_WORK_FAIL };
+        crate::census_diag::add(base + b.min(27), 1);
+    }
     r
+}
+
+/// Work budget of one vertex clip (edge pairs examined plus duplicate scans plus vertex-row products); a clip that
+/// exceeds it gives up and the region takes the LP path. `u64::MAX` = no budget.
+static CLIP_BUDGET: AtomicU64 = AtomicU64::new(u64::MAX);
+
+pub(super) fn set_clip_budget(b: u64) {
+    CLIP_BUDGET.store(b, AO::Relaxed);
 }
 
 #[inline(always)]
@@ -418,7 +434,7 @@ fn dotn<const N: usize>(a: &[f64], x: &[f64; N]) -> f64 {
 
 /// Vertex clipping of the box by the rows: per row 1 when it is tight at a vertex of box ∩ region,
 /// 0 when it clears every vertex by 1e-7 (relative), -1 when undecided.
-fn clip_n<const N: usize>(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &[f64], want: bool) -> Option<(Vec<i8>, Vec<f64>)> {
+fn clip_n<const N: usize>(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &[f64], want: bool, budget: u64, work: &mut u64) -> Option<(Vec<i8>, Vec<f64>)> {
     let m = e.rows;
     let mut pts: Vec<[f64; N]> = Vec::with_capacity(64);
     let mut tight: Vec<u128> = Vec::with_capacity(64);
@@ -478,6 +494,7 @@ fn clip_n<const N: usize>(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &
             continue;
         }
         let nv = pts.len();
+        *work += nv as u64;
         val.clear();
         ins.clear();
         outs.clear();
@@ -515,11 +532,17 @@ fn clip_n<const N: usize>(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &
         }
         let kept = npts.len();
         for &u in &ins {
+            if *work > budget {
+                #[cfg(feature = "lp_census")]
+                crate::census_diag::add(crate::census_diag::s::PF_CLIP_BUDGET_ABORTS, 1);
+                return None;
+            }
             for &w in &outs {
                 let common = tight[u] & tight[w];
                 if (common.count_ones() as usize) < N - 1 {
                     continue;
                 }
+                *work += npts.len() as u64 + 1;
                 let t = val[u] / (val[u] - val[w]);
                 let mut px = [0.0; N];
                 for k in 0..N {
@@ -549,6 +572,11 @@ fn clip_n<const N: usize>(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &
         }
         if npts.len() > 600 {
             crate::census_bump!(ClipManyVerts, 1);
+            return None;
+        }
+        if *work > budget {
+            #[cfg(feature = "lp_census")]
+            crate::census_diag::add(crate::census_diag::s::PF_CLIP_BUDGET_ABORTS, 1);
             return None;
         }
         if npts.len() <= N {
