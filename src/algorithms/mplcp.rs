@@ -850,7 +850,7 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
     // pop_005, rand_t12 and rand_t14: 30 to 20,000 pivots give the same regions apart from 3 on pop_005,
     // while the time grows 10-fold at 300 and 300-fold at 3,000). 2n pivots (at least 64) keeps the cost
     // of the old caps, and a spent budget is not silent: the facet also gets the QP just across it.
-    let budget = (2 * n).max(64);
+    let budget = (WALK_BUDGET_PER_ROW * n).max(WALK_BUDGET_MIN);
     let complete = pivot_facet(p, &mut work, n, Facet { ef: &ef, ff: &ff, sc: &rowsc, seen, hint_f: hint_f.as_deref() }, budget, &mut out);
     *ws = Some(work);
     crate::census_bump!(AdjCase2, 1);
@@ -929,6 +929,14 @@ pub fn regions(program: &MpProgram, seed: u64, method: Method) -> Vec<CriticalRe
 /// at most 4e-12 relative to depth 28 on the 3 and 4 parameter problems, the same size as at depth
 /// 0 to 7), so the period only trades a rebuild (about |z| pivots) against nothing. 8 -> 32.
 const REFACTOR: usize = 32;
+
+/// Pivot budget of one facet walk in `pivot_facet`: `WALK_BUDGET_PER_ROW * n` pivots (n = rows of the
+/// pLCP), at least `WALK_BUDGET_MIN`. A walk that spends it is stopped and the facet also gets the QP
+/// just across it. Smaller is faster and finds the same regions on everything measured except
+/// pop_005 (30 or 60 pivots: 10,294 regions, 100 or more: 10,297); see
+/// `bench/results/mplcp_case2_phase3.md`.
+const WALK_BUDGET_PER_ROW: usize = 2;
+const WALK_BUDGET_MIN: usize = 64;
 
 /// Where a queued region's tableau comes from. `Lazy` is the parent's tableau shared with the
 /// siblings plus the principal pivot (row, column) that turns it into this region's tableau; the
