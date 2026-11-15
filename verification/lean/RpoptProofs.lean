@@ -7,8 +7,11 @@ import RpoptProofs.Pivot
 import RpoptProofs.Lex
 import RpoptProofs.Facet
 import RpoptProofs.Algorithm2
+import RpoptProofs.Termination
+import RpoptProofs.FacetWalk
 import RpoptProofs.Coverage
 import RpoptProofs.Optimizations.EntryFacetSkip
+import RpoptProofs.Optimizations.KnownRegionSkip
 import RpoptProofs.MplpLex.Certificate
 import RpoptProofs.MplpLex.Pivot
 import RpoptProofs.MplpLex.LexUnique

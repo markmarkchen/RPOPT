@@ -400,8 +400,12 @@ time of `graph`. Those runs come from a shared, busy machine.
   that a pLCP solution gives the unique mp-QP optimizer, that each region's tableau law is optimal on its region
   and equals the KKT-solve law, that pivots and the Case-1 facet step are correct, that lexico-feasible bases
   never overlap (both solvers), and that the entry-facet skip is safe when the parent region is lexico-feasible.
-  Open: KKT necessity, the Case-2 degenerate-facet step, and the facet-graph connectivity behind coverage.
-  Tolerances and floating point are not modelled. The model traced the pop_001 overlap to absolute tolerances in
+  For the Case-2 degenerate-facet step they show that every basis it returns from a genuine facet is
+  lexico-feasible just across it, that its sub-facets cover the facet, and that its pivot walk never repeats a
+  state from a lexico-feasible start (so the `depth > 6` and `8n + 50` caps can become a cycle check that reports
+  instead of dropping neighbours). The known-region skip of Case-2 facets is safe when the known region is
+  lexico-feasible. Open: KKT necessity, Case-2 completeness (a Lemke-type termination statement), and the
+  facet-graph connectivity behind coverage. Tolerances and floating point are not modelled. The model traced the pop_001 overlap to absolute tolerances in
   the Case-2 sign test of `pivot_facet`; the fix is in progress.
 
 ## How it is fast
