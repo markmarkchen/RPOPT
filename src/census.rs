@@ -765,6 +765,11 @@ mod imp {
         CALL_MAXD.with(|c| c.get())
     }
 
+    /// Current value of a counter of this thread (census-only reads of per-region deltas).
+    pub fn cur(c: Counter) -> u64 {
+        MINE.with(|m| m.lock().unwrap().counters[c as usize])
+    }
+
     #[inline]
     pub fn bump(c: Counter, n: u64) {
         if (Counter::ClipCalls as usize..=Counter::ClipViolate as usize).contains(&(c as usize)) && MUTE_CLIP.with(|m| m.get()) {

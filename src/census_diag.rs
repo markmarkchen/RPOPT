@@ -149,6 +149,7 @@ pub mod s {
     pub const PF_WORK_OK: usize = 233; // 28 log2 buckets of the work of successful clips (nt <= 5)
     pub const PF_WORK_FAIL: usize = 262; // the same for clips that returned None
     pub const PF_CLIP_BUDGET_ABORTS: usize = 291;
+    pub const PF_REGSTAT_NS: usize = 292; // census-only work of the per-region records (subtracted from the solve)
     // Clarkson simulation, variant A (seed: parameter-set rows) at SIM_A, variant B (A + entry + parent's kept rows) at SIM_B
     pub const SIM_A: usize = 50;
     pub const SIM_B: usize = 62;
@@ -485,6 +486,32 @@ thread_local! {
 pub fn set_tab_rows(m: Option<HashMap<(u8, usize), (Vec<f64>, f64)>>) {
     TABROWS.with(|p| *p.borrow_mut() = m);
 }
+/// Per-region neighbour-search record (mplcp, census only), 12 numbers per popped region:
+/// [nbr_ns, fast_ns, none_ns, case2_ns, rank1_ns, fast_calls, none_calls, case2_calls, rank1_emitted, fresh_case1, fresh_case2, one_index_unseen]
+pub const REGREC: usize = 12;
+thread_local! {
+    static REGS: RefCell<Vec<f64>> = const { RefCell::new(Vec::new()) };
+}
+pub fn regs_reset() {
+    REGS.with(|r| r.borrow_mut().clear());
+}
+pub fn regs_push(rec: [f64; REGREC]) {
+    REGS.with(|r| r.borrow_mut().extend_from_slice(&rec));
+}
+/// Writes the records of this thread as little-endian f64 to `path`.
+pub fn regs_dump(path: &str) {
+    REGS.with(|r| {
+        let bytes: Vec<u8> = r.borrow().iter().flat_map(|v| v.to_le_bytes()).collect();
+        let _ = std::fs::write(path, bytes);
+    });
+}
+/// Snapshot of the counters whose per-region deltas split the neighbour search.
+pub fn reg_snap() -> [u64; 9] {
+    use crate::census::{cur, Counter as C};
+    let r1: u64 = [C::R1Nanos0, C::R1Nanos1, C::R1Nanos2, C::R1Nanos3, C::R1Nanos4, C::R1Nanos5].iter().map(|&k| cur(k)).sum();
+    [cur(C::AdjFastNanos), cur(C::AdjNoneNanos), cur(C::AdjCase2Nanos), r1, cur(C::AdjFast), cur(C::AdjNone), cur(C::AdjCase2), cur(C::R1Emitted), 0]
+}
+
 pub fn set_parent(a: &[usize]) {
     PARENT.with(|p| *p.borrow_mut() = Some(a.to_vec()));
 }

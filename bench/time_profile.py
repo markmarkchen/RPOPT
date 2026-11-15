@@ -34,7 +34,7 @@ def from_md(path, solver):
     cons, lpshare = pct(cells[3]), pct(cells[4])
     cand = (feas + nbr) * total
     if solver == 'parametric_daqp':
-        m = re.search(r'### High-dimension 3j.*?\n\|.*\n\|.*\n\| \S+ \|(.*)\n', t)
+        m = re.search(r'### High-dimension 3j[^\n]*\n+\|[^\n]*\n\|[^\n]*\n\| \S+ \|([^\n]*)\n', t)
         if m:
             f = [c.strip() for c in m.group(1).split('|')]
             # regions, solve ms, tests/region, licq, empty, nonempty, early, daqp, fallbacks, ms in tests, ...

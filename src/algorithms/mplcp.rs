@@ -2170,6 +2170,34 @@ enum Slot {
 type Seen = crate::fxhash::FxHashMap<Vec<usize>, Slot>;
 
 /// Claims `aset` as seen; true when it was new (it is then marked `Rejected` until its region is built).
+/// Census only: the number of one-index changes A + {i} and A - {i} of `aset` (over the inequality constraints) that are not in `seen`.
+#[cfg(feature = "lp_census")]
+fn count_one_index(plcp: &Plcp, aset: &[usize], seen: &Seen) -> usize {
+    let neq = plcp.eq.len();
+    let base = &aset[neq..];
+    let mut n = 0;
+    let mut cand: Vec<usize> = Vec::with_capacity(aset.len() + 1);
+    for &i in &plcp.ineq {
+        cand.clear();
+        cand.extend_from_slice(&aset[..neq]);
+        match base.binary_search(&i) {
+            Ok(p) => {
+                cand.extend_from_slice(&base[..p]);
+                cand.extend_from_slice(&base[p + 1..]);
+            }
+            Err(p) => {
+                cand.extend_from_slice(&base[..p]);
+                cand.push(i);
+                cand.extend_from_slice(&base[p..]);
+            }
+        }
+        if !seen.contains_key(&cand) {
+            n += 1;
+        }
+    }
+    n
+}
+
 fn seen_claim(seen: &mut Seen, aset: &[usize]) -> bool {
     if seen.contains_key(aset) {
         false
@@ -2994,7 +3022,21 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
         let (tab, cands) = match crate::census_timed!(MplcpTabNanos, tab.resolve(plcp, cur)) {
             Some(tab) => {
                 let cx = CertCtx::new(cmode, verts.as_deref(), &known, &regions, plcp.nt, wave_limit);
+                #[cfg(feature = "lp_census")]
+                let (_snap0, _tnb) = (crate::census_diag::reg_snap(), std::time::Instant::now());
                 let cands = crate::census_timed!(MplcpNbrNanos, expand_candidates(plcp, cur, center.as_ref(), &tab, depth, entry.as_ref(), cx.as_ref(), Some(&seen), program, &mut ws));
+                #[cfg(feature = "lp_census")]
+                {
+                    let nb_ns = _tnb.elapsed().as_nanos() as f64;
+                    let s1 = crate::census_diag::reg_snap();
+                    let d = |i: usize| (s1[i] - _snap0[i]) as f64;
+                    let t = std::time::Instant::now();
+                    let unseen = count_one_index(plcp, &cur.active_set, &seen) as f64;
+                    let fresh1 = cands.iter().filter(|c| c.piv.is_some() && !seen.contains_key(&c.aset)).count() as f64;
+                    let fresh2 = cands.iter().filter(|c| c.piv.is_none() && !seen.contains_key(&c.aset)).count() as f64;
+                    crate::census_diag::regs_push([nb_ns, d(0), d(1), d(2), d(3), d(4), d(5), d(6), d(7), fresh1, fresh2, unseen]);
+                    crate::census_diag::add(crate::census_diag::s::PF_REGSTAT_NS, t.elapsed().as_nanos() as u64);
+                }
                 (tab, cands)
             }
             None => {

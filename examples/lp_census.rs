@@ -46,6 +46,7 @@ fn child(path: &str, alg: &str) {
     let mut runs: Vec<(f64, usize, Stats)> = vec![];
     let lap_ns = census::calibrate();
     loop {
+        rpopt::census_diag::regs_reset();
         census::reset();
         rpopt::algorithms::mplcp::census_reset_local();
         census::set_calib(lap_ns);
@@ -56,6 +57,9 @@ fn child(path: &str, alg: &str) {
         if dt > 5.0 || runs.len() == 3 {
             break;
         }
+    }
+    if let Ok(path) = std::env::var("RPOPT_PERREGION") {
+        rpopt::census_diag::regs_dump(&path);
     }
     runs.sort_by(|a, b| a.0.total_cmp(&b.0));
     let (dt, regions, s) = &runs[runs.len() / 2];
@@ -71,7 +75,7 @@ fn profile(alg: &str, s: &Stats, dt: f64) -> Value {
     use rpopt::census_diag::{s as d, slot};
     let c = |k: Counter| s.counter(k) as f64;
     let by = |p: usize| (s.nanos[0][p] + s.nanos[1][p]) as f64;
-    let total = dt * 1e9;
+    let total = dt * 1e9 - if alg == "mplcp" { slot(s, d::PF_REGSTAT_NS) } else { 0.0 };
     let build_total = if alg == "mplcp" { c(Counter::MplcpBuildNanos) } else { c(Counter::BuildNanos) };
     let build_lp = c(Counter::BuildLpNanos);
     let (cand, case2, rank1, tab, rowgen, box_ns, perrow, cheb, build_other);
@@ -97,7 +101,7 @@ fn profile(alg: &str, s: &Stats, dt: f64) -> Value {
         build_other = (build_lp - box_ns - perrow - cheb).max(0.0);
     }
     let rest = total - cand - tab - build_total;
-    json!({"total": total, "cand": cand, "case2": case2, "rank1": rank1, "tab": tab, "build_total": build_total, "rowgen": rowgen, "box": box_ns, "perrow": perrow, "cheb": cheb, "build_other": build_other, "rest": rest, "work_ok": (0..28).map(|b| slot(s, d::PF_WORK_OK + b)).collect::<Vec<f64>>(), "work_fail": (0..28).map(|b| slot(s, d::PF_WORK_FAIL + b)).collect::<Vec<f64>>(), "clip": slot(s, d::PF_CLIP_NS), "clip_fail": slot(s, d::PF_CLIP_FAIL_NS), "clip_fails": slot(s, d::PF_CLIP_FAILS), "setup": slot(s, d::PF_SETUP_NS), "init": slot(s, d::PF_INIT_NS), "loop": slot(s, d::PF_LOOP_NS)})
+    json!({"pd_tests": c(Counter::PdTests), "total": total, "cand": cand, "case2": case2, "rank1": rank1, "tab": tab, "build_total": build_total, "rowgen": rowgen, "box": box_ns, "perrow": perrow, "cheb": cheb, "build_other": build_other, "rest": rest, "work_ok": (0..28).map(|b| slot(s, d::PF_WORK_OK + b)).collect::<Vec<f64>>(), "work_fail": (0..28).map(|b| slot(s, d::PF_WORK_FAIL + b)).collect::<Vec<f64>>(), "clip": slot(s, d::PF_CLIP_NS), "clip_fail": slot(s, d::PF_CLIP_FAIL_NS), "clip_fails": slot(s, d::PF_CLIP_FAILS), "setup": slot(s, d::PF_SETUP_NS), "init": slot(s, d::PF_INIT_NS), "loop": slot(s, d::PF_LOOP_NS)})
 }
 
 struct Row {
