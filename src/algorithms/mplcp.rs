@@ -1091,6 +1091,41 @@ fn z_toggle(tab: &Tab, n: usize, v: usize) -> Vec<usize> {
     z
 }
 
+/// Is the Case-1 neighbour (the toggle of row `v`) already in Seen? Its key is the key of A with one word added or
+/// removed; a hit is verified against the stored set, which must be A + {t} (or A - {t}) of the right length.
+fn toggle_known(p: &Plcp, tab: &Tab, v: usize, sn: &Seen) -> bool {
+    let n = p.n;
+    let var = tab.row_var[v];
+    R1_BUFS.with(|cell| {
+        let mut bufs = cell.borrow_mut();
+        let bits = &mut bufs.bits;
+        let words = (p.ineq.iter().chain(p.eq.iter()).copied().max().unwrap_or(0) >> 6) + 1;
+        bits.clear();
+        bits.resize(words, 0);
+        let mut key = sn.eq_key();
+        let mut alen = p.eq.len();
+        for &e in p.eq.iter() {
+            bits[e >> 6] |= 1u64 << (e & 63);
+        }
+        for &x in tab.row_var.iter() {
+            if x >= n && x < 2 * n {
+                let i = p.ineq[x - n];
+                key ^= sn.z(i);
+                bits[i >> 6] |= 1u64 << (i & 63);
+                alen += 1;
+            }
+        }
+        let bits = &*bits;
+        if var < n {
+            let t = p.ineq[var];
+            sn.find(key ^ sn.z(t), alen + 1, |s: &[u32]| s.iter().all(|&x| x as usize == t || (bits[(x >> 6) as usize] >> (x & 63)) & 1 == 1)).is_some()
+        } else {
+            let t = p.ineq[var - n];
+            sn.find(key ^ sn.z(t), alen - 1, |s: &[u32]| s.iter().all(|&x| x as usize != t && (bits[(x >> 6) as usize] >> (x & 63)) & 1 == 1)).is_some()
+        }
+    })
+}
+
 /// z rows of the basis reached from `tab` by the pivot (row r, column c), without doing the pivot.
 fn z_after(tab: &Tab, n: usize, r: usize, c: usize) -> Vec<usize> {
     let mut v: Vec<usize> = tab
@@ -1109,6 +1144,45 @@ fn z_rows(tab: &Tab, n: usize) -> Vec<usize> {
     let mut v: Vec<usize> = tab.row_var.iter().filter(|&&x| x >= n && x < 2 * n).map(|&x| x - n).collect();
     v.sort_unstable();
     v
+}
+
+/// `null_basis` into a flat buffer (nt-1 consecutive vectors of length nt), with the same arithmetic.
+fn null_basis_into(g: &[f64], out: &mut Vec<f64>) {
+    let nt = g.len();
+    out.clear();
+    let skip = (0..nt).max_by(|&a, &b| g[a].abs().partial_cmp(&g[b].abs()).unwrap()).unwrap();
+    for k in 0..nt {
+        if k == skip {
+            continue;
+        }
+        let start = out.len();
+        out.resize(start + nt, 0.0);
+        let (prev, v) = out.split_at_mut(start);
+        v[k] = 1.0;
+        let dp: f64 = v.iter().zip(g).map(|(a, b)| a * b).sum();
+        for (x, y) in v.iter_mut().zip(g) {
+            *x -= dp * y;
+        }
+        for u in prev.chunks_exact(nt) {
+            let dp: f64 = v.iter().zip(u).map(|(a, b)| a * b).sum();
+            for (x, y) in v.iter_mut().zip(u) {
+                *x -= dp * y;
+            }
+        }
+        let nrm = v.iter().map(|x| x * x).sum::<f64>().sqrt();
+        for x in v.iter_mut() {
+            *x /= nrm;
+        }
+    }
+}
+
+struct R1Hold(R1Bufs);
+
+impl Drop for R1Hold {
+    fn drop(&mut self) {
+        let b = std::mem::take(&mut self.0);
+        R1_BUFS.with(|c| *c.borrow_mut() = b);
+    }
 }
 
 /// Orthonormal basis (columns, nt x (nt-1)) of the orthogonal complement of the unit vector g.
@@ -1232,27 +1306,87 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
         crate::census_bump!(R1Handled, 1);
         return Some(vec![]);
     }
-    // the members A + {c} - {j}, minus the known ones
-    let zc = z_rows(tab, n);
+    // the members A + {c} - {j}, minus the known ones. A member's Seen key is built in a pooled buffer from the
+    // sorted constraint indices of A + {c} with one index removed, so a known member costs no allocation; the
+    // member's z rows are built only when it is not known.
+    let mut bufs = R1Hold(R1_BUFS.with(|c| std::mem::take(&mut *c.borrow_mut())));
+    let R1Bufs { bits, nbf, lam } = &mut bufs.0;
+    // Seen key of A + {c} - {j}: the key of A XOR the words of c and j, no vector is built; a hit is verified
+    // against the stored set (it must lie inside A + {c}, without j; its length is |A|)
+    let ic = p.ineq[var];
+    let mut key0 = 0u128;
+    let mut alen = p.eq.len();
+    if let Some(sn) = seen {
+        key0 = sn.eq_key() ^ sn.z(ic);
+        let words = (p.ineq.iter().chain(p.eq.iter()).copied().max().unwrap_or(0) >> 6) + 1;
+        bits.clear();
+        bits.resize(words, 0);
+        for &e in p.eq.iter() {
+            bits[e >> 6] |= 1u64 << (e & 63);
+        }
+        bits[ic >> 6] |= 1u64 << (ic & 63);
+        for &x in tab.row_var.iter() {
+            if x >= n && x < 2 * n {
+                let i = p.ineq[x - n];
+                key0 ^= sn.z(i);
+                bits[i >> 6] |= 1u64 << (i & 63);
+                alen += 1;
+            }
+        }
+    }
+    let mut zc: Option<Vec<usize>> = None;
     let mut members: Vec<(usize, Vec<usize>)> = vec![];
     for (a, &ia) in pm.iter().enumerate() {
         let zj = tab.row_var[ia] - n;
-        let mut z: Vec<usize> = zc.iter().cloned().filter(|&x| x != zj).collect();
-        z.push(var);
-        z.sort_unstable();
-        z.dedup();
-        let known = seen.map_or(false, |s| s.contains_key(&p.active_set(z.iter().copied())));
+        let ij = p.ineq[zj];
+        let known = seen.map_or(false, |sn| {
+            let inside = |s: &[u32]| s.iter().all(|&x| (bits[(x >> 6) as usize] >> (x & 63)) & 1 == 1 && x as usize != ij);
+            sn.find(key0 ^ sn.z(ij), alen, inside).is_some()
+        });
         crate::census_lap!(cm, Seen);
         if known {
             crate::census_bump!(R1SkipSeen, 1);
             continue;
         }
+        let zc = zc.get_or_insert_with(|| z_rows(tab, n));
+        let mut z: Vec<usize> = zc.iter().cloned().filter(|&x| x != zj).collect();
+        z.push(var);
+        z.sort_unstable();
+        z.dedup();
         members.push((a, z));
     }
     crate::census_skip!(cm);
-    // lambda_i on the facet, in facet coordinates: (rr0 - b gam_i, N' rr)
-    let nb = null_basis(g);
     let w = 1 + d1;
+    // two ratios identical on F: the lexicographic tie-break decides, the walk handles it. The lambda_i on the
+    // facet, in facet coordinates, are (rr0 - b gam_i, N' rr); the test needs a pair of members at least
+    if pm.len() >= 2 {
+        null_basis_into(g, nbf);
+        lam.clear();
+        for &i in pm.iter() {
+            let rr = &tab.rho[i * tab.w..(i + 1) * tab.w];
+            lam.push(rr[0] - b * gam[i]);
+            for vv in nbf.chunks_exact(nt) {
+                lam.push((0..nt).map(|k| rr[1 + k] * vv[k]).sum());
+            }
+        }
+        for a in 0..pm.len() {
+            for bb in a + 1..pm.len() {
+                let la = &lam[a * w..(a + 1) * w];
+                let lb = &lam[bb * w..(bb + 1) * w];
+                let sc = 1.0 + (0..w).fold(0.0f64, |m, k| m.max((mu[bb] * la[k]).abs()).max((mu[a] * lb[k]).abs()));
+                if (0..w).all(|k| (mu[bb] * la[k] - mu[a] * lb[k]).abs() <= ZTOL * sc) {
+                    return None;
+                }
+            }
+        }
+    }
+    crate::census_bump!(R1Handled, 1);
+    crate::census_lap!(cm, R1Entry);
+    if members.is_empty() {
+        return Some(vec![]);
+    }
+    drop(bufs);
+    let nb = null_basis(g);
     let lam: Vec<Vec<f64>> = pm
         .iter()
         .map(|&i| {
@@ -1267,19 +1401,6 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
     // mu_k lambda_j - mu_j lambda_k as (g0, g_q) for the pair (a, b)
     let cut = |a: usize, bb: usize| -> Vec<f64> { (0..w).map(|k| mu[bb] * lam[a][k] - mu[a] * lam[bb][k]).collect() };
     let scale = |a: usize, bb: usize| 1.0 + (0..w).fold(0.0f64, |m, k| m.max((mu[bb] * lam[a][k]).abs()).max((mu[a] * lam[bb][k]).abs()));
-    for a in 0..pm.len() {
-        for bb in a + 1..pm.len() {
-            let d = cut(a, bb);
-            if d.iter().all(|v| v.abs() <= ZTOL * scale(a, bb)) {
-                return None; // two ratios identical on F: the lexicographic tie-break decides, the walk handles it
-            }
-        }
-    }
-    crate::census_bump!(R1Handled, 1);
-    crate::census_lap!(cm, R1Entry);
-    if members.is_empty() {
-        return Some(vec![]);
-    }
     let (ef, ff) = facet_polytope(&nb, g, b, e_all, f_all, d1);
     let to_theta = |cf: &[f64]| -> Vec<f64> { (0..nt).map(|k| nb.iter().zip(cf).map(|(v, x)| v[k] * x).sum::<f64>() - g[k] * b).collect() };
     // the region centre projected onto the facet, in facet coordinates, as a first witness candidate
@@ -1411,6 +1532,40 @@ fn pivot_part(p: &Plcp, tab: &Tab, c: usize, kk: usize) -> f64 {
 const MEASURE_ZERO: f64 = 1e-9;
 const MEASURE_NONZERO: f64 = 1e-6;
 
+/// Scratch vectors of one `adjacent` call, kept between calls (the call allocates nothing for them).
+#[derive(Default)]
+struct AdjBufs {
+    g: Vec<f64>,
+    gam: Vec<f64>,
+    zrows: Vec<usize>,
+    rowsc: Vec<f64>,
+    pv: Vec<usize>,
+}
+
+struct AdjHold(Option<AdjBufs>);
+
+impl Drop for AdjHold {
+    fn drop(&mut self) {
+        if let Some(b) = self.0.take() {
+            ADJ_BUFS.with(|c| *c.borrow_mut() = Some(b));
+        }
+    }
+}
+
+thread_local! {
+    static ADJ_BUFS: std::cell::RefCell<Option<AdjBufs>> = const { std::cell::RefCell::new(None) };
+    static R1_BUFS: std::cell::RefCell<R1Bufs> = std::cell::RefCell::new(R1Bufs::default());
+}
+
+/// Scratch of `rank1_case2`: the sorted active set of A + {c} and the key of one member.
+#[derive(Default)]
+struct R1Bufs {
+    /// bit set of the indices of A + {c}
+    bits: Vec<u64>,
+    nbf: Vec<f64>,
+    lam: Vec<f64>,
+}
+
 /// Neighbouring z-row sets across the facet {e_k θ = f_k} of the region with tableau `tab`.
 ///
 /// `cert` is asked only when the fast path has failed, that is, when the slow path (Case 2) would
@@ -1427,13 +1582,19 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
     crate::census_bump!(AdjCalls, 1);
     let (n, nt) = (p.n, p.nt);
     let nrm = erow.iter().map(|v| v * v).sum::<f64>().sqrt();
-    let g: Vec<f64> = erow.iter().map(|v| v / nrm).collect();
+    // the per-call buffers come from a thread-local pool and go back on every exit (the guard's Drop)
+    let mut hold = AdjHold(Some(ADJ_BUFS.with(|c| c.borrow_mut().take()).unwrap_or_default()));
+    let AdjBufs { g, gam, zrows, rowsc, pv } = hold.0.as_mut().unwrap();
+    g.clear();
+    g.extend(erow.iter().map(|v| v / nrm));
     let b = -frhs / nrm; // γ'θ + b = 0
     let d1 = nt - 1;
     // rows identically zero on the facet (none: boundary of Θ), and the α column γ_i = ρθ_i · g
-    let mut gam = vec![0.0; n];
-    let mut zrows: Vec<usize> = vec![];
-    let mut rowsc = vec![1.0f64; 2 * n + 1];
+    gam.clear();
+    gam.resize(n, 0.0);
+    zrows.clear();
+    rowsc.clear();
+    rowsc.resize(2 * n + 1, 1.0f64);
     for i in 0..n {
         let rr = &tab.rho[i * tab.w..(i + 1) * tab.w];
         let gi: f64 = (0..nt).map(|k| rr[1 + k] * g[k]).sum();
@@ -1455,7 +1616,8 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
     // Fast path of Algorithm 2: a single leaving candidate v in P ∩ Z (Case 1 without ties), after
     // which α is basic and the entering variable comp(v) makes P' ∩ Z' empty with α rising:
     // the neighbour is the principal pivot (toggle) of v. Only column entries are needed.
-    let pv: Vec<usize> = zrows.iter().cloned().filter(|&i| gam[i] < -PTOL).collect();
+    pv.clear();
+    pv.extend(zrows.iter().cloned().filter(|&i| gam[i] < -PTOL));
     if pv.len() == 1 {
         let v = pv[0];
         let var = tab.row_var[v];
@@ -1497,6 +1659,12 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
             if !blocked {
                 crate::census_bump!(AdjFast, 1);
                 crate::census_bump!(AdjFastNanos, _cen_t.elapsed().as_nanos());
+                // a neighbour that is already known would be dropped by the caller: skip building it
+                if let Some(sn) = seen {
+                    if toggle_known(p, tab, v, sn) {
+                        return (vec![], None);
+                    }
+                }
                 if nonzero_rel {
                     // a pivot below PTOL leaves a badly scaled child tableau and an entry hyperplane that
                     // the pivot step cannot be trusted with: hand over the basis only, so the child is
@@ -1572,7 +1740,7 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
             if nr < 1e-12 {
                 continue;
             }
-            let eg: f64 = r.iter().zip(&g).map(|(a, b)| a * b).sum();
+            let eg: f64 = r.iter().zip(g.iter()).map(|(a, b)| a * b).sum();
             ef.push_row(&row.iter().map(|v| v / nr).collect::<Vec<_>>());
             ff.push((f_all[i] + b * eg) / nr);
         }
@@ -1681,7 +1849,7 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         for cf in probes {
             let on: Vec<f64> = (0..nt).map(|k| nb.iter().zip(&cf).map(|(v, x)| v[k] * x).sum::<f64>() - g[k] * b).collect();
             let delta = 1e-6 * (1.0 + on.iter().fold(0.0f64, |m, v| m.max(v.abs())));
-            nbrs.push(Nbr::Across(on.iter().zip(&g).map(|(x, gk)| x + delta * gk).collect()));
+            nbrs.push(Nbr::Across(on.iter().zip(g.iter()).map(|(x, gk)| x + delta * gk).collect()));
         }
     }
     crate::census_lap!(cm, Post);
@@ -2074,22 +2242,20 @@ impl TabSrc {
 
 /// What is known about an active set that `adjacent` has returned: the index of its region in the
 /// result list, or that its region was rejected (empty, lower dimensional, or not yet built).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Slot {
-    Built(usize),
-    Rejected,
-}
+use super::seen_set::{SeenSet as Seen, Slot};
 
-/// Exact map from an active set (as returned by `Plcp::active_set`) to its `Slot`; unlike the
-/// rounded hyperplane keys of `Known` it has no collisions.
-type Seen = crate::fxhash::FxHashMap<Vec<usize>, Slot>;
+/// The empty set of seen active sets for `plcp`.
+fn new_seen(plcp: &Plcp) -> Seen {
+    let max = plcp.ineq.iter().chain(plcp.eq.iter()).copied().max().unwrap_or(0);
+    Seen::new(max, &plcp.eq)
+}
 
 /// Claims `aset` as seen; true when it was new (it is then marked `Rejected` until its region is built).
 fn seen_claim(seen: &mut Seen, aset: &[usize]) -> bool {
     if seen.contains_key(aset) {
         false
     } else {
-        seen.insert(aset.to_vec(), Slot::Rejected);
+        seen.insert(aset, Slot::Rejected);
         true
     }
 }
@@ -2651,8 +2817,8 @@ fn build_cand(program: &MpProgram, plcp: &Plcp, parent: &Tab, c: &Cand, want_ver
 
 fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegion> {
     let Some((initial, init_center)) = initial_region(program, seed) else { return vec![] };
-    let mut seen: Seen = Seen::default();
-    seen.insert(initial.active_set.clone(), Slot::Built(0));
+    let mut seen: Seen = new_seen(plcp);
+    seen.insert(&initial.active_set, Slot::Built(0));
     let mut regions = vec![initial];
     let cmode = CERT.load(std::sync::atomic::Ordering::Relaxed);
     let mut known = Known::default();
@@ -2722,7 +2888,7 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
                 Some(_) => (TabSrc::None, 0),
                 None => (TabSrc::from(own), 0),
             };
-            seen.insert(cr.active_set.clone(), Slot::Built(regions.len()));
+            seen.insert(&cr.active_set, Slot::Built(regions.len()));
             regions.push(cr);
             if cmode != 6 && cert_active(cmode, plcp.nt) {
                 known.add(regions.len() - 1, regions.last().unwrap());
@@ -2740,7 +2906,7 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
     }
     SEEN_LEN.store(seen.len(), std::sync::atomic::Ordering::Relaxed);
     // hashbrown: one control byte per bucket and (key header + slot) per bucket, at the load factor 7/8
-    SEEN_BYTES.store(seen.capacity() * (1 + std::mem::size_of::<(Vec<usize>, Slot)>()) + seen.keys().map(|k| k.capacity() * 8).sum::<usize>(), std::sync::atomic::Ordering::Relaxed);
+    SEEN_BYTES.store(seen.bytes(), std::sync::atomic::Ordering::Relaxed);
     regions
 }
 
@@ -2764,8 +2930,8 @@ fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalR
         return pivot_solve(program, plcp, seed);
     }
     let Some((initial, init_center)) = initial_region(program, seed) else { return vec![] };
-    let mut seen: Seen = Seen::default();
-    seen.insert(initial.active_set.clone(), Slot::Built(0));
+    let mut seen: Seen = new_seen(plcp);
+    seen.insert(&initial.active_set, Slot::Built(0));
     let mut regions = vec![initial];
     let cmode = CERT.load(std::sync::atomic::Ordering::Relaxed);
     let mut known = Known::default();
@@ -2828,7 +2994,7 @@ fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalR
         }
         wave = vec![];
         for (cr, center, tab, depth, entry, verts) in built.into_iter().flatten() {
-            seen.insert(cr.active_set.clone(), Slot::Built(regions.len()));
+            seen.insert(&cr.active_set, Slot::Built(regions.len()));
             regions.push(cr);
             if cmode != 6 && cert_active(cmode, plcp.nt) {
                 known.add(regions.len() - 1, regions.last().unwrap());
