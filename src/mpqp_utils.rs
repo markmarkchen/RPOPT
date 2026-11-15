@@ -782,12 +782,8 @@ pub fn gen_cr_from_law_hinted(program: &MpProgram, active_set: &[usize], law: cr
         return gen_cr_from_active_set_1d(program, active_set, true).map(|c| (c, vec![0.0]));
     }
     crate::census_purpose!(Chebyshev);
-    crate::census_build!(cbuild);
-    let neq = program.num_equality_constraints();
     let KktRegion { mut law, e: e_all, f: f_all, n_lambda, inactive, point: _ } = kkt_region_from_law(program, active_set, law);
     program.complete_primal_law(active_set, &mut law);
-    let n_inactive = inactive.len();
-    let n_omega = program.a_t.rows;
 
     let kept_rows = numerically_nonzero_rows(&e_all);
     let mut pos = vec![usize::MAX; e_all.rows];
@@ -822,8 +818,37 @@ pub fn gen_cr_from_law_hinted(program: &MpProgram, active_set: &[usize], law: cr
     let cheb_radius = Some(s.x[nt]);
     let center: Vec<f64> = s.x[..nt].to_vec();
 
+    gen_cr_from_prepared(program, active_set, true, Prepared { law, n_lambda, inactive, pos, e, f, kept_rows_len: kept_rows.len(), center, cheb_radius })
+}
+
+/// Everything `gen_cr_from_law_hinted` has computed before the redundancy step: the completed
+/// law, the unit-norm kept rows `e x <= f` (`pos` maps an unreduced row to its place, or
+/// `usize::MAX`), and the Chebyshev centre and radius.
+pub struct Prepared {
+    pub law: crate::program::ControlLaw,
+    pub n_lambda: usize,
+    pub inactive: Vec<usize>,
+    pub pos: Vec<usize>,
+    pub e: Mat,
+    pub f: Vec<f64>,
+    pub kept_rows_len: usize,
+    pub center: Vec<f64>,
+    pub cheb_radius: Option<f64>,
+}
+
+/// The redundancy step of `gen_cr_from_law_hinted` on prepared rows. It is also the fallback of
+/// mplcp's own builder, which has done the preparation already (no second KKT build and second
+/// Chebyshev LP). `try_clip` = false skips the vertex clipping, for a caller whose own clipping
+/// of the same rows has just failed.
+pub fn gen_cr_from_prepared(program: &MpProgram, active_set: &[usize], try_clip: bool, prep: Prepared) -> Option<(CriticalRegion, Vec<f64>)> {
+    let Prepared { law, n_lambda, inactive, pos, e, f, kept_rows_len, center, cheb_radius } = prep;
+    let nt = program.num_t();
+    let neq = program.num_equality_constraints();
+    let n_inactive = inactive.len();
+    let n_omega = program.a_t.rows;
+    crate::census_build!(cbuild);
     let red_lp0 = crate::solver::lp::LP_CALLS.load();
-    crate::stats::lp(kept_rows.len() as u64);
+    crate::stats::lp(kept_rows_len as u64);
     // rows that provably cannot touch the region (interval propagation from the parameter box)
     let (mut blo, mut bhi) = match program.theta_bbox() {
         Some((l, h)) => (l.clone(), h.clone()),
@@ -836,7 +861,7 @@ pub fn gen_cr_from_law_hinted(program: &MpProgram, active_set: &[usize], law: cr
         let mut order: Vec<usize> = (0..e.rows).collect();
         let slack: Vec<f64> = (0..e.rows).map(|i| f[i] - crate::linalg::dot(e.row(i), &center)).collect();
         order.sort_by(|&x, &y| slack[x].partial_cmp(&slack[y]).unwrap_or(std::cmp::Ordering::Equal));
-        match clip_flags(&e, &f, &order, &blo, &bhi) {
+        match if try_clip { clip_flags(&e, &f, &order, &blo, &bhi) } else { None } {
             Some(fl) => fl.iter().enumerate().map(|(p, &v)| if v >= 0 { v == 1 } else { crate::solver::lp::lp_feasible_from(&e, &f, &[p], &center) }).collect(),
             None => lp_flags(&e, &f, &center, &blo, &bhi),
         }

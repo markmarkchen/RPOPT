@@ -22,7 +22,6 @@ pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Opti
     };
     let neq = program.num_equality_constraints();
     let crate::mpqp_utils::KktRegion { mut law, e: e_all, f: f_all, n_lambda, inactive, point: _ } = kkt_region_from_law(program, active_set, law);
-    program.complete_primal_law(active_set, &mut law);
     let n_inactive = inactive.len();
     let n_omega = program.a_t.rows;
 
@@ -58,6 +57,8 @@ pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Opti
     }
     let cheb_radius = Some(s.x[nt]);
     let center: Vec<f64> = s.x[..nt].to_vec();
+    // after the radius test: only the output fields need the primal law
+    program.complete_primal_law(active_set, &mut law);
     crate::stats::lp(kept_rows.len() as u64);
     // The parameter box is the starting polytope: the running bounding box of the clipped vertices
     // makes a separate interval propagation unnecessary (it measured slower than it saved).
@@ -74,7 +75,9 @@ pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Opti
         None => {
             #[cfg(feature = "lp_census")]
             let _mute = crate::census::MuteClip::new();
-            return crate::mpqp_utils::gen_cr_from_law_hinted(program, active_set, law.clone(), hint);
+            // the same rows and centre go to the shared redundancy step; its own clipping of
+            // them would fail the same way (measured: it never succeeded after a failed first pass)
+            return crate::mpqp_utils::gen_cr_from_prepared(program, active_set, false, crate::mpqp_utils::Prepared { law, n_lambda, inactive, pos, e, f, kept_rows_len: kept_rows.len(), center, cheb_radius });
         }
     };
     let mut kept_lambda = vec![];
