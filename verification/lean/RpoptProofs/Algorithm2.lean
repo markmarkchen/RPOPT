@@ -38,6 +38,23 @@ theorem gamma_scale {rowl rowj : Fin N → ℝ} {al aj : ℝ} (hl : 0 < al) (hj 
     congr 2 <;> field_simp
   rw [e, lexPos_smul_iff (mul_pos hl hj)]
 
+/-- The scale-free form, for the lexico-nonnegative test the code applies (`lex_nonneg_rel` on
+`row_j/a_j - row_l/a_l`, 52f3103): same exact answer as on `Γ`. -/
+theorem gamma_scale_nonneg {rowl rowj : Fin N → ℝ} {al aj : ℝ} (hl : 0 < al) (hj : 0 < aj) :
+    LexNonneg (al • rowj - aj • rowl) ↔ LexNonneg (aj⁻¹ • rowj - al⁻¹ • rowl) := by
+  have e : al • rowj - aj • rowl = (al * aj) • (aj⁻¹ • rowj - al⁻¹ • rowl) := by
+    rw [smul_sub, smul_smul, smul_smul]
+    congr 2 <;> field_simp
+  have hc : 0 < al * aj := mul_pos hl hj
+  rw [e]
+  constructor
+  · rintro (h | h)
+    · left; exact (smul_eq_zero.mp h).resolve_left hc.ne'
+    · right; exact (lexPos_smul_iff hc).mp h
+  · rintro (h | h)
+    · left; rw [h, smul_zero]
+    · right; exact (lexPos_smul_iff hc).mpr h
+
 /-- Both directions of the test pass exactly when `Γ = 0`. -/
 theorem lexNonneg_both_iff {u : Fin N → ℝ} : LexNonneg u ∧ LexNonneg (-u) ↔ u = 0 := by
   constructor

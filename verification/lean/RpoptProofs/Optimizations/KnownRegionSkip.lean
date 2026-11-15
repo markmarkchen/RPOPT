@@ -252,6 +252,23 @@ theorem known_region_unique_neighbour {M : Matrix (Fin n) (Fin n) ℝ} (hM : M.P
   exact lex_unique hM hC (isLexTableau_of_isTableau (htab θ)) fC
     (lexFeasible_of_mem_interior hlex hint)
 
+/-- **No overlaps of region interiors.** Two different bases that are lexico-feasible somewhere
+have critical regions with disjoint interiors. So a measured overlap of two lexico-feasible regions
+(pop_005, pop_007, pop_011) means that, for one of them, the region's row set is larger than its
+basis's critical region (`hreg` of `known_region_unique_neighbour`), or its lexico-feasibility is a
+numerical misjudgment (`hlex`), or its tableau is not exact. -/
+theorem cr_interiors_disjoint {M : Matrix (Fin n) (Fin n) ℝ} (hM : M.PosSemidef)
+    {r : (π → ℝ) → Fin n → ℝ} {B C : Finset (Fin n)} {ρB ρC : Fin n → ℝ}
+    {RB RC : Matrix (Fin n) π ℝ} {TB TC : Matrix (Fin n) (Fin n) ℝ}
+    (hB : ∀ θ, IsTableau M (r θ) B (ρB + RB *ᵥ θ) TB)
+    (hC : ∀ θ, IsTableau M (r θ) C (ρC + RC *ᵥ θ) TC)
+    {θB θC : π → ℝ} (lB : LexFeasible (lexRows B (ρB + RB *ᵥ θB) TB))
+    (lC : LexFeasible (lexRows C (ρC + RC *ᵥ θC) TC)) (hne : B ≠ C) :
+    Disjoint (interior (CR fun θ => ρB + RB *ᵥ θ)) (interior (CR fun θ => ρC + RC *ᵥ θ)) :=
+  Set.disjoint_left.mpr fun θ h1 h2 => hne
+    (lex_unique hM (isLexTableau_of_isTableau (hB θ)) (isLexTableau_of_isTableau (hC θ))
+      (lexFeasible_of_mem_interior lB h1) (lexFeasible_of_mem_interior lC h2))
+
 end Lex
 
 /-- **Skipping certified facets keeps the explored set.** If every neighbour candidate that the

@@ -94,3 +94,6 @@ import RpoptProofs
 -- Round 3b: region construction and start fallback
 #print axioms Rpopt.relint_of_strict
 #print axioms Rpopt.chebyshev_ball_feasible
+-- Round 3c: Case-2 fix and facet certificate
+#print axioms Rpopt.gamma_scale_nonneg
+#print axioms Rpopt.cr_interiors_disjoint
