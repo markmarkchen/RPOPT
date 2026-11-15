@@ -210,3 +210,37 @@ fn hash_table_errors_not_panics() {
     assert!(matches!(HashTable::from_bytes(&sol.to_bytes().unwrap()), Err(Error::BadMagic)));
     assert!(matches!(Solution::from_bytes(&bytes), Err(Error::BadMagic)));
 }
+
+#[test]
+fn streaming_save_writes_the_same_bytes_as_to_bytes() {
+    let dir = std::env::temp_dir().join(format!("rpopt_stream_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    for (name, sol) in problems() {
+        let path = dir.join(format!("{name}.rpsol"));
+        let n = sol.save_streaming(&path).unwrap();
+        let on_disk = std::fs::read(&path).unwrap();
+        assert_eq!(n as usize, on_disk.len(), "{name}: returned size");
+        assert_eq!(on_disk, sol.to_bytes().unwrap(), "{name}: streamed bytes differ");
+        // a solution with many repeated regions, so that the writer spills several 1 MiB chunks
+        let mut big = sol.clone();
+        let regs = big.critical_regions.clone();
+        if regs.is_empty() {
+            continue;
+        }
+        while big.to_bytes().unwrap().len() < 3 << 20 {
+            big.critical_regions.extend(regs.iter().cloned());
+        }
+        let n = big.save_streaming(&path).unwrap();
+        let on_disk = std::fs::read(&path).unwrap();
+        assert_eq!(n as usize, on_disk.len());
+        assert_eq!(on_disk, big.to_bytes().unwrap(), "{name}: big streamed bytes differ");
+        assert!(Solution::load(&path).unwrap().bit_identical(&big, true));
+        assert!(big.file_matches(&path).unwrap(), "{name}: file_matches");
+        let mut bad = on_disk.clone();
+        let mid = bad.len() / 2;
+        bad[mid] ^= 1;
+        std::fs::write(&path, &bad).unwrap();
+        assert!(!big.file_matches(&path).unwrap(), "{name}: file_matches missed a flipped byte");
+    }
+    std::fs::remove_dir_all(&dir).ok();
+}

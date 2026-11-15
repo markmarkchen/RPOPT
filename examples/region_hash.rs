@@ -87,9 +87,32 @@ fn main() {
         if std::env::var("RPOPT_INDEX_FIRST").is_ok() {
             eprintln!("index_first facets_skipped/audit_checks/audit_violations/regions_skipped/regions_would_skip/path_differs {:?}", rpopt::algorithms::mplcp::index_first_stats());
         }
-        let mut recs: Vec<(Vec<usize>, Vec<i64>)> = sol
-            .critical_regions
-            .iter()
+        // RPOPT_SAVE=<file>: the solution is also written as RPOPTSOL binary (streamed in chunks), loaded back and
+        // compared bit for bit with the in-memory solution; RPOPT_JSON_OUT=<file> gets a one-line record of the run
+        let mut saved: Option<(u64, bool)> = None;
+        if let Ok(path) = std::env::var("RPOPT_SAVE") {
+            let tmp = format!("{path}.part");
+            let bytes = sol.save_streaming(&tmp).expect("save_streaming");
+            // a solution over 1 GB in memory is not loaded a second time (that would double the peak); its file is instead
+            // compared chunk by chunk with a fresh encoding (the decoder is covered by the round-trip tests on small solutions)
+            let big = sol.memory_bytes() > 1_000_000_000;
+            let ok = if big {
+                sol.file_matches(&tmp).expect("file_matches")
+            } else {
+                let back = rpopt::solution::Solution::load(&tmp).expect("load back");
+                sol.bit_identical(&back, true)
+            };
+            println!("saved {path} bytes {bytes} roundtrip_bit_identical {ok} check {}", if big { "chunk_compare" } else { "load_back" });
+            assert!(ok, "round trip differs");
+            std::fs::rename(&tmp, &path).unwrap();
+            saved = Some((bytes, ok));
+        }
+        // the regions are consumed here, so that each one is freed as its record is made (the peak is then about the
+        // solution, not the solution plus all records)
+        let mut sol = sol;
+        let regions = std::mem::take(&mut sol.critical_regions);
+        let mut recs: Vec<(Vec<usize>, Vec<i64>)> = regions
+            .into_iter()
             .map(|r| {
                 let mut a: Vec<usize> = match &rep {
                     Some(rep) => r.active_set.iter().map(|&i| rep[i]).collect(),
@@ -121,6 +144,19 @@ fn main() {
         let hwm_mb = std::fs::read_to_string("/proc/self/status").ok().and_then(|t| t.lines().find(|l| l.starts_with("VmHWM")).and_then(|l| l.split_whitespace().nth(1).and_then(|v| v.parse::<f64>().ok()))).map_or(0.0, |kb| kb / 1024.0);
         let (seen_len, seen_bytes, qlen, qbytes) = rpopt::algorithms::mplcp::search_stats();
         println!("{name} seen_entries {seen_len} seen_mb {:.0} peak_queue {qlen} peak_queue_mb {:.0}", seen_bytes as f64 / 1048576.0, qbytes as f64 / 1048576.0);
+        if let Ok(path) = std::env::var("RPOPT_JSON_OUT") {
+            let host = std::fs::read_to_string("/proc/sys/kernel/hostname").unwrap_or_default();
+            let (bytes, ok) = saved.unwrap_or((0, false));
+            let line = format!(
+                "{{\"problem\":\"{name}\",\"algorithm\":\"{}\",\"regions\":{},\"solve_s\":{dt:.3},\"bytes\":{bytes},\"hash\":\"{:016x}\",\"sets_hash\":\"{:016x}\",\"roundtrip_ok\":{ok},\"rss_peak_mb\":{hwm_mb:.0},\"host\":\"{}\"}}\n",
+                args[1],
+                recs.len(),
+                h.finish(),
+                hs.finish(),
+                host.trim()
+            );
+            std::fs::write(path, line).unwrap();
+        }
         println!("{name} {} regions {} facet_rows {rows} hash {:016x} sets {:016x} solve_s {dt:.3} peak_parents {peak_parents} tab_bytes {tab_bytes} peak_parent_mb {:.0} rss_peak_mb {hwm_mb:.0}", args[1], recs.len(), h.finish(), hs.finish(), (peak_parents * tab_bytes) as f64 / 1048576.0);
     }
 }
