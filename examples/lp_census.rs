@@ -796,5 +796,37 @@ fn build_study(rows: &[Row]) {
             g(r, d::E_V1_PIV) / bb, g(r, d::E_V1_NS) / 1e3 / bb, sp(d::E_V1_NS), g(r, d::E_FAIL) / reg
         );
     }
+    println!("\n### Build study 10: `boxlp::box_chain` (first LP by the engine, the rest by a verified rank-one primal simplex) against the engine's 2n cold box LPs\n");
+    println!("| problem | engine us/region | chain us/region | speed-up | steps/LP | engine LPs/region | fallbacks/region | bounds differing | tight-set diffs/region | None/region |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+    for r in &rs {
+        let bb = g(r, d::BOX_BOUNDS).max(1.0);
+        let reg = g(r, d::BOX_REGIONS).max(1.0);
+        let eng = g(r, d::ENG_NS) / reg;
+        let ch = g(r, d::TC_NS) / reg;
+        println!(
+            "| {} | {:.1} | {:.1} | {:.2}x | {:.2} | {:.2} | {:.3} | {} | {:.2} | {:.3} |",
+            r.problem, eng / 1e3, ch / 1e3, eng / ch.max(1e-9), g(r, d::TC_STEPS) / (bb - g(r, d::TC_ENGINE_LPS)).max(1.0), g(r, d::TC_ENGINE_LPS) / reg, g(r, d::TC_FALLBACK) / reg,
+            pc(g(r, d::TC_VALDIFF), bb), g(r, d::TC_TD) / reg, g(r, d::TC_NONE) / reg
+        );
+    }
+    println!("\n### Build study 11: box LPs started at a parent vertex on the shared (entry) facet\n");
+    println!("| problem | children with entry and parent box | parent box points tight on the entry facet (per child) | of which feasible in the child | children with a shared vertex | engine cold us/region | chain from engine LP us | speed-up | chain from shared vertex us | speed-up | engine LPs/region (chain / shared) | steps/LP (shared) | fallbacks/region | bounds differing | tight-set diffs/region | rows kept by projection or LP | of which tight at a shared vertex | bytes per queued child (shared points) |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+    for r in &rs {
+        let nn = g(r, d::SH_N).max(1.0);
+        let any = g(r, d::SH_ANY).max(1.0);
+        let bb = (g(r, d::BOX_BOUNDS) / g(r, d::BOX_REGIONS).max(1.0)).max(1.0);
+        let eng = g(r, d::SH_ENG_NS) / any;
+        let ch = g(r, d::SH_CH_NS) / any;
+        let sv = g(r, d::SH_SV_NS) / any;
+        let nvar = bb / 2.0;
+        println!(
+            "| {} | {} | {:.2} | {:.2} | {} | {:.1} | {:.1} | {:.2}x | {:.1} | {:.2}x | {:.2} / {:.2} | {:.2} | {:.3} | {} | {:.2} | {:.1} | {} | {:.0} |",
+            r.problem, g(r, d::SH_N), g(r, d::SH_PTS_TIGHT) / nn, g(r, d::SH_PTS_FEAS) / nn, pc(g(r, d::SH_ANY), g(r, d::SH_N)), eng / 1e3, ch / 1e3, eng / ch.max(1e-9), sv / 1e3, eng / sv.max(1e-9),
+            g(r, d::SH_CH_ENGLP) / any, g(r, d::SH_SV_ENGLP) / any, g(r, d::SH_SV_STEPS) / (any * bb).max(1.0), g(r, d::SH_SV_FB) / any, pc(g(r, d::SH_SV_VALDIFF), any * bb), g(r, d::SH_SV_TD) / any,
+            g(r, d::SH_LPKEEP_ROWS) / any, pc(g(r, d::SH_SETTLED), g(r, d::SH_LPKEEP_ROWS)), g(r, d::SH_PTS_FEAS) / nn * nvar * 8.0 + 24.0
+        );
+    }
     }
 }

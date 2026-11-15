@@ -98,6 +98,30 @@ pub mod s {
     pub const E_V1_VALDIFF: usize = 132;
     pub const E_FAIL: usize = 133;
     pub const E_V1_TD: usize = 134;
+    pub const TC_NS: usize = 136;
+    pub const TC_STEPS: usize = 137;
+    pub const TC_FALLBACK: usize = 138;
+    pub const TC_ENGINE_LPS: usize = 139;
+    pub const TC_VALDIFF: usize = 140;
+    pub const TC_TD: usize = 141;
+    pub const TC_NONE: usize = 142;
+    pub const SH_N: usize = 143;
+    pub const SH_PTS_TIGHT: usize = 144;
+    pub const SH_PTS_FEAS: usize = 145;
+    pub const SH_ANY: usize = 146;
+    pub const SH_ENG_NS: usize = 147;
+    pub const SH_ENG_PIV: usize = 148;
+    pub const SH_CH_NS: usize = 149;
+    pub const SH_CH_STEPS: usize = 150;
+    pub const SH_CH_ENGLP: usize = 151;
+    pub const SH_SV_NS: usize = 152;
+    pub const SH_SV_STEPS: usize = 153;
+    pub const SH_SV_ENGLP: usize = 154;
+    pub const SH_SV_FB: usize = 155;
+    pub const SH_SV_VALDIFF: usize = 156;
+    pub const SH_SV_TD: usize = 157;
+    pub const SH_LPKEEP_ROWS: usize = 158;
+    pub const SH_SETTLED: usize = 159;
     // Clarkson simulation, variant A (seed: parameter-set rows) at SIM_A, variant B (A + entry + parent's kept rows) at SIM_B
     pub const SIM_A: usize = 50;
     pub const SIM_B: usize = 62;
@@ -248,7 +272,7 @@ fn engine_chain(e: &Mat, f: &[f64], center: &[f64], order: &[usize], push: f64, 
     add(slots.3, wt.iter().zip(cold_t).filter(|(a, b)| a != b).count() as u64);
 }
 
-fn box_study(e: &Mat, f: &[f64], center: &[f64], bx: &(Vec<f64>, Vec<f64>, Vec<Vec<f64>>)) {
+fn box_study(e: &Mat, f: &[f64], center: &[f64], bx: &(Vec<f64>, Vec<f64>, Vec<Vec<f64>>), entry_p: Option<usize>, parent_pts: Option<&[Vec<f64>]>, classes: &[u8]) {
     let n = e.cols;
     let (lo, hi, pts) = bx;
     // objective j = 2k (min theta_k = max -e_k), 2k+1 (max theta_k = max +e_k), in the engine's order
@@ -293,6 +317,32 @@ fn box_study(e: &Mat, f: &[f64], center: &[f64], bx: &(Vec<f64>, Vec<f64>, Vec<V
     engine_chain(e, f, center, &order2, 0.0, &target, (s::E_V2_PIV, s::E_V2_NS, s::E_V2_VALDIFF, s::E_V2_TD), &cold_t);
     engine_chain(e, f, center, &order2, 1e-4, &target, (s::E_P2_PIV, s::E_P2_NS, s::E_P2_VALDIFF, s::E_P2_TD), &cold_t);
     engine_chain(e, f, center, &order1, 0.0, &target, (s::E_V1_PIV, s::E_V1_NS, s::E_V1_VALDIFF, s::E_V1_TD), &cold_t);
+    {
+        let mut st = crate::boxlp::Stats::default();
+        let t = Instant::now();
+        let r = crate::boxlp::box_chain(e, f, center, None, &mut st);
+        add(s::TC_NS, t.elapsed().as_nanos() as u64);
+        match r {
+            None => add(s::TC_NONE, 1),
+            Some((clo, chi, cpts)) => {
+                add(s::TC_STEPS, st.steps);
+                add(s::TC_FALLBACK, st.fallbacks);
+                add(s::TC_ENGINE_LPS, st.engine_lps);
+                let mut dv = 0;
+                for k in 0..n {
+                    if (clo[k] - lo[k]).abs() > 1e-9 * (1.0 + lo[k].abs()) {
+                        dv += 1;
+                    }
+                    if (chi[k] - hi[k]).abs() > 1e-9 * (1.0 + hi[k].abs()) {
+                        dv += 1;
+                    }
+                }
+                add(s::TC_VALDIFF, dv);
+                let wt = tight_set(&cpts);
+                add(s::TC_TD, wt.iter().zip(&cold_t).filter(|(a, b)| a != b).count() as u64);
+            }
+        }
+    }
     for (ord, st_slot, ns_slot, vd_slot, td_slot) in [(&order1, s::WARM1_STEPS, s::WARM1_NS, s::WARM1_VALDIFF, s::TIGHT_DIFF_W1), (&order2, s::WARM2_STEPS, s::WARM2_NS, s::WARM2_VALDIFF, s::TIGHT_DIFF_W2)] {
         let t = Instant::now();
         let (mut x, mut tt) = (center.to_vec(), vec![]);
@@ -321,6 +371,68 @@ fn box_study(e: &Mat, f: &[f64], center: &[f64], bx: &(Vec<f64>, Vec<f64>, Vec<V
         } else {
             let wt = tight_set(&wp);
             add(td_slot, wt.iter().zip(&cold_t).filter(|(a, b)| a != b).count() as u64);
+        }
+    }
+    if let (Some(ep), Some(pp)) = (entry_p, parent_pts) {
+        add(s::SH_N, 1);
+        let mut feas: Vec<&Vec<f64>> = vec![];
+        for x in pp {
+            if (dot(e.row(ep), x) - f[ep]).abs() <= 1e-9 * (1.0 + f[ep].abs()) {
+                add(s::SH_PTS_TIGHT, 1);
+                if (0..e.rows).all(|i| dot(e.row(i), x) <= f[i] + 1e-9 * (1.0 + f[i].abs())) {
+                    add(s::SH_PTS_FEAS, 1);
+                    feas.push(x);
+                }
+            }
+        }
+        if !feas.is_empty() {
+            add(s::SH_ANY, 1);
+            let t = Instant::now();
+            let p0 = crate::census::piv_get();
+            for j in 0..2 * n {
+                let mut o = vec![0.0; n];
+                o[j / 2] = if j % 2 == 0 { 1.0 } else { -1.0 };
+                let _ = crate::solver::lp::lp_point_from(Some(&o), e, f, &[], center);
+            }
+            add(s::SH_ENG_NS, t.elapsed().as_nanos() as u64);
+            add(s::SH_ENG_PIV, crate::census::piv_get() - p0);
+            let mut st = crate::boxlp::Stats::default();
+            let t = Instant::now();
+            let _ = crate::boxlp::box_chain(e, f, center, None, &mut st);
+            add(s::SH_CH_NS, t.elapsed().as_nanos() as u64);
+            add(s::SH_CH_STEPS, st.steps);
+            add(s::SH_CH_ENGLP, st.engine_lps);
+            let mut st = crate::boxlp::Stats::default();
+            let t = Instant::now();
+            let r = crate::boxlp::box_chain(e, f, center, Some(feas[0]), &mut st);
+            add(s::SH_SV_NS, t.elapsed().as_nanos() as u64);
+            add(s::SH_SV_STEPS, st.steps);
+            add(s::SH_SV_ENGLP, st.engine_lps);
+            add(s::SH_SV_FB, st.fallbacks);
+            if let Some((clo, chi, cpts)) = r {
+                let mut dv = 0;
+                for k in 0..n {
+                    if (clo[k] - lo[k]).abs() > 1e-9 * (1.0 + lo[k].abs()) {
+                        dv += 1;
+                    }
+                    if (chi[k] - hi[k]).abs() > 1e-9 * (1.0 + hi[k].abs()) {
+                        dv += 1;
+                    }
+                }
+                add(s::SH_SV_VALDIFF, dv);
+                let wt = tight_set(&cpts);
+                add(s::SH_SV_TD, wt.iter().zip(&cold_t).filter(|(a, b)| a != b).count() as u64);
+            }
+            if classes.len() == e.rows {
+                for p in 0..e.rows {
+                    if classes[p] == 3 || classes[p] == 4 {
+                        add(s::SH_LPKEEP_ROWS, 1);
+                        if feas.iter().any(|x| (dot(e.row(p), x) - f[p]).abs() <= 1e-9 * (1.0 + f[p].abs())) {
+                            add(s::SH_SETTLED, 1);
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -550,7 +662,22 @@ pub fn on_built(program: &crate::program::MpProgram, active_set: &[usize], e: &M
     let classes = CLASSES.with(|c| std::mem::take(&mut *c.borrow_mut()));
     let bx = BOX.with(|c| c.borrow_mut().take());
     if let Some(b) = &bx {
-        box_study(e, f, center, b);
+        let entry0 = ENTRY.with(|c| c.borrow().clone());
+        let mut ep0 = None;
+        if let Some((ea, ef)) = &entry0 {
+            for p in 0..m {
+                let a = e.row(p);
+                let same = a.iter().zip(ea).all(|(x, y)| (x - y).abs() < 1e-7) && (f[p] - ef).abs() < 1e-7 * (1.0 + ef.abs());
+                let rev = a.iter().zip(ea).all(|(x, y)| (x + y).abs() < 1e-7) && (f[p] + ef).abs() < 1e-7 * (1.0 + ef.abs());
+                if same || rev {
+                    ep0 = Some(p);
+                    break;
+                }
+            }
+        }
+        let pkey = PARENT.with(|c| c.borrow().clone());
+        let ppts: Option<Vec<Vec<f64>>> = pkey.and_then(|k| STORE.get_or_init(|| Mutex::new(HashMap::new())).lock().unwrap().get(&k).and_then(|r| r.bx.as_ref().map(|b| b.2.clone())));
+        box_study(e, f, center, b, ep0, ppts.as_deref(), &classes);
     }
     let have_classes = classes.len() == m;
     // row p -> (kind, id)

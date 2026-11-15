@@ -16,6 +16,8 @@
 
 pub mod algorithms;
 pub mod census;
+#[allow(dead_code)]
+pub mod boxlp;
 #[cfg(feature = "lp_census")]
 pub mod census_diag;
 pub mod critical_region;
