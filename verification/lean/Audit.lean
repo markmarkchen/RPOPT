@@ -160,3 +160,13 @@ import RpoptProofs
 -- Round 18: chained box LPs of the region builder (685c144)
 #print axioms Rpopt.box_lp_optimal
 #print axioms Rpopt.Case1.shared_point
+-- Round 19: duplicated constraints (dedupe) and the box-chain gap (b98b621)
+#print axioms Rpopt.Twins.feasible_iff
+#print axioms Rpopt.Twins.tight_iff
+#print axioms Rpopt.Twins.vecMul_split
+#print axioms Rpopt.Twins.kkt_reduce
+#print axioms Rpopt.Twins.kkt_split
+#print axioms Rpopt.box_lp_gap
+-- Round 20: claimed candidates and the cold retry (62f7442)
+#print axioms Rpopt.reach_of_claims
+#print axioms Rpopt.chebyshev_radius_le
