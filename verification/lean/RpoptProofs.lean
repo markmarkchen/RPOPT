@@ -4,6 +4,7 @@ import RpoptProofs.Foundations.QP
 import RpoptProofs.Foundations.LCP
 import RpoptProofs.Foundations.Chebyshev
 import RpoptProofs.Foundations.Farkas
+import RpoptProofs.Foundations.Twins
 import RpoptProofs.Tableau
 import RpoptProofs.Pivot
 import RpoptProofs.Lex
@@ -18,6 +19,7 @@ import RpoptProofs.Optimizations.EntryFacetSkip
 import RpoptProofs.Optimizations.KnownRegionSkip
 import RpoptProofs.Optimizations.ReverseCrossing
 import RpoptProofs.Optimizations.BoxChain
+import RpoptProofs.Optimizations.SeenClaims
 import RpoptProofs.MplpLex.Certificate
 import RpoptProofs.MplpLex.Pivot
 import RpoptProofs.MplpLex.LexUnique
