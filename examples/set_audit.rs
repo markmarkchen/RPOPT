@@ -35,6 +35,37 @@ fn read(path: &str) -> Option<Vec<Set>> {
     Some(out)
 }
 
+/// Solver-side record of a region: (radius, centre), from <dir>/<old|new>.<name>.reg (written by audit_solve with AUDIT_DUMP).
+fn read_reg(path: &str) -> std::collections::HashMap<Set, (f64, Vec<f64>)> {
+    let mut m = std::collections::HashMap::new();
+    let Ok(txt) = std::fs::read_to_string(path) else { return m };
+    for l in txt.lines().filter(|l| !l.trim().is_empty()) {
+        let mut it = l.split('\t');
+        let set = read_line(it.next().unwrap());
+        let r = it.next().unwrap();
+        if r == "NONE" {
+            continue;
+        }
+        let c: Vec<f64> = it.next().unwrap_or("").split(',').filter(|t| !t.is_empty()).map(|t| t.parse().unwrap()).collect();
+        m.insert(set, (r.parse().unwrap(), c));
+    }
+    m
+}
+
+fn read_line(l: &str) -> Set {
+    let l = l.trim();
+    assert!(l.starts_with('[') && l.ends_with(']'), "bad line {l:?}");
+    let inner = &l[1..l.len() - 1];
+    let mut s: Set = vec![];
+    if !inner.trim().is_empty() {
+        for t in inner.split(',') {
+            s.push(t.trim().parse().unwrap_or_else(|_| panic!("unparsable token {t:?} in line {l:?}")));
+        }
+    }
+    s.sort_unstable();
+    s
+}
+
 struct Diff {
     set: Set,
     side: &'static str,
@@ -105,13 +136,48 @@ fn main() {
             }
         }
     }
+    let reg_old = read_reg(&format!("{dir}/old.{name}.reg"));
+    let reg_new = read_reg(&format!("{dir}/new.{name}.reg"));
     let mut counts = std::collections::BTreeMap::new();
     for d in &diffs {
         let (own, other) = if d.side == "lost" { (0, 1) } else { (1, 0) };
         let own_others = d.inside[own].iter().filter(|s| **s != d.set).count();
         let own_set: &BTreeSet<Set> = if d.side == "lost" { old } else { new };
         let class = if !d.full_dim {
-            "c_nofulldim"
+            // the set cannot be rebuilt full-dimensionally: use the solver's own region (radius, centre) from the dump
+            let reg = if d.side == "lost" { &reg_old } else { &reg_new };
+            let lacking: &BTreeSet<Set> = if d.side == "lost" { new } else { old };
+            match reg.get(&d.set) {
+                None => "e_nofulldim_nodump",
+                Some((r, _)) if *r <= 1e-12 => "c_zero_radius",
+                Some((r, c)) => {
+                    let qp = prog.solve_theta(c).map(|o| {
+                        let mut v = o.active_set.clone();
+                        v.sort_unstable();
+                        v
+                    });
+                    println!(
+                        "{name} NOFULLDIM {} {:?} solver_radius {:.3e} qp_set_at_solver_centre {:?} qp_set_in_lacking {}",
+                        d.side,
+                        d.set,
+                        r,
+                        qp,
+                        qp.as_ref().map_or(false, |q| lacking.contains(q))
+                    );
+                    match qp {
+                        None => "c_qp",
+                        Some(q) if lacking.contains(&q) => "d_dup_unbuildable",
+                        Some(q) if q == d.set => {
+                            if d.side == "lost" {
+                                "a_lost_unbuildable"
+                            } else {
+                                "b_gained_unbuildable"
+                            }
+                        }
+                        Some(_) => "c_qp_unbuildable",
+                    }
+                }
+            }
         } else if !d.qp_agrees || d.qp_set.is_none() {
             "c_qp"
         } else if own_others > 0 {

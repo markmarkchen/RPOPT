@@ -20,6 +20,24 @@ fn main() {
             format!("{s:?}")
         })
         .collect();
+    if let Ok(path) = std::env::var("AUDIT_DUMP") {
+        // set, Chebyshev radius and centre of the solver's own region (for sets that cannot be rebuilt from the active set)
+        let nt = p.num_t();
+        let mut reg: Vec<String> = sol
+            .critical_regions
+            .iter()
+            .map(|r| {
+                let mut s = r.active_set.clone();
+                s.sort_unstable();
+                match rpopt::utils::chebyshev_ball(&r.e, &r.f, &[]) {
+                    Some(b) => format!("{s:?}\t{:e}\t{}", b.x[nt], b.x[..nt].iter().map(|v| format!("{v:e}")).collect::<Vec<_>>().join(",")),
+                    None => format!("{s:?}\tNONE\t"),
+                }
+            })
+            .collect();
+        reg.sort();
+        std::fs::write(path, reg.join("\n") + "\n").unwrap();
+    }
     lines.sort();
     std::fs::write(&a[2], lines.join("\n") + "\n").unwrap();
     println!("{} regions", lines.len());
