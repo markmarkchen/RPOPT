@@ -16,6 +16,7 @@ import RpoptProofs.PivotMeasure
 import RpoptProofs.Coverage
 import RpoptProofs.Optimizations.EntryFacetSkip
 import RpoptProofs.Optimizations.KnownRegionSkip
+import RpoptProofs.Optimizations.ReverseCrossing
 import RpoptProofs.MplpLex.Certificate
 import RpoptProofs.MplpLex.Pivot
 import RpoptProofs.MplpLex.LexUnique

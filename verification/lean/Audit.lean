@@ -148,3 +148,12 @@ import RpoptProofs
 #print axioms Rpopt.pivotSeq_perm
 #print axioms Rpopt.box_sq_le
 #print axioms Rpopt.daqp_box_certificate
+-- Round 16: reverse crossing of a Case-1 facet (for the planned skip in mplcp-order)
+#print axioms Rpopt.pivVec_vanish_iff
+#print axioms Rpopt.pivVec_prop_iff
+#print axioms Rpopt.toggle_toggle
+#print axioms Rpopt.Case1.reverse
+#print axioms Rpopt.Case1.reverse_ρ'
+#print axioms Rpopt.Case1.reverse_neighbour
+#print axioms Rpopt.Case1.reverse_neighbour_single
+#print axioms Rpopt.reach_skip_reverse

@@ -9,7 +9,7 @@ Lean 4 and Mathlib proofs of the mathematics behind two RPOPT solvers:
 
 The proofs are at the model level, in exact real arithmetic. They justify the steps the Rust code
 takes, not its floating point execution. Every result listed as proved has no `sorry`, and
-`Audit.lean` prints the axioms of all 126 main theorems: each uses at most `propext`,
+`Audit.lean` prints the axioms of all 134 main theorems: each uses at most `propext`,
 `Classical.choice` and `Quot.sound` (two use none, one only `propext` and `Quot.sound`). Modelling
 assumptions are explicit hypotheses,
 never axioms.
@@ -52,6 +52,7 @@ lake env lean Audit.lean    # one line per main theorem: the axioms it depends o
 | `PivotMeasure.lean` | the off-`A` block of a tableau is positive semidefinite: sign, size and zero pattern of the pivot of a vanishing slack row |
 | `Optimizations/EntryFacetSkip.lean` | safety of the entry-facet skip (merged) |
 | `Optimizations/KnownRegionSkip.lean` | safety of the known-region skip of Case-2 facets (step 2) |
+| `Optimizations/ReverseCrossing.lean` | reverse crossing of a Case-1 facet: the pivot keeps the zero rows, the second toggle returns the first region, and the skip keeps the explored set (planned in `mplcp-order`) |
 | `MplpLex/Certificate.lean` | LP weak duality and the basis certificate |
 | `MplpLex/Pivot.lean` | ratio tests, rank-1 basis update, dual and primal simplex steps |
 | `MplpLex/LexUnique.lean` | uniqueness of the lexico-optimal basis |
@@ -110,6 +111,9 @@ lake env lean Audit.lean    # one line per main theorem: the axioms it depends o
 | Skip 2 | `known_region_unique_neighbour`, `known_region_skip` | if a known lexico-feasible region `R` on the other side contains `F`, every lexico-feasible basis across `F` is `R`'s; skipping `F` keeps the explored set | proved |
 | Skip 2 | `vertices_subset_polyhedron` | the vertices of `F` in `R` imply `F ⊆ R` | proved |
 | Skip 2 | `cr_interiors_disjoint` | two different bases lexico-feasible somewhere have critical regions with disjoint interiors | proved |
+| Skip 3 | `pivVec_vanish_iff`, `pivVec_prop_iff` | a pivot on a row that vanishes on the facet keeps the set of rows that vanish there (as a set, and in the form `ρ_k = γ_k h` that `zrows` tests) | proved |
+| Skip 3 | `toggle_toggle`, `Case1.reverse`, `Case1.reverse_neighbour`, `Case1.reverse_neighbour_single` | seen from `R = toggle S v`, the facet is a Case-1 facet on the same pair (normal `-h`) when the other vanishing rows are inert, always for a single vanishing row; its toggle is `S` with `S`'s tableau | proved |
+| Skip 3 | `reach_skip_reverse` | skipping the search of `(R, F)` when an explored region crossed `F` into `R` keeps the explored set, given that this region is `R`'s only neighbour across `F` | proved |
 | Facets | `relint_of_strict` | a point on the facet plane that clears every other row strictly is a relative-interior point of the facet | proved |
 | Start | `chebyshev_ball_feasible` | every point within the radius of a Chebyshev centre satisfies every inequality row | proved |
 | B1 | `lp_certificate`, `basis_certificate`, `lp_weak_duality` | primal and dual feasibility (with complementarity) imply optimality | proved |
