@@ -137,6 +137,9 @@ pub mod s {
     pub const RG_AMBIG: usize = 212;
     pub const RG_AMBIG_WRONG: usize = 213;
     pub const RG_NOENOUGH: usize = 214; // children whose shared points are fewer than d - 1
+    // time profile of the LP-path builder (always counted under lp_census)
+    pub const PF_BOX_NS: usize = 225; // box_chain, whole call
+    pub const PF_PERROW_NS: usize = 226; // projection tests and per-row LPs
     // Clarkson simulation, variant A (seed: parameter-set rows) at SIM_A, variant B (A + entry + parent's kept rows) at SIM_B
     pub const SIM_A: usize = 50;
     pub const SIM_B: usize = 62;

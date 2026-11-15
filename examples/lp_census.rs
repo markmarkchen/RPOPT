@@ -61,8 +61,43 @@ fn child(path: &str, alg: &str) {
     let (dt, regions, s) = &runs[runs.len() / 2];
     println!(
         "{}",
-        json!({"regions": regions, "solve_s": dt, "runs": runs.len(), "calls": s.calls, "infeasible": s.infeasible, "nanos": s.nanos, "counters": s.counters.to_vec()})
+        json!({"regions": regions, "solve_s": dt, "runs": runs.len(), "calls": s.calls, "infeasible": s.infeasible, "nanos": s.nanos, "counters": s.counters.to_vec(), "profile": profile(alg, s, *dt)})
     );
+}
+
+/// Time profile of one solve in ns, by phase (see `bench/results/time_profile.md`). LP and QP time by
+/// purpose comes from the census; mplcp's construction and neighbour search from its own timers.
+fn profile(alg: &str, s: &Stats, dt: f64) -> Value {
+    use rpopt::census_diag::{s as d, slot};
+    let c = |k: Counter| s.counter(k) as f64;
+    let by = |p: usize| (s.nanos[0][p] + s.nanos[1][p]) as f64;
+    let total = dt * 1e9;
+    let build_total = if alg == "mplcp" { c(Counter::MplcpBuildNanos) } else { c(Counter::BuildNanos) };
+    let build_lp = c(Counter::BuildLpNanos);
+    let (cand, case2, rank1, tab, rowgen, box_ns, perrow, cheb, build_other);
+    if alg == "mplcp" {
+        cand = c(Counter::MplcpNbrNanos);
+        case2 = c(Counter::AdjCase2Nanos);
+        rank1 = [Counter::R1Nanos0, Counter::R1Nanos1, Counter::R1Nanos2, Counter::R1Nanos3, Counter::R1Nanos4, Counter::R1Nanos5].iter().map(|&k| c(k)).sum::<f64>();
+        tab = c(Counter::MplcpTabNanos);
+        rowgen = slot(s, d::LAW_NS) + slot(s, d::ROWS_NS);
+        cheb = slot(s, d::CHEB_NS);
+        box_ns = if slot(s, d::PF_BOX_NS) > 0.0 { slot(s, d::PF_BOX_NS) } else { by(4) };
+        perrow = if slot(s, d::PF_PERROW_NS) > 0.0 { slot(s, d::PF_PERROW_NS) } else { by(0) };
+        build_other = (build_total - rowgen - cheb - box_ns - perrow).max(0.0);
+    } else {
+        cand = if alg == "parametric_daqp" { c(Counter::PdTestNanos) } else { by(1) + by(2) };
+        case2 = 0.0;
+        rank1 = 0.0;
+        tab = 0.0;
+        rowgen = (build_total - build_lp).max(0.0);
+        box_ns = by(4);
+        perrow = by(0);
+        cheb = by(3);
+        build_other = (build_lp - box_ns - perrow - cheb).max(0.0);
+    }
+    let rest = total - cand - tab - build_total;
+    json!({"total": total, "cand": cand, "case2": case2, "rank1": rank1, "tab": tab, "build_total": build_total, "rowgen": rowgen, "box": box_ns, "perrow": perrow, "cheb": cheb, "build_other": build_other, "rest": rest})
 }
 
 struct Row {

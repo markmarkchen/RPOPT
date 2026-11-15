@@ -246,7 +246,11 @@ fn lp_path(program: &MpProgram, active_set: &[usize], prep: crate::mpqp_utils::P
                 _ => None,
             };
             let mut st = crate::boxlp::Stats::default();
+            #[cfg(feature = "lp_census")]
+            let _tbox = crate::census_diag::t0();
             let r = crate::boxlp::box_chain(&el, &fl, &center, start.as_deref(), &mut st);
+            #[cfg(feature = "lp_census")]
+            crate::census_diag::lap(crate::census_diag::s::PF_BOX_NS, _tbox);
             note_chain(1, st.fallbacks, st.engine_lps, nt);
             if let Some((_, _, pts)) = &r {
                 boxflat = Some(pts.iter().flat_map(|p| p.iter().copied()).collect());
@@ -277,7 +281,12 @@ fn lp_path(program: &MpProgram, active_set: &[usize], prep: crate::mpqp_utils::P
             }
             crate::solver::lp::lp_feasible_from(&el, &fl, &[lp_], &center)
         };
-        (0..e.rows).map(test).collect()
+        #[cfg(feature = "lp_census")]
+        let _trow = crate::census_diag::t0();
+        let fl_out: Vec<bool> = (0..e.rows).map(test).collect();
+        #[cfg(feature = "lp_census")]
+        crate::census_diag::lap(crate::census_diag::s::PF_PERROW_NS, _trow);
+        fl_out
     };
     let mut kept_lambda = vec![];
     let mut kept_ineq = vec![];
