@@ -508,12 +508,12 @@ fn highdim_tables(rows: &[Row], skipped: &[(String, String)]) {
         );
     }
     println!("\n### High-dimension 3j: mplcp tableau rebuilds refused\n");
-    println!("| problem | regions | `tableau_for` refusals | of which pivot / M_ii above 1e-6 | regions popped without a tableau (neighbour search skipped) | `candidate_law`: fresh tableau refused | `candidate_law`: one-pivot step below 1e-9 |");
-    println!("|---|---:|---:|---:|---:|---:|---:|");
+    println!("| problem | regions | `tableau_for` refusals | of which pivot / M_ii above 1e-6 | regions popped without a tableau (neighbour search skipped) | `candidate_law`: fresh tableau refused | `candidate_law`: one-pivot step below 1e-9| bases accepted in the second pivot order |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|");
     for r in rows.iter().filter(|r| r.alg == "mplcp") {
         println!(
-            "| {} | {} | {} | {} | {} | {} | {} |",
-            r.problem, r.regions, c(r, Counter::TabRefuse), c(r, Counter::TabRefuseRel), c(r, Counter::ResolveNone), c(r, Counter::CandLawNoTab), c(r, Counter::CandLawSmallPiv)
+            "| {} | {} | {} | {} | {} | {} | {} | {} |",
+            r.problem, r.regions, c(r, Counter::TabRefuse), c(r, Counter::TabRefuseRel), c(r, Counter::ResolveNone), c(r, Counter::CandLawNoTab), c(r, Counter::CandLawSmallPiv), c(r, Counter::TabRescued)
         );
     }
     println!("\n### High-dimension 4: vertex clipping (`clip_flags`) outcomes per call\n");

@@ -341,8 +341,10 @@ mod imp {
         ResolveNone,
         CandLawNoTab,
         CandLawSmallPiv,
+        /// bases that `tableau_for` accepted only in the second, largest-pivot-first order
+        TabRescued,
     }
-    pub const NC: usize = 151;
+    pub const NC: usize = 152;
 
     #[derive(Clone, Debug)]
     pub struct Stats {
