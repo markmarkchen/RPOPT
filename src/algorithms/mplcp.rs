@@ -433,12 +433,13 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
         };
         let rowmax = |i: usize| (0..1 + d1).fold(0.0f64, |m, k| m.max(tab.rv(i, k).abs()));
         let pset: Vec<usize> = (0..n).filter(|&i| a[i] > PTOL).collect();
-        if pset.is_empty() {
-            return;
-        }
         let in_z = |i: usize| rowmax(i) <= ZTOL * fpoly.sc[tab.row_var[i]];
         let pz: Vec<usize> = pset.iter().cloned().filter(|&i| in_z(i)).collect();
         let alpha_row = tab.row_var.iter().position(|&v| v == alpha);
+        // No row that vanishes on the facet blocks the entering variable and α rises: the entering
+        // variable replaces α, which is the neighbour. This holds also when P is empty (nothing
+        // decreases at all). Returning there, as before, lost the neighbour whenever the previous
+        // pivot had exchanged a dependent pair (pop_081: parallel rows of a one-variable program).
         if pz.is_empty() {
             if let Some(ra) = alpha_row {
                 if tab.tv(ra, e) > PTOL {
@@ -446,6 +447,9 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
                     return;
                 }
             }
+        }
+        if pset.is_empty() {
+            return;
         }
         if !pz.is_empty() {
             // Case 1: leaving variable independent of θ_f
