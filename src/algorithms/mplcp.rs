@@ -378,6 +378,8 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
     let alpha = 2 * n;
     let mut e = e;
     let mut first = first;
+    #[cfg(feature = "lp_census")]
+    crate::census::depth_note(depth);
     crate::census_bump!(PfCalls, 1);
     match depth {
         0 => {
@@ -790,6 +792,213 @@ enum Nbr {
     Across(Vec<f64>),
 }
 
+/// The rank-1 enumeration of `adjacent` (on by default; `set_rank1(false)` restores the walk).
+static RANK1: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+pub fn set_rank1(on: bool) {
+    RANK1.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The facet polytope F = region ∩ Θ restricted to the hyperplane, in the coordinates θ = N θ_f - g b.
+fn facet_polytope(nb: &[Vec<f64>], g: &[f64], b: f64, e_all: &Mat, f_all: &[f64], d1: usize) -> (Mat, Vec<f64>) {
+    let mut ef = Mat::zeros(0, d1);
+    let mut ff = vec![];
+    if d1 > 0 {
+        for i in 0..e_all.rows {
+            let r = e_all.row(i);
+            let row: Vec<f64> = nb.iter().map(|v| r.iter().zip(v).map(|(a, b)| a * b).sum()).collect();
+            let nr = row.iter().map(|v| v * v).sum::<f64>().sqrt();
+            if nr < 1e-12 {
+                continue;
+            }
+            let eg: f64 = r.iter().zip(g).map(|(a, b)| a * b).sum();
+            ef.push_row(&row.iter().map(|v| v / nr).collect::<Vec<_>>());
+            ff.push((f_all[i] + b * eg) / nr);
+        }
+    }
+    (ef, ff)
+}
+
+/// Case 2 with exactly one row c vanishing on the facet, a slack row (w_c = 0 on the facet) whose pivot
+/// T[c,kk] (kk the column of its complement z_c) is zero. Then a_c = sum_j mu_j a_j over the active rows,
+/// column kk holds -mu_j on the z rows and zero on every slack row, and the active set T = A + {c} has rank
+/// deficiency one. Across the facet z_c rises and the multipliers move as lambda_j - mu_j z_c; the basis that
+/// is lexicographically feasible drops j* = argmin lambda_j / mu_j over P- = {j : mu_j > 0}, unique at a generic
+/// facet point. So the neighbours are A + {c} - {j}, one per j in P- whose piece F ∩ {lambda_j / mu_j <=
+/// lambda_k / mu_k, k in P-} of the facet is nonempty (a witness, or the Chebyshev LP); P- empty means no
+/// neighbour (boundary of the feasible set). A known set is dropped. Returns None when the case does not apply
+/// (several vanishing rows, a multiplier row, a nonzero pivot or slack column, ties between two ratios as
+/// affine functions on F, nt = 1), and the walk runs instead.
+#[allow(clippy::too_many_arguments)]
+fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usize], pv: &[usize], e_all: &Mat, f_all: &[f64], seen: Option<&Seen>, region_centre: Option<&[f64]>) -> Option<Vec<Nbr>> {
+    let (n, nt) = (p.n, p.nt);
+    let d1 = nt - 1;
+    if d1 == 0 || zrows.len() != 1 || pv.len() != 1 || pv[0] != zrows[0] {
+        return None;
+    }
+    let c = zrows[0];
+    let var = tab.row_var[c];
+    if var >= n {
+        return None;
+    }
+    let kk = tab.col_of(comp(var, n));
+    if tab.t[c * n + kk].abs() > PTOL * gam[c].abs().max(1.0) {
+        return None;
+    }
+    if (0..n).any(|i| i != c && tab.row_var[i] < n && tab.t[i * n + kk].abs() > 1e-8) {
+        return None;
+    }
+    // Hypotheses of the rank-1 lemma (Lean DependentFacet): row c of the tableau is w_c = rho_c + sum_j mu_j w_j with
+    // no z column, and column kk is -mu_j on the active rows and 0 elsewhere (checked above for the slack rows).
+    // Row c: zero on every nonbasic z column, and mu_j on the nonbasic w_j column of every active row j.
+    for (col, &cv) in tab.col_var.iter().enumerate().take(n) {
+        if cv >= n && cv < 2 * n {
+            if tab.t[c * n + col].abs() > 1e-8 {
+                return None;
+            }
+        }
+    }
+    let zrows_all: Vec<usize> = (0..n).filter(|&i| tab.row_var[i] >= n && tab.row_var[i] < 2 * n).collect();
+    let mu_max = zrows_all.iter().fold(0.0f64, |m, &i| m.max(tab.t[i * n + kk].abs()));
+    for &i in &zrows_all {
+        let mi = -tab.t[i * n + kk];
+        let colw = tab.col_of(tab.row_var[i] - n);
+        if (tab.t[c * n + colw] - mi).abs() > 1e-8 * (1.0 + mi.abs()) {
+            return None;
+        }
+        // a multiplier between the zero tolerance and 1e-7 of the largest one is neither zero nor safely
+        // positive: the columns of A + {c} - {j} could be nearly dependent, the walk decides
+        let m = mi.abs();
+        if m > PTOL && m <= 1e-7 * mu_max.max(1.0) {
+            return None;
+        }
+    }
+    let pm: Vec<usize> = (0..n).filter(|&i| tab.row_var[i] >= n && tab.row_var[i] < 2 * n && -tab.t[i * n + kk] > PTOL).collect();
+    let mu: Vec<f64> = pm.iter().map(|&i| -tab.t[i * n + kk]).collect();
+    if pm.is_empty() {
+        crate::census_bump!(R1Handled, 1);
+        return Some(vec![]);
+    }
+    // the members A + {c} - {j}, minus the known ones
+    let zc = z_rows(tab, n);
+    let mut members: Vec<(usize, Vec<usize>)> = vec![];
+    for (a, &ia) in pm.iter().enumerate() {
+        let zj = tab.row_var[ia] - n;
+        let mut z: Vec<usize> = zc.iter().cloned().filter(|&x| x != zj).collect();
+        z.push(var);
+        z.sort_unstable();
+        z.dedup();
+        if seen.map_or(false, |s| s.contains_key(&p.active_set(z.iter().copied()))) {
+            crate::census_bump!(R1SkipSeen, 1);
+            continue;
+        }
+        members.push((a, z));
+    }
+    // lambda_i on the facet, in facet coordinates: (rr0 - b gam_i, N' rr)
+    let nb = null_basis(g);
+    let w = 1 + d1;
+    let lam: Vec<Vec<f64>> = pm
+        .iter()
+        .map(|&i| {
+            let rr = &tab.rho[i * tab.w..(i + 1) * tab.w];
+            let mut v = vec![rr[0] - b * gam[i]];
+            for vv in nb.iter() {
+                v.push((0..nt).map(|k| rr[1 + k] * vv[k]).sum());
+            }
+            v
+        })
+        .collect();
+    // mu_k lambda_j - mu_j lambda_k as (g0, g_q) for the pair (a, b)
+    let cut = |a: usize, bb: usize| -> Vec<f64> { (0..w).map(|k| mu[bb] * lam[a][k] - mu[a] * lam[bb][k]).collect() };
+    let scale = |a: usize, bb: usize| 1.0 + (0..w).fold(0.0f64, |m, k| m.max((mu[bb] * lam[a][k]).abs()).max((mu[a] * lam[bb][k]).abs()));
+    for a in 0..pm.len() {
+        for bb in a + 1..pm.len() {
+            let d = cut(a, bb);
+            if d.iter().all(|v| v.abs() <= ZTOL * scale(a, bb)) {
+                return None; // two ratios identical on F: the lexicographic tie-break decides, the walk handles it
+            }
+        }
+    }
+    crate::census_bump!(R1Handled, 1);
+    if members.is_empty() {
+        return Some(vec![]);
+    }
+    let (ef, ff) = facet_polytope(&nb, g, b, e_all, f_all, d1);
+    let to_theta = |cf: &[f64]| -> Vec<f64> { (0..nt).map(|k| nb.iter().zip(cf).map(|(v, x)| v[k] * x).sum::<f64>() - g[k] * b).collect() };
+    // the region centre projected onto the facet, in facet coordinates, as a first witness candidate
+    let hint_f: Option<Vec<f64>> = region_centre.map(|c| {
+        // g is the unit normal of the row: the projection onto the hyperplane g.theta + b = 0
+        let sft = -(g.iter().zip(c).map(|(x, y)| x * y).sum::<f64>() + b);
+        let h: Vec<f64> = c.iter().zip(g).map(|(ci, gi)| ci + sft * gi).collect();
+        nb.iter().map(|v| h.iter().zip(v).map(|(a, b)| a * b).sum()).collect()
+    });
+    let mut witnesses: Vec<Vec<f64>> = hint_f.into_iter().collect();
+    let mut out = vec![];
+    for (a, z) in members {
+        let mut e2 = ef.clone();
+        let mut f2 = ff.clone();
+        let mut empty = false;
+        for bb in 0..pm.len() {
+            if bb == a {
+                continue;
+            }
+            // lambda_j / mu_j <= lambda_k / mu_k  <=>  mu_k lambda_j - mu_j lambda_k <= 0
+            let d = cut(a, bb);
+            let nrm = d[1..].iter().map(|v| v * v).sum::<f64>().sqrt();
+            let sc = scale(a, bb);
+            if nrm <= ZTOL * sc {
+                if d[0] > ZTOL * sc {
+                    empty = true;
+                    break;
+                } else if d[0] >= -ZTOL * sc {
+                    return None; // a tie as a constant: the walk decides
+                }
+                continue;
+            }
+            e2.push_row(&d[1..].iter().map(|v| v / nrm).collect::<Vec<_>>());
+            f2.push(-d[0] / nrm);
+        }
+        if empty {
+            crate::census_bump!(R1EmptyMember, 1);
+            #[cfg(feature = "lp_census")]
+            crate::census::tested(&z, true);
+            continue;
+        }
+        let clears = |pt: &[f64]| (0..e2.rows).all(|i| f2[i] - e2.row(i).iter().zip(pt).map(|(x, y)| x * y).sum::<f64>() >= WITNESS_MARGIN);
+        if let Some(pt) = witnesses.iter().find(|pt| clears(pt)).cloned() {
+            crate::census_bump!(R1WitnessAcc, 1);
+            crate::census_bump!(R1Emitted, 1);
+            #[cfg(feature = "lp_census")]
+            crate::census::tested(&z, false);
+            out.push(Nbr::Z(z, Some(to_theta(&pt))));
+            continue;
+        }
+        crate::census_bump!(R1LpRun, 1);
+        crate::census_bump!(PfCheb, 1);
+        let ball = {
+            crate::census_purpose!(Neighbour);
+            chebyshev_ball(&e2, &f2, &[])
+        };
+        match ball {
+            Some(s) if s.x[d1] > 1e-9 => {
+                let cf = s.x[..d1].to_vec();
+                crate::census_bump!(R1Emitted, 1);
+                #[cfg(feature = "lp_census")]
+                crate::census::tested(&z, false);
+                out.push(Nbr::Z(z, Some(to_theta(&cf))));
+                witnesses.push(cf);
+            }
+            _ => {
+                crate::census_bump!(R1EmptyMember, 1);
+                crate::census_bump!(PfChebEmpty, 1);
+                #[cfg(feature = "lp_census")]
+                crate::census::tested(&z, true);
+            }
+        }
+    }
+    Some(out)
+}
+
 /// Neighbouring z-row sets across the facet {e_k θ = f_k} of the region with tableau `tab`.
 ///
 /// `cert` is asked only when the fast path has failed, that is, when the slow path (Case 2) would
@@ -850,6 +1059,24 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         crate::census_bump!(AdjCertSkipNanos, _cen_t.elapsed().as_nanos());
         return (vec![], certified);
     }
+    // Rank-1 Case 2: one vanishing slack row c with a zero pivot, a_c = sum mu_j a_j over the active rows.
+    // The neighbours are enumerated directly, no walk (see `rank1_case2`).
+    if RANK1.load(std::sync::atomic::Ordering::Relaxed) {
+        if let Some(nbrs) = rank1_case2(p, tab, g.as_slice(), b, &gam, &zrows, &pv, e_all, f_all, seen, region_centre) {
+            crate::census_bump!(AdjCase2, 1);
+            crate::census_bump!(AdjCase2Nanos, _cen_t.elapsed().as_nanos());
+            return (nbrs, certified);
+        }
+        crate::census_bump!(R1Fallback, 1);
+    }
+    #[cfg(feature = "lp_census")]
+    let (r1_class, r1_kk, r1_pminus, r1_mu, r1_c, r1_overhead) = {
+        let t0 = std::time::Instant::now();
+        let (cl, kk, pm, mu, cc) = rank1_probe(p, tab, &zrows, &pv, &gam);
+        (cl, kk, pm, mu, cc, t0.elapsed().as_nanos())
+    };
+    #[cfg(feature = "lp_census")]
+    crate::census::depth_reset();
     let nb = null_basis(&g);
     let w = 1 + d1;
     // work tableau: n x (n+1) with the α column last
@@ -888,6 +1115,8 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
     let mut out = vec![];
     #[cfg(feature = "lp_census")]
     crate::census::basis_reset();
+    #[cfg(feature = "lp_census")]
+    let r1_overhead = if r1_class == 0 { r1_overhead + rank1_census(p, tab, &work, &ef, &ff, d1, seen, &r1_pminus, &r1_mu, r1_c, r1_kk) } else { r1_overhead };
     // the old hint (parent centre on the row) in facet coordinates: N' hint (N is orthogonal to g)
     let hint_f: Option<Vec<f64>> = region_centre.map(|c| {
         let sft = frhs - erow.iter().zip(c).map(|(x, y)| x * y).sum::<f64>();
@@ -908,6 +1137,25 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
     *ws = Some(work);
     crate::census_bump!(AdjCase2, 1);
     crate::census_bump!(AdjCase2Nanos, _cen_t.elapsed().as_nanos());
+    #[cfg(feature = "lp_census")]
+    {
+        use crate::census::Counter as C;
+        let calls = [C::R1Calls0, C::R1Calls1, C::R1Calls2, C::R1Calls3, C::R1Calls4, C::R1Calls5];
+        let nanos = [C::R1Nanos0, C::R1Nanos1, C::R1Nanos2, C::R1Nanos3, C::R1Nanos4, C::R1Nanos5];
+        crate::census::bump(calls[r1_class], 1);
+        crate::census::bump(nanos[r1_class], (_cen_t.elapsed().as_nanos().saturating_sub(r1_overhead)) as u64);
+        if r1_class == 0 {
+            let d = crate::census::depth_take();
+            let dc = match d {
+                0 => C::R1D0,
+                1 => C::R1D1,
+                2 => C::R1D2,
+                3..=5 => C::R1D3to5,
+                _ => C::R1D6p,
+            };
+            crate::census::bump(dc, 1);
+        }
+    }
     // theta = N theta_f - g b
     let nbrs = out
         .into_iter()
@@ -938,6 +1186,117 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         }
     }
     (nbrs, certified)
+}
+
+/// Census only: classifies a Case-2 call by the number and type of the rows that vanish on the facet and
+/// returns, for the rank-1 class, the column kk of the complement of the vanishing row, the rows P- (z rows with
+/// -T[i,kk] > PTOL), their multipliers mu = -T[i,kk] and the vanishing row. Classes: 0 one slack row with a zero
+/// pivot and zero slack columns, 1 the same with a nonzero slack column, 2 one slack row otherwise, 3 one
+/// multiplier row, 4 two rows, 5 three or more.
+#[cfg(feature = "lp_census")]
+fn rank1_probe(p: &Plcp, tab: &Tab, zrows: &[usize], pv: &[usize], gam: &[f64]) -> (usize, usize, Vec<usize>, Vec<f64>, usize) {
+    let n = p.n;
+    match zrows.len() {
+        0 => (5, 0, vec![], vec![], 0),
+        1 => {
+            let c = zrows[0];
+            let var = tab.row_var[c];
+            if var >= n {
+                return (3, 0, vec![], vec![], c);
+            }
+            let kk = tab.col_of(comp(var, n));
+            let zero_pivot = pv.len() == 1 && pv[0] == c && tab.t[c * n + kk].abs() <= PTOL * gam[c].abs().max(1.0);
+            if !zero_pivot {
+                return (2, kk, vec![], vec![], c);
+            }
+            let slack_zero = (0..n).all(|i| i == c || tab.row_var[i] >= n || tab.t[i * n + kk].abs() <= 1e-8);
+            if !slack_zero {
+                return (1, kk, vec![], vec![], c);
+            }
+            let pm: Vec<usize> = (0..n).filter(|&i| tab.row_var[i] >= n && tab.row_var[i] < 2 * n && -tab.t[i * n + kk] > PTOL).collect();
+            let mu: Vec<f64> = pm.iter().map(|&i| -tab.t[i * n + kk]).collect();
+            (0, kk, pm, mu, c)
+        }
+        2 => (4, 0, vec![], vec![], 0),
+        _ => (5, 0, vec![], vec![], 0),
+    }
+}
+
+/// Census only, for the rank-1 class: the |P-| histogram, the members of S = A + {c} - {j} (j in P-), how many are in
+/// `Seen`, for the unseen ones whether their sub-facet F and {lambda_j / mu_j <= lambda_k / mu_k for all k in P-} is
+/// empty (Chebyshev LP), and whether two ratios are identical as affine functions on F. Returns the time spent.
+#[cfg(feature = "lp_census")]
+#[allow(clippy::too_many_arguments)]
+fn rank1_census(p: &Plcp, tab: &Tab, work: &Tab, ef: &Mat, ff: &[f64], d1: usize, seen: Option<&Seen>, pm: &[usize], mu: &[f64], c: usize, _kk: usize) -> u128 {
+    use crate::census::{bump, Counter as C};
+    let t0 = std::time::Instant::now();
+    let n = p.n;
+    let hist = [C::R1P0, C::R1P1, C::R1P2, C::R1P3, C::R1P4, C::R1P5, C::R1P6, C::R1P7];
+    bump(hist[pm.len().min(7)], 1);
+    if pm.is_empty() {
+        return t0.elapsed().as_nanos();
+    }
+    let w = 1 + d1;
+    let zc = z_rows(tab, n);
+    let cvar = tab.row_var[c] as usize; // slack w_c: the constraint index is cvar
+    let mut all_seen = true;
+    // lambda_i(theta_f) = rho row i of the work tableau
+    let lam = |i: usize| -> &[f64] { &work.rho[i * w..(i + 1) * w] };
+    let mut tie = false;
+    for a in 0..pm.len() {
+        for b in a + 1..pm.len() {
+            let (ia, ib) = (pm[a], pm[b]);
+            let diff: Vec<f64> = (0..w).map(|k| mu[b] * lam(ia)[k] - mu[a] * lam(ib)[k]).collect();
+            let sc = 1.0 + (0..w).fold(0.0f64, |m, k| m.max((mu[b] * lam(ia)[k]).abs()).max((mu[a] * lam(ib)[k]).abs()));
+            if diff.iter().all(|v| v.abs() <= 1e-9 * sc) {
+                tie = true;
+            }
+        }
+    }
+    if tie {
+        bump(C::R1Ties, 1);
+    }
+    for (a, &ia) in pm.iter().enumerate() {
+        let zj = tab.row_var[ia] - n;
+        let mut z: Vec<usize> = zc.iter().cloned().filter(|&x| x != zj).collect();
+        let cz = cvar; // the slack index equals the z index of its complement
+        z.push(cz);
+        z.sort_unstable();
+        z.dedup();
+        bump(C::R1Members, 1);
+        let known = seen.map_or(false, |s| s.contains_key(&p.active_set(z.iter().copied())));
+        if known {
+            continue;
+        }
+        all_seen = false;
+        bump(C::R1Unseen, 1);
+        // sub-facet: F and mu_k lambda_j - mu_j lambda_k <= 0 for k in P-, k != j
+        let mut e2 = ef.clone();
+        let mut f2 = ff.to_vec();
+        if d1 > 0 {
+            for (b, &ib) in pm.iter().enumerate() {
+                if b == a {
+                    continue;
+                }
+                let g: Vec<f64> = (0..w).map(|k| mu[b] * lam(ia)[k] - mu[a] * lam(ib)[k]).collect();
+                let nrm = g[1..].iter().map(|v| v * v).sum::<f64>().sqrt();
+                if nrm <= 1e-12 {
+                    continue;
+                }
+                e2.push_row(&g[1..].iter().map(|v| v / nrm).collect::<Vec<_>>());
+                f2.push(-g[0] / nrm);
+            }
+            let empty = match chebyshev_ball(&e2, &f2, &[]) {
+                Some(s) => s.x[d1] <= 1e-9,
+                None => true,
+            };
+            bump(if empty { C::R1UnseenEmpty } else { C::R1UnseenNonEmpty }, 1);
+        }
+    }
+    if all_seen {
+        bump(C::R1AllSeen, 1);
+    }
+    t0.elapsed().as_nanos()
 }
 
 /// Which pLCP method `solve` runs.

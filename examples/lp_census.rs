@@ -440,6 +440,44 @@ fn highdim_tables(rows: &[Row], skipped: &[(String, String)]) {
             r.problem, r.regions, c(r, Counter::PfCheb) / n, acc, pct(acc, acc + c(r, Counter::PfCheb)), c(r, Counter::WitnessNoCuts), fail, c(r, Counter::PfChebEmpty)
         );
     }
+    println!("\n### High-dimension 3g: mplcp Case-2 calls by class (rank-1 census)\n");
+    println!("| problem | Case-2 calls | one slack row, zero pivot, slack columns zero | one slack row, zero pivot, slack columns not zero | one slack row, other | one multiplier row | two rows | three or more rows | time share of the same classes (ms) |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|---|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::AdjCase2) > 0.0) {
+        let cs = [Counter::R1Calls0, Counter::R1Calls1, Counter::R1Calls2, Counter::R1Calls3, Counter::R1Calls4, Counter::R1Calls5];
+        let ns = [Counter::R1Nanos0, Counter::R1Nanos1, Counter::R1Nanos2, Counter::R1Nanos3, Counter::R1Nanos4, Counter::R1Nanos5];
+        let tot = c(r, Counter::AdjCase2);
+        let times: Vec<String> = ns.iter().map(|&k| format!("{:.0}", c(r, k) / 1e6)).collect();
+        println!(
+            "| {} | {} | {} | {} |",
+            r.problem, tot, cs.iter().map(|&k| format!("{} ({})", c(r, k), pct(c(r, k), tot))).collect::<Vec<_>>().join(" | "), times.join(" / ")
+        );
+    }
+    println!("\n### High-dimension 3h: mplcp rank-1 calls (one slack row, zero pivot, slack columns zero): |P-|, the candidate set S, depth of the current walk\n");
+    println!("| problem | calls | |P-| = 0 / 1 / 2 / 3 / 4 / 5 / 6 / 7+ | members of S | already in Seen | calls with all of S in Seen | unseen members with an empty sub-facet | unseen with a nonempty sub-facet | calls with a structural tie | current walk depth 0 / 1 / 2 / 3-5 / 6+ |");
+    println!("|---|---:|---|---:|---:|---:|---:|---:|---:|---|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::R1Calls0) > 0.0) {
+        let h: Vec<String> = [Counter::R1P0, Counter::R1P1, Counter::R1P2, Counter::R1P3, Counter::R1P4, Counter::R1P5, Counter::R1P6, Counter::R1P7].iter().map(|&k| format!("{}", c(r, k))).collect();
+        let d: Vec<String> = [Counter::R1D0, Counter::R1D1, Counter::R1D2, Counter::R1D3to5, Counter::R1D6p].iter().map(|&k| format!("{}", c(r, k))).collect();
+        let (m, u) = (c(r, Counter::R1Members), c(r, Counter::R1Unseen));
+        println!(
+            "| {} | {} | {} | {} | {} ({}) | {} ({}) | {} | {} | {} | {} |",
+            r.problem, c(r, Counter::R1Calls0), h.join(" / "), m, m - u, pct(m - u, m), c(r, Counter::R1AllSeen), pct(c(r, Counter::R1AllSeen), c(r, Counter::R1Calls0)),
+            c(r, Counter::R1UnseenEmpty), c(r, Counter::R1UnseenNonEmpty), c(r, Counter::R1Ties), d.join(" / ")
+        );
+    }
+    println!("\n### High-dimension 3i: mplcp rank-1 enumeration of Case 2\n");
+    println!("| problem | Case-2 calls | answered by the enumeration | handed to the walk | candidates emitted | members dropped as known | emitted on a witness | sub-facet LPs | members with an empty sub-facet | neighbour LPs/region | distinct active sets tested | repeated tests | of which empty |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::AdjCase2) > 0.0) {
+        let n = r.regions.max(1) as f64;
+        println!(
+            "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {:.1} | {} | {} | {} |",
+            r.problem, c(r, Counter::AdjCase2), c(r, Counter::R1Handled), c(r, Counter::R1Fallback), c(r, Counter::R1Emitted), c(r, Counter::R1SkipSeen),
+            c(r, Counter::R1WitnessAcc), c(r, Counter::R1LpRun), c(r, Counter::R1EmptyMember), c(r, Counter::PfCheb) / n,
+            c(r, Counter::R1TestDistinct), c(r, Counter::R1TestRepeat), c(r, Counter::R1EmptyRepeat)
+        );
+    }
     println!("\n### High-dimension 4: vertex clipping (`clip_flags`) outcomes per call\n");
     println!("| problem | algorithm | clip calls/region | ok | nt outside 2..=6 | more than 128 hyperplanes | infinite box | more than 600 vertices | too few vertices | vertex violates a row | redundancy LPs/region |");
     println!("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
