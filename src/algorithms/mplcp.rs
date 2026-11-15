@@ -674,7 +674,7 @@ struct Frame {
 /// Algorithm 2 on an explicit work stack (no depth limit, no iteration cap). Returns false when a
 /// repeated state or the pivot `budget` stopped some branch, so a neighbour may be missing.
 #[inline(never)]
-fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, budget: usize, out: &mut Vec<(Vec<usize>, Option<Vec<f64>>)>) -> bool {
+fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, budget: usize, out: &mut Vec<(Vec<usize>, Option<Vec<f64>>)>, lost: &mut Vec<Vec<f64>>) -> bool {
     let mut left = budget;
     let mut stack: Vec<Frame> = vec![];
     let mut complete = true;
@@ -683,6 +683,8 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, budget: usize, o
         WalkEnd::Cycle => complete = false,
         WalkEnd::Budget => {
             crate::census_bump!(WalkBudget, 1);
+            // the frames not yet walked are lost: their sub-facets are probed by the caller
+            lost.extend(stack.drain(..).filter_map(|f| f.centre.or(f.witness)));
             return false;
         }
     }
@@ -691,9 +693,14 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, budget: usize, o
         let facet = Facet { ef: &ef, ff: &ff, sc: fpoly.sc, seen: fpoly.seen, hint_f: fpoly.hint_f };
         match walk_one(p, &mut tab, e, facet, depth, centre.as_deref(), witness.as_deref(), first, &mut left, &mut stack, out) {
             WalkEnd::Done => {}
-            WalkEnd::Cycle => complete = false,
+            WalkEnd::Cycle => {
+                complete = false;
+                lost.extend(centre.or(witness));
+            }
             WalkEnd::Budget => {
                 crate::census_bump!(WalkBudget, 1);
+                lost.extend(centre.or(witness));
+                lost.extend(stack.drain(..).filter_map(|f| f.centre.or(f.witness)));
                 return false;
             }
         }
@@ -920,7 +927,8 @@ fn adjacent_case2(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_a
     // while the time grows 10-fold at 300 and 300-fold at 3,000). 2n pivots (at least 64) keeps the cost
     // of the old caps, and a spent budget is not silent: the facet also gets the QP just across it.
     let budget = (WALK_BUDGET_PER_ROW * n).max(WALK_BUDGET_MIN);
-    let complete = pivot_facet(p, &mut work, n, Facet { ef: &ef, ff: &ff, sc: rowsc, seen, hint_f: hint_f.as_deref() }, budget, &mut out);
+    let mut lost: Vec<Vec<f64>> = vec![];
+    let complete = pivot_facet(p, &mut work, n, Facet { ef: &ef, ff: &ff, sc: rowsc, seen, hint_f: hint_f.as_deref() }, budget, &mut out, &mut lost);
     *ws = Some(work);
     crate::census_bump!(AdjCase2, 1);
     crate::census_bump!(AdjCase2Nanos, _cen_t.elapsed().as_nanos());
@@ -936,11 +944,22 @@ fn adjacent_case2(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_a
     if !complete {
         // a repeated state or the budget stopped the walk: also look across the facet by a QP at a
         // point just beyond its Chebyshev centre (resolved by the caller, which has the program)
+        // The probes: the centre of the whole facet, and the centre (or witness) of every sub-facet whose
+        // walk was stopped or never started, so that the neighbours across those are not lost either
+        // (at most 16 points, so the cost stays negligible).
         let sol = if d1 > 0 { chebyshev_ball(&ef, &ff, &[]) } else { None };
         let cf: Vec<f64> = sol.map_or(vec![0.0; d1], |s| s.x[..d1].to_vec());
-        let on: Vec<f64> = (0..nt).map(|k| nb.iter().zip(&cf).map(|(v, x)| v[k] * x).sum::<f64>() - g[k] * b).collect();
-        let delta = 1e-6 * (1.0 + on.iter().fold(0.0f64, |m, v| m.max(v.abs())));
-        nbrs.push(Nbr::Across(on.iter().zip(g).map(|(x, gk)| x + delta * gk).collect()));
+        let mut probes: Vec<Vec<f64>> = vec![cf];
+        for pt in lost {
+            if probes.len() < 16 && !probes.iter().any(|q| q.iter().zip(&pt).all(|(a, b)| (a - b).abs() <= 1e-9)) {
+                probes.push(pt);
+            }
+        }
+        for cf in probes {
+            let on: Vec<f64> = (0..nt).map(|k| nb.iter().zip(&cf).map(|(v, x)| v[k] * x).sum::<f64>() - g[k] * b).collect();
+            let delta = 1e-6 * (1.0 + on.iter().fold(0.0f64, |m, v| m.max(v.abs())));
+            nbrs.push(Nbr::Across(on.iter().zip(g).map(|(x, gk)| x + delta * gk).collect()));
+        }
     }
     (nbrs, certified)
 }
