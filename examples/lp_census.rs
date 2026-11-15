@@ -43,8 +43,8 @@ fn child(path: &str, alg: &str) {
     if std::env::var("MPLCP_MU_AUDIT").is_ok() {
         rpopt::algorithms::mplcp::set_mu_audit(true);
     }
-    if std::env::var("MPLCP_REFINE").is_ok() {
-        rpopt::algorithms::mplcp::set_refine_multipliers(true);
+    if let Ok(v) = std::env::var("MPLCP_REFINE") {
+        rpopt::algorithms::mplcp::set_refine_multipliers(v != "0");
     }
     if let Ok(m) = std::env::var("RPOPT_CERT") {
         rpopt::algorithms::mplcp::set_certificate(m.parse().unwrap());
