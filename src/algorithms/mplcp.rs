@@ -1670,6 +1670,13 @@ static REFINE_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool:
 pub fn set_refine_multipliers(on: bool) {
     REFINE_ON.store(on, std::sync::atomic::Ordering::Relaxed);
 }
+/// Census only: with the audit on, the refined classification is computed and compared but not applied (`MPLCP_MU_AUDIT=1` in `lp_census`).
+#[cfg(feature = "lp_census")]
+static MU_AUDIT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+#[cfg(feature = "lp_census")]
+pub fn set_mu_audit(on: bool) {
+    MU_AUDIT.store(on, std::sync::atomic::Ordering::Relaxed);
+}
 
 /// Measure at or below which the pivot is zero (rank-1 case), and above which it is nonzero (Case 1). Between them
 /// the walk decides; `PivotGap` counts those calls.
