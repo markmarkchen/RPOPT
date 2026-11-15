@@ -236,6 +236,17 @@ theorem tableauFor_isTableau (M : Matrix ι ι ℝ) (r : ι → ℝ) {l : List �
   have := pivotSeq_isTableau l (isTableau_empty M r) hp
   rwa [toggleSeq_eq_union l hnd (by simp), Finset.empty_union] at this
 
+/-- **Pivoted and rebuilt tableaux agree, for chains of any length** (`REFACTOR`, lazy child
+pivots in `TabSrc::resolve`). A chain of principal pivots with nonzero elements from a tableau of
+`B` gives exactly the tableau that any other construction gives for the resulting basis: rebuilt
+from scratch (`tableau_for`), reached by another chain, or by the same pivots applied later. -/
+theorem pivotSeq_eq_of_isTableau {M : Matrix ι ι ℝ} {r : ι → ℝ} {B : Finset ι} {ρ : ι → ℝ}
+    {T : Matrix ι ι ℝ} (h : IsTableau M r B ρ T) (l : List ι) (hp : NonzeroPivots T l)
+    {ρ' : ι → ℝ} {T' : Matrix ι ι ℝ} (h' : IsTableau M r (toggleSeq B l) ρ' T') :
+    pivotSeq ρ T l = (ρ', T') := by
+  obtain ⟨h1, h2⟩ := tableau_unique (pivotSeq_isTableau l h hp) h'
+  exact Prod.ext h1 h2
+
 end Principal
 
 end Rpopt

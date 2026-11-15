@@ -9,11 +9,11 @@ Lean 4 and Mathlib proofs of the mathematics behind two RPOPT solvers:
 
 The proofs are at the model level, in exact real arithmetic. They justify the steps the Rust code
 takes, not its floating point execution. Every result listed as proved has no `sorry`, and
-`Audit.lean` prints the axioms of all 77 main theorems: each uses only `propext`,
+`Audit.lean` prints the axioms of all 78 main theorems: each uses only `propext`,
 `Classical.choice` and `Quot.sound` (two use none). Modelling assumptions are explicit hypotheses,
 never axioms.
 
-Rust line numbers refer to main at commit `f017013`.
+Rust line numbers refer to main at commit `2b0c6c7`.
 
 ## Build
 
@@ -69,6 +69,7 @@ lake env lean Audit.lean    # one line per main theorem: the axioms it depends o
 | A3 | `exchange_iff`, `pivot_isTableau` | a pivot with nonzero element has the same solution set, pair exchanged | proved |
 | A3 | `pivot_agree_on_facet` | where the pivot row is zero both tableaux give the same values | proved |
 | A3 | `tableauFor_isTableau` | principal pivots on distinct pairs with nonzero elements give the tableau of that basis | proved |
+| A3 | `pivotSeq_eq_of_isTableau` | a chain of pivots of any length gives the same tableau as any other construction of that basis (rebuilt, other chain, pivots applied later) | proved |
 | A4 | `Case1.facet_eq` | the shared facet is the same set from both sides: `CR_B ∩ H = CR_B' ∩ H` | proved |
 | A4 | `Case1.cr_le`, `Case1.cr'_ge` | the two regions lie on opposite sides of the facet hyperplane | proved |
 | A4 | `Case1.across`, `Case1.own_side` | near every relative-interior facet point, `B` covers its side and the toggled `B'` the other | proved |
@@ -145,23 +146,23 @@ rather than returns.
 
 ## Correspondence with the Rust code
 
-`mplcp.rs` at `f017013` unless noted; `build` is `mplcp_build.rs`.
+`mplcp.rs` at `2b0c6c7` unless noted; `build` is `mplcp_build.rs`.
 
 | Lean theorem | Rust function or step | What it justifies |
 |:-------------|:----------------------|:------------------|
 | `lcpM`, `lcpq`, `lcpQ`, `slack_primalOf` | `Plcp::new` (50-117) | the pLCP data `M, q, R` from the KKT cache |
-| `lcp_unique_optimizer`, `region_law_optimal` | `tableau_law` (889), `complete_primal_law` | `x(θ) = -H⁻¹(c + Hθ + Aᵀλ(θ))` is the optimizer on the region |
-| `law_eq_kkt` | `TABLEAU_LAW` switch (863), `tableau_law` vs `optimal_control_law_dual` | the tableau law equals the KKT-solve law |
-| `tableau_unique` | `REFACTOR` (740), `candidate_law` (926), `pivot_solve` (1024-1043) | a tableau reached by pivots equals the one rebuilt from scratch |
+| `lcp_unique_optimizer`, `region_law_optimal` | `tableau_law` (926), `complete_primal_law` | `x(θ) = -H⁻¹(c + Hθ + Aᵀλ(θ))` is the optimizer on the region |
+| `law_eq_kkt` | `TABLEAU_LAW` switch (900), `tableau_law` vs `optimal_control_law_dual` | the tableau law equals the KKT-solve law |
+| `tableau_unique`, `pivotSeq_eq_of_isTableau` | `REFACTOR` (745), `TabSrc::Lazy` and `resolve` (750-778), `candidate_law` (963), `pivot_solve` (1054-1065) | a tableau reached by a chain of pivots, applied when the child is popped, equals the one rebuilt from scratch, for any period |
 | `isTableau_empty`, `tableauFor_isTableau` | `tableau_for` (297-314; check `piv.abs() < 1e-11` at 308) | the region tableau rebuilt from an active set |
 | `exchange_iff`, `pivVec`, `pivT` | `Tab::defer_pivot` (202), `Tab::flush` (263), `Tab::pivoted` (226), `Tab::tv`/`rv` (157-193) | the pivot formulas |
-| `pivot_isTableau`, `toggle` | `Nbr::Toggle` (644), `z_toggle` (536) | the neighbour's tableau is one principal pivot away |
+| `pivot_isTableau`, `toggle` | `Nbr::Toggle` (644, used at 884), `z_toggle` (536) | the neighbour's tableau is one principal pivot away |
 | `Case1` (fields), `Case1.facet_eq` | `adjacent` (601): `zrows` (608-625), `pv` (632), `tve` (638), `blocked` (640) | the exact conditions of the fast path |
 | `Case1.across`, `Case1.lex_cover` | fast path return (644) | the toggled basis is the region across the facet |
-| `entry_facet_unique_neighbour` | entry-facet skip in `expand_candidates` (787-808), `Item::entry` (1043) | the skipped search could only return the parent |
+| `entry_facet_unique_neighbour` | entry-facet skip in `expand_candidates` (824-846), `Item::entry` (1064) | the skipped search could only return the parent |
 | `LexPos`, `LexNonneg` | `lex_nonneg` (341-348), `lex_cmp` (327-338) | lexicographic sign, without tolerance |
 | `LexPos.eventually_pos` | header (7-9): `ε = (ε0, ε0², …)` | symbolic `ε` is sound |
-| `lexRows`, `isLexTableau_of_isTableau` | `rfull` (409-422), `rowmax` (423); `lex_feasible` (1409) | the β block is `-T[:, c]` for nonbasic `w_j`, a unit vector for basic `w_j` |
+| `lexRows`, `isLexTableau_of_isTableau` | `rfull` (409-422), `rowmax` (423); `lex_feasible` (1427) | the β block is `-T[:, c]` for nonbasic `w_j`, a unit vector for basic `w_j` |
 | `lex_ratio_pivot_on`, `zero_row_beats_positive_row`, `lexmin_zero_row` | Case 1 (438-458): lexmin over `P ∩ Z` on β | the Case-1 pivot keeps the non-α rows lexico-positive |
 | `WalkState`, `WalkStep` | `Tab` with `row_var`, `col_var` and the entering column `e`; `e = col_of(comp(leaving))` (457, 519) | the walk of `pivot_facet` |
 | `first_step_rows`, `first_step_nonAlpha` | first iteration, `e` = the α column of the work tableau (653-666) | the first pivot establishes the walk invariant |
@@ -172,8 +173,8 @@ rather than returns.
 | `case2_needs_dependent_rows` | slow path entered with `tve ≈ 0` (638); Case 2 (459) | Case 2 moves multipliers among dependent active rows |
 | `walk_no_repeat`, `walk_repeat_returns`, `chain_length_bound` | `for _ in 0..(8 * n + 50)` (390), `if depth > 6` (462) | what the caps can be replaced with |
 | `known_region_unique_neighbour`, `known_region_skip`, `vertices_subset_polyhedron` | step 2 of branch `mplcp-case2-fix` (not yet merged) | skipping a Case-2 facet contained in a known region |
-| `reach_least` | `pivot_solve` (991), `pivot_solve_par` (1061), `seen` (994, 1011, 1104) | the explored set does not depend on the visiting order |
-| `reach_skip` | `seen` check before `build_cand` (1011); mplp_lex `crossed` (mplp_lex.rs 502, 509, 524-526, 560) | skipping known neighbours is safe |
+| `reach_least` | `pivot_solve` (1028), `pivot_solve_par` (1082), `seen` (1031, 1042, 1122) | the explored set does not depend on the visiting order |
+| `reach_skip` | `seen` check before `build_cand` (1042); mplp_lex `crossed` (mplp_lex.rs 502, 509, 524-526, 560) | skipping known neighbours is safe |
 | `lp_certificate`, `basis_certificate` | mplp_lex.rs header (13-16), `Lex::solve` (264-377), `Ok(())` at 358 | a basis with no lexico-negative slack or multiplier row is optimal |
 | `rank1_inverse`, `rank1_tableau` | mplp_lex.rs `Lex::pivot` (159-181) | the rank-1 update of `binv` and `t` |
 | `dual_pivot`, `ratio_test` | mplp_lex.rs phase 1 (310-342), ratio `l / y` with `y > 1e-9` (324-338) | phase 1 keeps dual feasibility |
@@ -213,8 +214,8 @@ All of these appear as explicit hypotheses of the theorems that need them.
   Chebyshev center and the facet hint.
 - Tableau refactoring and drift (`REFACTOR`, `mplp_lex` `REFRESH`), beyond the exact statement
   `tableau_unique`.
-- Start-region selection (`initial_region` 755, `degenerate_start`, `lex_feasible_start` 1561,
-  `drop_lex_infeasible` 1473, `mplp_lex` initial basis). Past bugs of this kind, such as the zero-region
+- Start-region selection (`initial_region` 792, `degenerate_start`, `lex_feasible_start` 1579,
+  `drop_lex_infeasible` 1491, `mplp_lex` initial basis). Past bugs of this kind, such as the zero-region
   start from dependent active rows fixed in `668403e`, live at this level.
 - The enumeration method (`Method::Enumeration`) and the parallel scheduling of `pivot_solve_par`
   (only its result set, via `reach_least`).
@@ -256,6 +257,11 @@ All of these appear as explicit hypotheses of the theorems that need them.
    case `walk_repeat_returns` says the first repeated state is the state after the first pivot.
 6. **The `depth > 6` guard drops neighbours silently** (462). See "Answers on the two caps" for the
    replacement.
+7. **Lazy child pivots and `REFACTOR = 32` (2b0c6c7) match the model.** `TabSrc::resolve` applies the same
+   principal pivot to the unchanged shared parent (the in-place pivot only for the last holder, 767-772), so
+   it equals the eager pivot, and `pivotSeq_eq_of_isTableau` makes the period irrelevant in exact arithmetic.
+   The pivot element of a `Toggle` is nonzero by the fast-path test (`tve > PTOL`, 638-639), as `Case1`
+   assumes. Floating-point drift, measured in `bench/results/mplcp_tableau_handling.md`, is outside the model.
 
 The measurements in findings 3 to 5 come from an uncommitted debug build run on the laptop (runs of 4
 to 30 s). They are diagnostics, not timings.

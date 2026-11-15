@@ -763,7 +763,44 @@ pub fn regions(program: &MpProgram, seed: u64, method: Method) -> Vec<CriticalRe
     }
 }
 
-const REFACTOR: usize = 8;
+/// A child reached by Case-1 pivots has its tableau rebuilt from scratch every REFACTOR levels. The
+/// tableau reached by pivots equals the rebuilt one in exact arithmetic (Lean `tableau_unique`); in
+/// floating point the difference does not grow with the depth (bench/results/mplcp_tableau_handling.md:
+/// at most 4e-12 relative to depth 28 on the 3 and 4 parameter problems, the same size as at depth
+/// 0 to 7), so the period only trades a rebuild (about |z| pivots) against nothing. 8 -> 32.
+const REFACTOR: usize = 32;
+
+/// Where a queued region's tableau comes from. `Lazy` is the parent's tableau shared with the
+/// siblings plus the principal pivot (row, column) that turns it into this region's tableau; the
+/// pivot is done when the region is popped, and the last holder of the parent pivots it in place.
+enum TabSrc {
+    None,
+    Ready(Tab),
+    Lazy(std::sync::Arc<Tab>, usize, usize),
+}
+
+impl From<Option<Tab>> for TabSrc {
+    fn from(t: Option<Tab>) -> Self {
+        t.map_or(TabSrc::None, TabSrc::Ready)
+    }
+}
+
+impl TabSrc {
+    /// The tableau, rebuilt from the active set of `cr` when there is none.
+    fn resolve(self, plcp: &Plcp, cr: &CriticalRegion) -> Option<Tab> {
+        match self {
+            TabSrc::Ready(t) => Some(t),
+            TabSrc::Lazy(a, v, kk) => Some(match std::sync::Arc::try_unwrap(a) {
+                Ok(mut t) => {
+                    t.pivot(v, kk);
+                    t
+                }
+                Err(a) => a.pivoted(v, kk),
+            }),
+            TabSrc::None => tableau_of(plcp, cr),
+        }
+    }
+}
 
 /// What is known about an active set that `adjacent` has returned: the index of its region in the
 /// result list, or that its region was rejected (empty, lower dimensional, or not yet built).
@@ -792,7 +829,7 @@ fn seen_claim(seen: &mut Seen, aset: &[usize]) -> bool {
 struct Item {
     idx: usize,
     center: Option<Vec<f64>>,
-    tab: Option<Tab>,
+    tab: TabSrc,
     depth: usize,
     /// hyperplane (unit normal, offset) of the parent's facet this region was entered through,
     /// only when it was reached by a Case-1 Toggle pivot (see `expand_candidates`)
@@ -1229,7 +1266,7 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
         known.add(0, &regions[0]);
     }
     let mut queue: VecDeque<Item> = VecDeque::new();
-    queue.push_back(Item { idx: 0, center: init_center, tab: None, depth: 0, entry: None, verts: None });
+    queue.push_back(Item { idx: 0, center: init_center, tab: TabSrc::None, depth: 0, entry: None, verts: None });
     let mut ws: Option<Tab> = None;
     let mut pending: Vec<(CriticalRegion, Option<Vec<f64>>, Option<(usize, usize)>, Option<Tab>, Option<(Vec<f64>, f64)>, Option<Vec<f64>>)> = vec![];
     let mut wave_limit = 1usize;
@@ -1238,13 +1275,7 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
             wave_limit = regions.len();
         }
         let cur = &regions[idx];
-        let tab = match tab {
-            Some(t) => t,
-            None => {
-                let Some(t) = crate::census_timed!(MplcpTabNanos, tableau_of(plcp, cur)) else { continue };
-                t
-            }
-        };
+        let Some(tab) = crate::census_timed!(MplcpTabNanos, tab.resolve(plcp, cur)) else { continue };
         let cx = CertCtx::new(cmode, verts.as_deref(), &known, &regions, plcp.nt, wave_limit);
         let cands = crate::census_timed!(MplcpNbrNanos, expand_candidates(plcp, cur, center.as_ref(), &tab, depth, entry.as_ref(), cx.as_ref(), &mut ws));
         for c in cands {
@@ -1272,29 +1303,19 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
             }
         }
         // the neighbours' tableaux are one pivot away (rebuilt from scratch every REFACTOR levels);
-        // the last one takes over this region's tableau
-        let np = pending.len();
-        let mut tab = Some(tab);
-        for (i, (cr, ce, piv, own, ent, vt)) in pending.drain(..).enumerate() {
-            let (ntab, nd) = crate::census_timed!(MplcpTabNanos, match piv {
-                Some((v, kk)) => {
-                    let t = if i + 1 == np {
-                        let mut t = tab.take().unwrap();
-                        t.pivot(v, kk);
-                        t
-                    } else {
-                        tab.as_ref().unwrap().pivoted(v, kk)
-                    };
-                    (Some(t), depth + 1)
-                }
-                None => (own, 0),
-            });
+        // each pivot is done when its region is popped, and the last one popped takes over this tableau
+        let tab = std::sync::Arc::new(tab);
+        for (cr, ce, piv, own, ent, vt) in pending.drain(..) {
+            let (src, nd) = match piv {
+                Some((v, kk)) => (TabSrc::Lazy(tab.clone(), v, kk), depth + 1),
+                None => (TabSrc::from(own), 0),
+            };
             seen.insert(cr.active_set.clone(), Slot::Built(regions.len()));
             regions.push(cr);
             if cert_active(cmode, plcp.nt) {
                 known.add(regions.len() - 1, regions.last().unwrap());
             }
-            queue.push_back(Item { idx: regions.len() - 1, center: ce, tab: ntab, depth: nd, entry: ent, verts: vt });
+            queue.push_back(Item { idx: regions.len() - 1, center: ce, tab: src, depth: nd, entry: ent, verts: vt });
         }
     }
     regions
@@ -1328,7 +1349,7 @@ fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalR
     if cert_active(cmode, plcp.nt) {
         known.add(0, &regions[0]);
     }
-    let mut wave: Vec<Item> = vec![Item { idx: 0, center: init_center, tab: None, depth: 0, entry: None, verts: None }];
+    let mut wave: Vec<Item> = vec![Item { idx: 0, center: init_center, tab: TabSrc::None, depth: 0, entry: None, verts: None }];
     // measured serial cost (ns) of expanding one region and of building one candidate
     let mut ns_expand: f64 = 0.0;
     let mut ns_build: f64 = 0.0;
@@ -1337,10 +1358,7 @@ fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalR
         let expand = |ws: &mut Option<Tab>, item: Item| -> Option<(Arc<Tab>, usize, Vec<Cand>)> {
             let Item { idx, center, tab, depth, entry, verts } = item;
             let cur = &regions[idx];
-            let tab = match tab {
-                Some(t) => t,
-                None => tableau_of(plcp, cur)?,
-            };
+            let tab = tab.resolve(plcp, cur)?;
             let cx = CertCtx::new(cmode, verts.as_deref(), &known, &regions, plcp.nt, wave_limit);
             let cands = expand_candidates(plcp, cur, center.as_ref(), &tab, depth, entry.as_ref(), cx.as_ref(), ws);
             Some((Arc::new(tab), depth, cands))
@@ -1392,7 +1410,7 @@ fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalR
             if cert_active(cmode, plcp.nt) {
                 known.add(regions.len() - 1, regions.last().unwrap());
             }
-            wave.push(Item { idx: regions.len() - 1, center, tab, depth, entry, verts });
+            wave.push(Item { idx: regions.len() - 1, center, tab: tab.into(), depth, entry, verts });
         }
     }
     regions

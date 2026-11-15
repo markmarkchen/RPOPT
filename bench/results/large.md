@@ -360,11 +360,29 @@ Timed-out solves: masses3_N6/ahmadi, masses3_N7/ahmadi, masses4_N5/geometric, ma
 
 ## Summary by algorithm
 
-| algorithm | solved | timed out | geometric-mean time vs graph (common problems) |
-|---|---|---|---|
-| combinatorial | 79 | 0 | 1.57 |
-| geometric | 119 | 12 | 1.02 |
-| graph | 124 | 7 | 1.00 |
-| combinatorial_graph | 122 | 9 | 1.03 |
-| ahmadi | 120 | 11 | 1.17 |
-| mplcp | 124 | 7 | 0.76 |
+| algorithm | solved | timed out | returned no regions | geometric-mean time vs graph (common problems) |
+|---|---|---|---|---|
+| combinatorial | 79 | 0 | 0 | 1.57 |
+| geometric | 114 | 12 | 5 | 1.26 |
+| graph | 124 | 7 | 0 | 1.00 |
+| combinatorial_graph | 122 | 9 | 0 | 1.03 |
+| ahmadi | 120 | 11 | 0 | 1.17 |
+| mplcp | 119 | 7 | 5 | 0.92 |
+
+Runs that returned no regions: pop_001/geometric, pop_001/mplcp, pop_019/geometric, pop_019/mplcp, pop_031/geometric, pop_031/mplcp, pop_052/geometric, pop_052/mplcp, pop_071/geometric, pop_071/mplcp.
+
+## Time vs graph by parameter count
+
+Geometric mean of solve time relative to `graph`, over the problems both solved (problem count in brackets).
+
+| parameters | combinatorial | geometric | graph | combinatorial_graph | ahmadi | mplcp |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 2.96 (15) | 0.23 (14) | 1.00 (15) | 0.43 (15) | 0.64 (15) | 0.17 (14) |
+| 2 | 2.45 (11) | 0.84 (9) | 1.00 (11) | 0.85 (11) | 1.18 (11) | 0.57 (9) |
+| 3 | 3.57 (10) | 0.70 (15) | 1.00 (15) | 1.57 (14) | 0.86 (15) | 0.45 (15) |
+| 4 | 1.21 (7) | 1.02 (10) | 1.00 (11) | 1.90 (11) | 1.30 (10) | 0.91 (10) |
+| 5 | 1.31 (5) | 2.32 (10) | 1.00 (11) | 1.36 (11) | 2.10 (11) | 1.29 (10) |
+| 6 | 0.83 (10) | 2.04 (18) | 1.00 (18) | 1.23 (18) | 1.56 (16) | 1.44 (18) |
+| 7 | 0.89 (10) | 2.10 (14) | 1.00 (15) | 1.02 (15) | 1.28 (15) | 1.66 (15) |
+| 8 | 0.79 (9) | 2.41 (18) | 1.00 (20) | 0.91 (20) | 1.19 (20) | 1.89 (20) |
+| 10 | 0.74 (2) | 2.83 (6) | 1.00 (8) | 0.94 (7) | 1.07 (7) | 1.86 (7) |

@@ -154,7 +154,7 @@ function. Every exact method returns the same set of critical regions as PPOPT o
 | `combinatorial_graph`, `combinatorial_graph_parallel` | Arnström, Axehill 2024, as simplified in PPOPT | PPOPT | breadth-first visit order |
 | `parametric_daqp` | Arnström, Axehill 2024, as published | paper | least-distance transformation and DAQP subproblems; 1.5x to 2.9x faster than the authors' `pdaqp` |
 | `ahmadi` | Ahmadi-Moshkenani, Johansen, Olaru 2018 | paper | handles LICQ and strict-complementarity violations (PPOPT ships an empty stub) |
-| `mplcp`, `mplcp_parallel` | Jones, Morari 2006, mp-LCP pivoting | paper | the fastest serial mpQP solver on the benchmark; lexicographic perturbation: no gaps or overlaps at degenerate vertices (the Case-2 sign test is scale-free since the pop_001 twin-row fix, so no end filter is needed: 0 lexico-infeasible regions on 135 problems; serial 1.04x faster, 1.45x to 1.58x on the two largest degenerate cases, `bench/results/mplcp_case2_tolerance.md`); mpLPs are routed to `mplp_lex`; the neighbour search on the facet a region was entered through by a single pivot is skipped (it can only return the parent; about 2% faster serial, same regions; measured on Negishi, median ratio 1.02 to 1.03 against an A/A noise band of 0.99 to 1.01 on the larger problems, see `bench/results/negishi_entry_skip_ab.md`; no resolvable gain at 16 threads); a facet whose Case-2 neighbour search would only return a known region is skipped when a known region R has the opposite row on the same hyperplane and contains the facet (checked on the facet's clip vertices; sound for lexico-feasible regions, Lean `known_region_skip`): 3 to 5 parameters only, where the clip vertices exist and the check is cheap; 11 to 41% of the Case-2 facets are skipped, serial 1.05 to 1.15x faster on `masses2_N4` to `N8` and `pop_006`, neutral elsewhere, no effect above 6 parameters (no vertices), `bench/results/mplcp_facet_certificate.md`; each region's law is read from the pivot tableau instead of a fresh KKT solve (same regions; coefficients agree with the KKT solve to about 6e-9 relative, so not bit-identical; `mplcp::set_tableau_law(false)` restores the KKT solve) |
+| `mplcp`, `mplcp_parallel` | Jones, Morari 2006, mp-LCP pivoting | paper | the fastest serial mpQP solver on the benchmark; lexicographic perturbation: no gaps or overlaps at degenerate vertices (the Case-2 sign test is scale-free since the pop_001 twin-row fix, so no end filter is needed: 0 lexico-infeasible regions on 135 problems; serial 1.04x faster, 1.45x to 1.58x on the two largest degenerate cases, `bench/results/mplcp_case2_tolerance.md`); mpLPs are routed to `mplp_lex`; the neighbour search on the facet a region was entered through by a single pivot is skipped (it can only return the parent; about 2% faster serial, same regions; measured on Negishi, median ratio 1.02 to 1.03 against an A/A noise band of 0.99 to 1.01 on the larger problems, see `bench/results/negishi_entry_skip_ab.md`; no resolvable gain at 16 threads); a facet whose Case-2 neighbour search would only return a known region is skipped when a known region R has the opposite row on the same hyperplane and contains the facet (checked on the facet's clip vertices; sound for lexico-feasible regions, Lean `known_region_skip`): 3 to 5 parameters only, where the clip vertices exist and the check is cheap; 11 to 41% of the Case-2 facets are skipped, serial 1.05 to 1.15x faster on `masses2_N4` to `N8` and `pop_006`, neutral elsewhere, no effect above 6 parameters (no vertices), `bench/results/mplcp_facet_certificate.md`; each region's law is read from the pivot tableau instead of a fresh KKT solve (same regions; coefficients agree with the KKT solve to about 6e-9 relative, so not bit-identical; `mplcp::set_tableau_law(false)` restores the KKT solve); child tableaux are pivoted lazily when popped (a shared parent, no time change, 4% to 29% less peak memory on 3 to 8 parameter problems) and rebuilt from scratch every 32 levels instead of 8 (the pivot drift does not grow with depth; 1% to 6% faster serial on sys3x2_N3 to N7 and masses2_N8, same active sets and order, facet rows within 2e-12 except 1.6e-8 on pop_005; measured on Negishi against an A/A band of 0.98 to 1.00, see `bench/results/mplcp_tableau_handling.md`) |
 | `mplcp_enum` | Herceg, Jones, Kvasnica, Morari 2015 | paper | basis enumeration for general M (mpQP and mpLP); exponential |
 | `mplp_lex` | Jones, Kerrigan, Maciejowski 2007 | paper | lexicographic mpLP: unique, gap- and overlap-free partition for degenerate mpLPs; the fastest mpLP solver on the benchmark |
 | `algorithms::dp::solve_mpc_dp` | Mitze, Mönnigmann 2020, 2022; Mitze, Kvasnica, Mönnigmann 2023 | paper | active-set dynamic programming over the MPC horizon; takes the MPC model (`mpc::MpcProblem`) |
@@ -181,9 +181,11 @@ function. Every exact method returns the same set of critical regions as PPOPT o
 
 ### Which one to use
 
-- **Strictly convex mpQP:** `mplcp`. It is the fastest serial method on 8 of the 9 benchmark problems (1.2x to
-  1.8x faster than `geometric`) and the reference for degenerate mpQPs. `mplcp_parallel`
+- **Strictly convex mpQP with up to about 4 parameters:** `mplcp`. It is the fastest serial method on 8 of the 9
+  benchmark problems (1.2x to 1.8x faster than `geometric`) and the reference for degenerate mpQPs. `mplcp_parallel`
   scales to 4.7x on 8 threads on the larger problems and falls back to serial on small ones.
+- **Strictly convex mpQP with 5 or more parameters:** `graph`, which is 1.3x to 1.9x faster than `mplcp` there
+  on the large suite. `combinatorial` is worth trying when the constraints are few.
 - **mpLP:** `mplp_lex`. It is the fastest on every mpLP in the benchmark and gives a unique gap-free partition
   even when the problem is primal and dual degenerate.
 - **General fallback:** `geometric`, which handles every program class and is robust on degenerate problems.
@@ -370,8 +372,13 @@ thin but real: direct QP solves confirm them, and its default `lowdim_tol` disca
 | masses2_N6 | 901 | 27.5 ms (`mplcp`) |
 
 **Larger problems** (`bench/problems_large`, 131 MPC, POP and random problems with up to 428,841 regions and 10
-parameters; `bench/results/large.md`): `mplcp` is the fastest exact solver overall, at a geometric mean of 0.76x the
-time of `graph`. Those runs come from a shared, busy machine.
+parameters; `bench/results/large.md`): `mplcp` is the fastest exact solver overall, at a geometric mean of 0.92x the
+time of `graph` (119 problems solved).
+- The advantage holds at few parameters: 0.17x to 0.57x of `graph` at 1 to 3 parameters and 0.91x at 4.
+- From 5 parameters on, `graph` is faster: `mplcp` takes 1.29x at 5 and 1.4x to 1.9x at 6 to 10.
+- Five `mplcp` and five `geometric` runs returned no regions, because of a start-region bug since fixed. An earlier
+  summary counted them as solves and reported 0.76x.
+- Those runs come from a shared, busy machine; a rerun on Negishi is pending.
 
 ## Correctness
 
