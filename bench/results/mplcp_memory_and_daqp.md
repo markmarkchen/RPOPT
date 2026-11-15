@@ -97,8 +97,16 @@ Sampling cannot see slivers of radius 1e-7, so "overlap-free" is at the sampling
 
 Site: the Chebyshev LP of the Case-2 branch test (`pivot_facet`) and of the rank-1 sub-facet test, for polytopes
 `{x : e x <= f}`. `daqp_certainly_empty` runs the in-crate DAQP kernel on the unit-normalised rows and accepts an
-**empty** verdict only with a checked Farkas certificate (`p >= 0`, `|sum p_i a_i|_1 R + sum p_i b_i < -1e-10 sum p_i`
-with R = 1e3). Everything else, including every nonempty answer, goes to the LP unchanged.
+**empty** verdict only with a checked Farkas certificate. The multipliers are clamped to `max(p, 0)` and the residual
+`r = sum p_i a_i` and gap `g = sum p_i b_i` are recomputed from the clamped vector; the polytope is empty when
+`g + |r|_1 R < -1e-10 sum p_i`. `R` is the Euclidean radius of the parameter box (`theta_bbox`, finite LPs), because the
+facet coordinates satisfy `|x|_inf <= |x|_2 <= |theta|_2`; when the box is unbounded or unavailable no certificate is
+accepted. (The first version used a fixed R = 1e3 and charged negative multipliers as `neg * R`; Lean round 11,
+Finding 17, showed that is not sound in principle: 5 random problems, `rand_t8_x5_m20_s1`, `rand_t8_x6_m18_s0`,
+`rand_t8_x6_m24_s0`, `rand_t10_x6_m18_s0`, `rand_t10_x6_m24_s0`, leave a parameter unbounded above. Fixed in 23300a2.)
+Hashes after the fix: identical to the build before it on 58 of 58 problems, and identical with DAQP on and off on those
+5 unbounded-box problems (where no certificate is accepted). The certified share is unchanged: masses3_N4 84%, masses4_N3
+74%, pop_005 88%. Everything else, including every nonempty answer, goes to the LP unchanged.
 
 What did not work first, and why the shipped form is narrower:
 * DAQP deciding "nonempty" on rows shifted by 2e-7 (witness = minimum-norm point as hint): regions differed by 1 to 11
