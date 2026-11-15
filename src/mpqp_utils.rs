@@ -220,7 +220,7 @@ pub fn gen_cr_from_kkt(program: &MpProgram, active_set: &[usize], kkt: KktRegion
     };
     let mut start_r = start;
     start_r.push(0.0);
-    match chebyshev_ball_from(&e, &f, &start_r) {
+    match chebyshev_ball_from_or_cold(&e, &f, &start_r) {
         Some(s) => {
             if check_full_dim && s.x[nt] <= 1e-8 {
                 return None;
@@ -323,6 +323,23 @@ pub fn gen_cr_from_kkt(program: &MpProgram, active_set: &[usize], kkt: KktRegion
         y_indices: None,
         x_indices: None,
         cheb_radius,
+    })
+}
+
+/// `chebyshev_ball_from`; when the warm LP fails, the cold Chebyshev LP, and when that fails too, the cold LP on
+/// the rows in reverse order, then with the right hand side relaxed by 1e-9 (relative). The dense LP can fail on a
+/// nonempty system (found on masses8inf_N1, 16 parameters: the central region, radius 1.6, 95 rows, fails as given
+/// and solves after removing any one of 40 rows or after reordering; it was dropped by every exact solver, 17 of 2,000
+/// sampled parameters uncovered). The retries solve the same problem, so they change only runs that previously
+/// lost the region; the radius from a relaxed right hand side is off by at most 1e-9.
+fn chebyshev_ball_from_or_cold(a: &Mat, b: &[f64], x0: &[f64]) -> Option<crate::solver::lp::LpSolution> {
+    chebyshev_ball_from(a, b, x0).or_else(|| crate::utils::chebyshev_ball(a, b, &[])).or_else(|| {
+        let order: Vec<usize> = (0..a.rows).rev().collect();
+        let (ar, br) = (a.select_rows(&order), order.iter().map(|&i| b[i]).collect::<Vec<f64>>());
+        crate::utils::chebyshev_ball(&ar, &br, &[])
+    }).or_else(|| {
+        let relaxed: Vec<f64> = b.iter().map(|v| v + 1e-9 * (1.0 + v.abs())).collect();
+        crate::utils::chebyshev_ball(a, &relaxed, &[])
     })
 }
 
@@ -811,7 +828,7 @@ pub fn gen_cr_from_law_hinted(program: &MpProgram, active_set: &[usize], law: cr
     };
     let mut start_r = start;
     start_r.push(0.0);
-    let s = chebyshev_ball_from(&e, &f, &start_r)?;
+    let s = chebyshev_ball_from_or_cold(&e, &f, &start_r)?;
     if s.x[nt] <= 1e-8 {
         return None;
     }
