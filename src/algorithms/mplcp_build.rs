@@ -212,11 +212,12 @@ pub(super) struct ChainGuard {
     off: AtomicBool,
     /// the number of regions the chain had built when the guard switched it off
     off_at: AtomicU64,
+    no_outer: AtomicU64,
 }
 
 impl ChainGuard {
     pub(super) fn new() -> ChainGuard {
-        ChainGuard { on: CHAIN.load(AO::Relaxed), reg: AtomicU64::new(0), fb: AtomicU64::new(0), eng: AtomicU64::new(0), init: AtomicU64::new(0), reb: AtomicU64::new(0), off: AtomicBool::new(false), off_at: AtomicU64::new(0) }
+        ChainGuard { on: CHAIN.load(AO::Relaxed), reg: AtomicU64::new(0), fb: AtomicU64::new(0), eng: AtomicU64::new(0), init: AtomicU64::new(0), reb: AtomicU64::new(0), off: AtomicBool::new(false), off_at: AtomicU64::new(0), no_outer: AtomicU64::new(0) }
     }
 
     fn chain_on(&self) -> bool {
@@ -228,6 +229,7 @@ impl ChainGuard {
         self.eng.fetch_add(st.engine_lps, AO::Relaxed);
         self.init.fetch_add(st.init_failures, AO::Relaxed);
         self.reb.fetch_add(st.rebuilt, AO::Relaxed);
+        self.no_outer.fetch_add(st.no_outer, AO::Relaxed);
         let r = self.reg.fetch_add(regions, AO::Relaxed) + regions;
         // an objective that went to the engine because the simplex failed, and a chain that could not be started at a vertex, both count
         let fallbacks = st.fallbacks + st.init_failures;
@@ -246,17 +248,18 @@ impl ChainGuard {
         LAST[4].store(self.init.load(AO::Relaxed), AO::Relaxed);
         LAST[5].store(self.reb.load(AO::Relaxed), AO::Relaxed);
         LAST[6].store(self.off_at.load(AO::Relaxed), AO::Relaxed);
+        LAST[7].store(self.no_outer.load(AO::Relaxed), AO::Relaxed);
     }
 }
 
 const LAST0: AtomicU64 = AtomicU64::new(0);
 /// Counters of the last finished solve, for reporting only (nothing reads them to decide anything).
-static LAST: [AtomicU64; 7] = [LAST0; 7];
+static LAST: [AtomicU64; 8] = [LAST0; 8];
 
 /// (regions built by the chain, objectives that fell back to the engine, engine LPs, chain switched off by the guard) of the last solve.
-/// (chains that could not start at a vertex, failed checks resolved by the rebuild, the region count at which the guard switched the chain off, 0 if it did not) of the last solve.
-pub(super) fn chain_detail() -> (u64, u64, u64) {
-    (LAST[4].load(AO::Relaxed), LAST[5].load(AO::Relaxed), LAST[6].load(AO::Relaxed))
+/// (failed attempts to start a state at a vertex, failed checks resolved by the rebuild, the region count at which the guard switched the chain off (0 if it did not), regions built without a finite outer box, so without the chain) of the last solve.
+pub(super) fn chain_detail() -> (u64, u64, u64, u64) {
+    (LAST[4].load(AO::Relaxed), LAST[5].load(AO::Relaxed), LAST[6].load(AO::Relaxed), LAST[7].load(AO::Relaxed))
 }
 
 pub(super) fn chain_stats() -> (u64, u64, u64, bool) {

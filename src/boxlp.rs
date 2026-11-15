@@ -38,6 +38,43 @@ use std::cell::RefCell;
 /// The result in the engine's order: lo, hi and the 2n optimal points [min x0, max x0, min x1, ...].
 pub type BoxPts = (Vec<f64>, Vec<f64>, Vec<Vec<f64>>);
 
+const GZ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// Reporting only: certified gaps g of the objectives the chain solved, by floor(log10 g) from 1e-16 (bucket 0, also g = 0) to 1e-6 (bucket 10) and above.
+static GAP_HIST: [std::sync::atomic::AtomicU64; 12] = [GZ; 12];
+
+fn note_gap(g: f64) {
+    let b = if g <= 1e-16 { 0 } else { ((g.log10().floor() + 17.0).max(0.0) as usize).min(11) };
+    GAP_HIST[b].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Clears the gap histogram (call before a solve whose gaps are to be reported).
+pub fn reset_gap_hist() {
+    for a in GAP_HIST.iter() {
+        a.store(0, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// (objectives solved by the chain, median bucket upper bound of g, share of g above 1e-9, share of g above 1e-7) since the last reset.
+pub fn gap_summary() -> (u64, f64, f64, f64) {
+    let h: Vec<u64> = GAP_HIST.iter().map(|a| a.load(std::sync::atomic::Ordering::Relaxed)).collect();
+    let tot: u64 = h.iter().sum();
+    if tot == 0 {
+        return (0, 0.0, 0.0, 0.0);
+    }
+    let mut acc = 0;
+    let mut med = 0.0;
+    for (b, &c) in h.iter().enumerate() {
+        acc += c;
+        if acc * 2 >= tot {
+            med = 10f64.powi(b as i32 - 16);
+            break;
+        }
+    }
+    // bucket b holds g in [10^(b-17), 10^(b-16))
+    let above = |from: usize| h[from..].iter().sum::<u64>() as f64 / tot as f64;
+    (tot, med, above(8), above(10))
+}
+
 /// Per-call statistics (for the census and the fallback guard).
 #[derive(Default, Clone, Copy, Debug)]
 pub struct Stats {
@@ -45,8 +82,10 @@ pub struct Stats {
     pub engine_lps: u64,
     /// objectives whose rank-one simplex failed (verification, no blocking row, singular pivot, iteration guard)
     pub fallbacks: u64,
-    /// chains in which no state could be formed at a vertex (the start, or an engine optimum): every later objective of the chain went to the engine
+    /// failed attempts to form a state at a vertex (the start, or an engine optimum), each followed by engine LPs for the later objectives of the chain
     pub init_failures: u64,
+    /// 1 when the caller gave no finite outer box and the chain was not used at all
+    pub no_outer: u64,
     /// failed verifications that the rebuild of the state resolved (verified, or the simplex went on)
     pub rebuilt: u64,
 }
@@ -397,6 +436,7 @@ pub fn shared_start(e: &Mat, f: &[f64], pts: &[f64], ea: &[f64], ef: f64) -> Opt
 pub fn box_chain_in(e: &Mat, f: &[f64], center: &[f64], start: Option<&[f64]>, outer: Option<(&[f64], &[f64])>, stats: &mut Stats) -> Option<BoxPts> {
     let n = e.cols;
     let chain = outer.map_or(false, |(lo, hi)| lo.iter().chain(hi).all(|v| v.is_finite()));
+    stats.no_outer += (!chain) as u64;
     let ob = outer.unwrap_or((&[], &[]));
     // order: all maxima, then all minima reversed (adjacent objectives are close)
     let mut order: Vec<usize> = (0..n).map(|k| 2 * k + 1).collect();
@@ -419,6 +459,7 @@ pub fn box_chain_in(e: &Mat, f: &[f64], center: &[f64], start: Option<&[f64]>, o
                     (Some(g), resolved) => {
                         pts[j] = sc.x.clone();
                         gaps[j] = g;
+                        note_gap(g);
                         stats.rebuilt += resolved as u64;
                         done = true;
                     }
