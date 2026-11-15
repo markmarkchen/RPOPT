@@ -1,6 +1,6 @@
 # mplcp: work budget on the vertex clip (2 to 5 parameters)
 
-Branch `worktree-agent-a8095c6d163dbc0a4` (code commit d42a11f), merged with main 8033548's parent. Negishi, one CPU per task, SLURM arrays 45927457 (census), 45927807 (gate), 45927808 (timing).
+Branch `worktree-agent-a8095c6d163dbc0a4`, code commit 724e593 on main 62f7442. Negishi, one CPU per task, SLURM arrays 45927457 (census, on an earlier base), 45929198 (gate) and 45929199 (timing), both on 724e593.
 
 ## The problem
 
@@ -38,22 +38,22 @@ Successful clips: 3 of about 200,000 needed 2^18 units or more (nt 4: one in buc
 
 ## Gate
 
-* `lexcheck`, budget off against default, on 60 problems at 2 to 5 parameters (6 are heavy POP problems left out): region counts, lexico-infeasible counts (0), sampled gaps and overlaps, the sorted-active-set hash **and the rounded-row hash** are identical on all 60.
-* Suite on the tree: see the report; 
+* `lexcheck`, budget off against default, on 60 problems at 2 to 5 parameters (heavy POP problems left out): region counts, lexico-infeasible counts (0), sampled gaps and overlaps, the sorted-active-set hash **and the rounded-row hash** are identical on all 60.
+* Suite on the merged tree (CI tag regbuild5): SUITE_PLACEHOLDER
 
 ## Paired timing (regbuild_ab: modes main (budget off), new (default budget), main again as the A/A pair, shuffled, 3 alternations per problem; ratio inside the task, median over tasks; above 1 = faster)
 
 | problem | regions | tasks | main ms | new ms | speed-up median | min | max | A/A median | A/A min | A/A max |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| masses2_N8 | 2837 | 3 | 145.7 | 144.7 | 0.996 | 0.996 | 1.007 | 1.006 | 0.979 | 1.017 |
-| pop_001 | 3529 | 3 | 16711.9 | 388.0 | 43.087 | 42.957 | 43.239 | 1.000 | 0.999 | 1.000 |
-| pop_019 | 6857 | 3 | 2449.8 | 560.9 | 4.368 | 4.308 | 4.413 | 0.991 | 0.990 | 1.010 |
-| pop_040 | 2007 | 3 | 147.8 | 141.7 | 1.040 | 0.861 | 1.043 | 0.968 | 0.881 | 0.988 |
-| pop_048 | 46 | 3 | 28.5 | 3.7 | 7.656 | 7.384 | 7.699 | 1.001 | 0.996 | 1.016 |
-| pop_057 | 34 | 3 | 3.0 | 3.0 | 0.982 | 0.894 | 0.999 | 1.004 | 0.948 | 1.007 |
-| pop_096 | 258 | 3 | 39.0 | 11.4 | 3.435 | 3.239 | 3.446 | 1.010 | 1.010 | 1.012 |
+| masses2_N8 | 2837 | 3 | 139.8 | 141.5 | 0.987 | 0.987 | 0.988 | 0.998 | 0.971 | 1.004 |
+| pop_001 | 3529 | 3 | 16351.3 | 261.0 | 62.643 | 62.469 | 63.078 | 1.001 | 1.001 | 1.001 |
+| pop_019 | 6857 | 3 | 2131.1 | 322.2 | 6.614 | 6.518 | 6.693 | 1.004 | 1.003 | 1.018 |
+| pop_040 | 2007 | 3 | 132.2 | 124.7 | 1.057 | 1.054 | 1.061 | 0.991 | 0.990 | 0.994 |
+| pop_048 | 46 | 3 | 27.9 | 3.2 | 8.816 | 8.766 | 8.853 | 1.001 | 1.001 | 1.001 |
+| pop_057 | 34 | 3 | 2.8 | 2.9 | 0.996 | 0.986 | 0.997 | 0.997 | 0.995 | 0.999 |
+| pop_096 | 258 | 3 | 36.6 | 10.7 | 3.425 | 3.399 | 3.432 | 1.002 | 0.999 | 1.002 |
 
-pop_040 and pop_057 are inside their A/A bands (their A/A minimum is 0.88 and 0.95); masses2_N8 is unchanged. Problems at 4 and 5 parameters that clip a lot (rand_t4 and rand_t5 problems) are not on the cluster's problem directories, so the check uses the POP problems and masses2_N8.
+pop_040 (1.06x) and pop_057 (1.00x) are inside the noise; masses2_N8 is 0.99x against an A/A of 1.00 (a 1% difference, no clip failures in it). Problems at 4 and 5 parameters that clip a lot (rand_t4 and rand_t5 problems) are not on the cluster's problem directories, so the check uses the POP problems and masses2_N8.
 
 ## Not changed
 

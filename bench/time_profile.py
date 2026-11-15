@@ -17,7 +17,9 @@ PHASES = [('cand', 'neighbour search / candidate tests'), ('rowgen', 'row genera
 
 def from_md(path, solver):
     t = open(path).read()
-    ms = float(re.search(r'\| \S+ \| ' + solver + r' \| \d+ \| ([\d.]+) \|', t).group(1))
+    mo = re.search(r'\| \S+ \| ' + solver + r' \| (\d+) \| ([\d.]+) \|', t)
+    ms = float(mo.group(2))
+    regions = int(mo.group(1))
     total = ms * 1e6
     sec = t.split('### Share of total solve time by purpose')[1].split('###')[0]
     row = [l for l in sec.split('\n') if l.startswith('| ') and solver in l][0].split('|')
@@ -42,7 +44,7 @@ def from_md(path, solver):
     build_total = cons * total
     build_lp = lpshare * total
     box, perrow, cheb = bbox * total, red * total, cheb * total
-    return {'total': total, 'cand': cand, 'case2': 0.0, 'rank1': 0.0, 'tab': 0.0, 'build_total': build_total, 'rowgen': max(0.0, build_total - build_lp), 'box': box, 'perrow': perrow, 'cheb': cheb,
+    return regions, {'total': total, 'cand': cand, 'case2': 0.0, 'rank1': 0.0, 'tab': 0.0, 'build_total': build_total, 'rowgen': max(0.0, build_total - build_lp), 'box': box, 'perrow': perrow, 'cheb': cheb,
             'build_other': max(0.0, build_lp - box - perrow - cheb), 'rest': total - cand - build_total}
 
 
@@ -63,7 +65,8 @@ def load(cache, old, solver, problem):
         g = os.path.join(old, '%s.%s.%s.md' % (pre, solver, problem))
         if os.path.exists(g):
             try:
-                return from_md(g, solver), 'cached report %s (shares rounded to 1%%)' % os.path.basename(g), None
+                rg, prof = from_md(g, solver)
+                return prof, 'cached report %s (shares rounded to 1%%)' % os.path.basename(g), rg
             except Exception as e:
                 sys.stderr.write('parse %s: %s\n' % (g, e))
     return None, 'missing', None
@@ -76,12 +79,12 @@ def main():
     summary = []
     for p in PROBLEMS:
         md.append('## %s\n' % p)
-        md.append('| solver | solve ms | ' + ' | '.join(n for _, n in PHASES) + ' | source |')
-        md.append('|---|---:|' + '---:|' * len(PHASES) + '---|')
+        md.append('| solver | regions | solve ms | ' + ' | '.join(n for _, n in PHASES) + ' | source |')
+        md.append('|---|---:|---:|' + '---:|' * len(PHASES) + '---|')
         for s in SOLVERS:
             prof, src, regions = load(cache, old, s, p)
             if prof is None:
-                md.append('| %s | - | ' % s + ' | '.join('-' for _ in PHASES) + ' | %s |' % src)
+                md.append('| %s | - | - | ' % s + ' | '.join('-' for _ in PHASES) + ' | %s |' % src)
                 continue
             tot = prof['total']
             cells = []
@@ -92,7 +95,7 @@ def main():
                 cells.append('-' if v <= 0 and k in ('tab',) else '%.1f (%.0f%%)' % (v / 1e6, 100 * v / tot))
             if s == 'mplcp' and prof.get('case2', 0) > 0:
                 cells[0] += ', Case 2 %.1f (rank-1 %.1f)' % (prof['case2'] / 1e6, prof['rank1'] / 1e6)
-            md.append('| %s | %.1f | ' % (s, tot / 1e6) + ' | '.join(cells) + ' | %s |' % src)
+            md.append('| %s | %s | %.1f | ' % (s, '{:,}'.format(regions) if regions else '-', tot / 1e6) + ' | '.join(cells) + ' | %s |' % src)
             csv.append(','.join([p, s, src.split(' (')[0].replace(',', ';'), str(regions or ''), '%.3f' % (tot / 1e6)] + ['%.3f' % (v / 1e6) for v in vals] + ['%.3f' % (prof.get('case2', 0) / 1e6), '%.3f' % (prof.get('rank1', 0) / 1e6)]))
             top = max(range(len(PHASES)), key=lambda i: vals[i])
             summary.append((p, s, tot / 1e6, PHASES[top][1], 100 * vals[top] / tot, 100 * (prof['box'] + prof['perrow'] + prof['cheb']) / tot))
