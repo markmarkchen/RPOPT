@@ -1220,8 +1220,10 @@ pub fn standard_normal<R: Rng>(rng: &mut R) -> f64 {
 }
 
 /// The centre, then 500 points drawn uniformly from the ball of radius `radius` around it (a
-/// Gaussian direction scaled by radius·u^(1/p)). Every point lies in the Chebyshev ball of the
-/// feasible set, so every parameter it yields is feasible.
+/// Gaussian direction scaled by radius·u^(1/p)). With x held at the centre, every point satisfies
+/// every inequality row of the feasible set (Lean `chebyshev_ball_feasible`). Equality rows hold
+/// only at the centre, so with equality constraints a sample can be infeasible; the QP solve that
+/// follows rejects it.
 pub(crate) fn ball_points<'a, R: Rng>(center: &'a [f64], radius: f64, rng: &'a mut R) -> impl Iterator<Item = Vec<f64>> + 'a {
     let p = center.len();
     std::iter::once(center.to_vec()).chain((0..500).map(move |_| {
