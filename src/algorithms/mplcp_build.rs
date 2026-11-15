@@ -414,9 +414,12 @@ fn clip_flags(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &[f64], want:
     r
 }
 
-/// Work budget of one vertex clip (edge pairs examined plus duplicate scans plus vertex-row products); a clip that
-/// exceeds it gives up and the region takes the LP path. `u64::MAX` = no budget.
-static CLIP_BUDGET: AtomicU64 = AtomicU64::new(u64::MAX);
+/// Work budget of one vertex clip (vertex-row products, edge pairs examined and duplicate scans, counted in `clip_n`).
+/// A clip that exceeds it gives up and the region takes the LP path, which costs about 0.1 to 0.3 ms per region. At
+/// about 1.5 ns per unit, 2^18 units are about 0.4 ms. Census over 60 problems at 2 to 5 parameters
+/// (`bench/results/mplcp_clip_budget.md`): 1,430,000 successful clips, of which 3 needed more than 2^18 units, against
+/// 1,500,000,000 and more units for the clips that failed at the 600-vertex guard (12 to 170 ms each). `u64::MAX` = no budget.
+static CLIP_BUDGET: AtomicU64 = AtomicU64::new(super::DEFAULT_CLIP_BUDGET);
 
 pub(super) fn set_clip_budget(b: u64) {
     CLIP_BUDGET.store(b, AO::Relaxed);

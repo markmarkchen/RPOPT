@@ -2680,6 +2680,9 @@ pub fn box_chain_stats() -> (u64, u64, u64, bool) {
     build::chain_stats()
 }
 
+/// Default work budget of one vertex clip (see `mplcp_build.rs`): 2^18 units, about 0.4 ms.
+pub const DEFAULT_CLIP_BUDGET: u64 = 1 << 18;
+
 /// Work budget of one vertex clip in mplcp's region builder (2 to 5 parameters): a clip that exceeds it gives up and
 /// the region takes the LP path. `u64::MAX` switches the budget off.
 pub fn set_clip_budget(budget: u64) {

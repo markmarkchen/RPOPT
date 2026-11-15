@@ -35,6 +35,10 @@ fn region_hash(regs: &[rpopt::critical_region::CriticalRegion]) -> u64 {
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let ns: usize = a[1].parse().unwrap();
+    // RPOPT_CLIP_BUDGET=<units>: work budget of mplcp's vertex clip (default 2^18, u64::MAX = none)
+    if let Some(b) = std::env::var("RPOPT_CLIP_BUDGET").ok().and_then(|v| v.parse().ok()) {
+        rpopt::algorithms::mplcp::set_clip_budget(b);
+    }
     // RPOPT_BOXCHAIN=0: no chained bounding-box LPs in the mplcp LP-path builder (the shared builder instead)
     if let Ok(v) = std::env::var("RPOPT_BOXCHAIN") {
         rpopt::algorithms::mplcp::set_box_chain(v != "0");
