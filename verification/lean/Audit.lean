@@ -57,3 +57,36 @@ import RpoptProofs
 #print axioms Rpopt.primal_direction
 #print axioms Rpopt.nondeg_basis_unique
 #print axioms Rpopt.lexOptimal_unique
+-- Round 2: step-2 certificate (known-region skip)
+#print axioms Rpopt.vertices_subset_polyhedron
+#print axioms Rpopt.active_row_multiple
+#print axioms Rpopt.near_side_subset
+#print axioms Rpopt.lexFeasible_of_mem_interior
+#print axioms Rpopt.known_region_unique_neighbour
+#print axioms Rpopt.known_region_skip
+-- Round 2: Case 2 of Algorithm 2 at a facet point
+#print axioms Rpopt.lex_ratio_pivot_on
+#print axioms Rpopt.first_step_rows
+#print axioms Rpopt.lexmin_zero_row
+#print axioms Rpopt.first_step_nonAlpha
+#print axioms Rpopt.pivVec_num_zero
+#print axioms Rpopt.terminal_rows
+#print axioms Rpopt.ray3_eventually
+#print axioms Rpopt.ray_lexFeasible
+#print axioms Rpopt.walk_sound
+#print axioms Rpopt.exists_lexmin
+#print axioms Rpopt.case2_lexmin_accepted
+#print axioms Rpopt.neighbour_unique_on_ray
+#print axioms Rpopt.lcp_multipliers_dependent
+#print axioms Rpopt.case2_needs_dependent_rows
+-- Round 2: termination of the facet walk (the two caps)
+#print axioms Rpopt.chain_returns_to_one
+#print axioms Rpopt.chain_no_repeat
+#print axioms Rpopt.chain_length_bound
+#print axioms Rpopt.lex_pivot_reverse_on
+#print axioms Rpopt.walkStep_allLexPos
+#print axioms Rpopt.walkStep_nonAlphaLexPos
+#print axioms Rpopt.walkStep_injective_full
+#print axioms Rpopt.walkStep_injective_inv
+#print axioms Rpopt.walk_no_repeat
+#print axioms Rpopt.walk_repeat_returns
