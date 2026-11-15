@@ -1059,7 +1059,12 @@ pub(crate) fn degenerate_start(program: &MpProgram, rng: &mut StdRng) -> Option<
             }
         }
     }
-    None
+    // many parameters: the cube misses the feasible set, the centre and the ball do not (see
+    // MpProgram::gen_optimal_active_set)
+    crate::program::ball_points(center, radius, rng).find_map(|test| {
+        let active = program.active_set_at(&test)?;
+        canonical_basis(program, &active, &test)
+    })
 }
 
 /// Spjøtvold et al. facet-stepping exploration.

@@ -27,7 +27,7 @@ fn child(path: &str, alg: &str) {
     let prog = Arc::new(MpProgram::from_json_file(std::path::Path::new(path)).unwrap());
     let algo = MpqpAlgorithm::from_name(alg).unwrap_or_else(|| panic!("unknown algorithm {alg}"));
     let opts = SolveOptions::default();
-    // RPOPT_CERT=0|1|2|3|4: mplcp facet certificate off, on (default, 3 to 5 parameters), audit, on at 2 to 6, audit at 2 to 6
+    // RPOPT_CERT=0|1|2|3|4: mplcp facet certificate off (default), on (3 to 5 parameters), audit, on at 2 to 6, audit at 2 to 6
     if let Ok(m) = std::env::var("RPOPT_CERT") {
         rpopt::algorithms::mplcp::set_certificate(m.parse().unwrap());
     }

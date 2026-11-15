@@ -895,10 +895,12 @@ struct Cand {
 /// 4 (audit) apply to every count the vertex clip covers (2 to 6). At 2 parameters the problems are
 /// too small to repay the bookkeeping, and at 6 the check (many vertices per facet) can cost more
 /// than the search it saves (rand_t6_x5_m20_s0: 0.74x).
-static CERT: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(1);
+static CERT: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 
-/// Sets the facet-certificate mode of `Method::Pivot` and `Method::PivotParallel`: 0 off, 1 on
-/// (default), 2 audit.
+/// Sets the facet-certificate mode of `Method::Pivot` and `Method::PivotParallel`: 0 off (the
+/// default: at 6 parameters it lost a real region on masses3_N4, and the stray overlapping regions of
+/// pop_005, pop_007 and pop_011 could pass as the known neighbour; it stays off until that is
+/// understood), 1 on at 3 to 5 parameters, 2 audit, 3 and 4 the same at 2 to 6.
 pub fn set_certificate(mode: u8) {
     CERT.store(mode, std::sync::atomic::Ordering::Relaxed);
 }

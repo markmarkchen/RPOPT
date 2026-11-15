@@ -78,11 +78,12 @@ pub fn remove_duplicate_rows(a: &Mat, b: &[f64]) -> (Mat, Vec<f64>) {
         return (a.clone(), b.to_vec());
     }
     let mut keep: Vec<usize> = Vec::with_capacity(a.rows);
-    let mut seen: std::collections::HashSet<Vec<u64>> = std::collections::HashSet::with_capacity(a.rows);
+    // A row is a duplicate when every entry (and the right-hand side) has the same canonical bits
+    // as an earlier kept row. Pairwise comparison with an early exit on the first differing
+    // entry beats hashing a Vec per row for the few dozen rows of a region.
+    let same = |i: usize, j: usize| -> bool { canonical_bits(b[i]) == canonical_bits(b[j]) && a.row(i).iter().zip(a.row(j)).all(|(x, y)| canonical_bits(*x) == canonical_bits(*y)) };
     for i in 0..a.rows {
-        let mut key: Vec<u64> = a.row(i).iter().map(|v| canonical_bits(*v)).collect();
-        key.push(canonical_bits(b[i]));
-        if seen.insert(key) {
+        if !keep.iter().any(|&k| same(k, i)) {
             keep.push(i);
         }
     }
