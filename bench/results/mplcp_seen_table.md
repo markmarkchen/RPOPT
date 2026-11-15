@@ -98,7 +98,7 @@ snap landed. On the merged tree:
 
 - **Region sets:** sorted active sets with the facet rows rounded to 1e-6 (`RPOPT_HASH_SCALE=1e6`, `region_hash`) are
   identical to df4176c on 54 of 54 problems (the 51 above plus `pop_001`, `pop_052` and `pop_076`).
-- **Tests:** TESTS_AB5_PLACEHOLDER
+- **Tests:** 146 passed, 0 failed, 3 ignored (CI gate, 149 tests, gate profile, 1 CPU each, patched script so that the tree is rebuilt), the same count as main.
 - **Paired timing** (new, df4176c, df4176c again; 3 alternations, shuffled order, 3 solves per binary, median per task,
   median ratio over the 3 tasks):
 
