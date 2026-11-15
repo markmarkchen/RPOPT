@@ -1524,6 +1524,29 @@ static PEAK_PARENTS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicU
 static TAB_BYTES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static TAB_BUDGET: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(256 << 20);
 
+static SEEN_LEN: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static SEEN_BYTES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static PEAK_QUEUE_LEN: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static PEAK_QUEUE_BYTES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Memory held by the search structures of the last serial exploration: (entries of the `Seen` map, its bytes by
+/// capacity, peak queued items, peak bytes of the queued items without their shared tableaux).
+pub fn search_stats() -> (usize, usize, usize, usize) {
+    let g = |a: &std::sync::atomic::AtomicUsize| a.load(std::sync::atomic::Ordering::Relaxed);
+    (g(&SEEN_LEN), g(&SEEN_BYTES), g(&PEAK_QUEUE_LEN), g(&PEAK_QUEUE_BYTES))
+}
+
+fn item_bytes(it: &Item) -> usize {
+    std::mem::size_of::<Item>()
+        + it.center.as_ref().map_or(0, |c| c.capacity() * 8)
+        + it.entry.as_ref().map_or(0, |e| e.0.capacity() * 8)
+        + it.verts.as_ref().map_or(0, |v| v.capacity() * 8)
+        + match &it.tab {
+            TabSrc::Ready(t) => (t.t.capacity() + t.rho.capacity() + t.row_var.capacity() + t.col_var.capacity()) * 8,
+            _ => 0,
+        }
+}
+
 /// (peak number of live parent tableaux, bytes of one tableau) of the last serial exploration.
 pub fn tab_stats() -> (usize, usize) {
     (PEAK_PARENTS.load(std::sync::atomic::Ordering::Relaxed), TAB_BYTES.load(std::sync::atomic::Ordering::Relaxed))
@@ -2155,8 +2178,13 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
     LIVE_PARENTS.store(0, std::sync::atomic::Ordering::Relaxed);
     PEAK_PARENTS.store(0, std::sync::atomic::Ordering::Relaxed);
     let budget = TAB_BUDGET.load(std::sync::atomic::Ordering::Relaxed);
+    PEAK_QUEUE_LEN.store(0, std::sync::atomic::Ordering::Relaxed);
+    PEAK_QUEUE_BYTES.store(0, std::sync::atomic::Ordering::Relaxed);
+    let mut queue_bytes = item_bytes(queue.front().unwrap());
     loop {
-        let Some(Item { idx, center, tab, depth, entry, verts }) = queue.pop_front() else { break };
+        let Some(it) = queue.pop_front() else { break };
+        queue_bytes -= item_bytes(&it);
+        let Item { idx, center, tab, depth, entry, verts } = it;
         if idx >= wave_limit {
             wave_limit = regions.len();
         }
@@ -2210,13 +2238,20 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
             if cmode != 6 && cert_active(cmode, plcp.nt) {
                 known.add(regions.len() - 1, regions.last().unwrap());
             }
-            queue.push_back(Item { idx: regions.len() - 1, center: ce, tab: src, depth: nd, entry: ent, verts: vt });
+            let it = Item { idx: regions.len() - 1, center: ce, tab: src, depth: nd, entry: ent, verts: vt };
+            queue_bytes += item_bytes(&it);
+            queue.push_back(it);
+            PEAK_QUEUE_LEN.fetch_max(queue.len(), std::sync::atomic::Ordering::Relaxed);
+            PEAK_QUEUE_BYTES.fetch_max(queue_bytes, std::sync::atomic::Ordering::Relaxed);
         }
         if lazy_children > 0 {
             let live = LIVE_PARENTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
             PEAK_PARENTS.fetch_max(live, std::sync::atomic::Ordering::Relaxed);
         }
     }
+    SEEN_LEN.store(seen.len(), std::sync::atomic::Ordering::Relaxed);
+    // hashbrown: one control byte per bucket and (key header + slot) per bucket, at the load factor 7/8
+    SEEN_BYTES.store(seen.capacity() * (1 + std::mem::size_of::<(Vec<usize>, Slot)>()) + seen.keys().map(|k| k.capacity() * 8).sum::<usize>(), std::sync::atomic::Ordering::Relaxed);
     regions
 }
 
