@@ -97,7 +97,7 @@ fn profile(alg: &str, s: &Stats, dt: f64) -> Value {
         build_other = (build_lp - box_ns - perrow - cheb).max(0.0);
     }
     let rest = total - cand - tab - build_total;
-    json!({"total": total, "cand": cand, "case2": case2, "rank1": rank1, "tab": tab, "build_total": build_total, "rowgen": rowgen, "box": box_ns, "perrow": perrow, "cheb": cheb, "build_other": build_other, "rest": rest})
+    json!({"total": total, "cand": cand, "case2": case2, "rank1": rank1, "tab": tab, "build_total": build_total, "rowgen": rowgen, "box": box_ns, "perrow": perrow, "cheb": cheb, "build_other": build_other, "rest": rest, "setup": slot(s, d::PF_SETUP_NS), "init": slot(s, d::PF_INIT_NS), "loop": slot(s, d::PF_LOOP_NS)})
 }
 
 struct Row {

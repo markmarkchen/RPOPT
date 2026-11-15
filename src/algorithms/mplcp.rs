@@ -1917,7 +1917,11 @@ pub fn solve(program: &MpProgram, seed: u64, method: Method) -> Result<Vec<Criti
             if program.q.is_none() {
                 return Err("mplcp: mpLP not supported by the pivoting method (use mplcp_enum)".into());
             }
+            #[cfg(feature = "lp_census")]
+            let _tsetup = crate::census_diag::t0();
             let plcp = Plcp::new(program).ok_or("mplcp: no pLCP form (Q not positive definite or singular equality block)")?;
+            #[cfg(feature = "lp_census")]
+            crate::census_diag::lap(crate::census_diag::s::PF_SETUP_NS, _tsetup);
             let regions = if method == Method::PivotParallel { pivot_solve_par(program, &plcp, seed) } else { pivot_solve(program, &plcp, seed) };
             Ok(regions)
         }
@@ -2938,7 +2942,13 @@ fn build_cand(program: &MpProgram, plcp: &Plcp, parent: &Tab, c: &Cand, want_ver
 }
 
 fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegion> {
+    #[cfg(feature = "lp_census")]
+    let _tinit = crate::census_diag::t0();
     let Some((initial, init_center)) = initial_region(program, seed) else { return vec![] };
+    #[cfg(feature = "lp_census")]
+    crate::census_diag::lap(crate::census_diag::s::PF_INIT_NS, _tinit);
+    #[cfg(feature = "lp_census")]
+    let _tloop = crate::census_diag::t0();
     build::reset_guard();
     let mut seen: Seen = Seen::default();
     seen.insert(initial.active_set.clone(), Slot::Built(0));
@@ -3049,6 +3059,8 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
             PEAK_PARENTS.fetch_max(live, std::sync::atomic::Ordering::Relaxed);
         }
     }
+    #[cfg(feature = "lp_census")]
+    crate::census_diag::lap(crate::census_diag::s::PF_LOOP_NS, _tloop);
     SEEN_LEN.store(seen.len(), std::sync::atomic::Ordering::Relaxed);
     // hashbrown: one control byte per bucket and (key header + slot) per bucket, at the load factor 7/8
     SEEN_BYTES.store(seen.capacity() * (1 + std::mem::size_of::<(Vec<usize>, Slot)>()) + seen.keys().map(|k| k.capacity() * 8).sum::<usize>(), std::sync::atomic::Ordering::Relaxed);

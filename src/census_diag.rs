@@ -140,6 +140,9 @@ pub mod s {
     // time profile of the LP-path builder (always counted under lp_census)
     pub const PF_BOX_NS: usize = 225; // box_chain, whole call
     pub const PF_PERROW_NS: usize = 226; // projection tests and per-row LPs
+    pub const PF_SETUP_NS: usize = 227; // Plcp::new
+    pub const PF_INIT_NS: usize = 228; // initial_region
+    pub const PF_LOOP_NS: usize = 229; // the exploration loop of pivot_solve
     // Clarkson simulation, variant A (seed: parameter-set rows) at SIM_A, variant B (A + entry + parent's kept rows) at SIM_B
     pub const SIM_A: usize = 50;
     pub const SIM_B: usize = 62;

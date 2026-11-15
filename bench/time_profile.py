@@ -55,7 +55,10 @@ def load(cache, old, solver, problem):
         except Exception:
             pass
     if os.path.exists(f + '.timeout'):
-        return None, 'no result within the time limit', None
+        rc = open(f + '.timeout').read().strip()
+        if rc == 'rc=137':
+            return None, 'killed at the memory limit (up to 8 GB)', None
+        return None, 'no result within 1500 s (%s)' % rc, None
     for pre in ('d1', 'm1'):
         g = os.path.join(old, '%s.%s.%s.md' % (pre, solver, problem))
         if os.path.exists(g):
