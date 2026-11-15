@@ -438,7 +438,10 @@ time of `graph` (119 problems solved).
   lexico-feasible just across it, that its sub-facets cover the facet, and that its pivot walk never repeats a
   state from a lexico-feasible start (so the `depth > 6` and `8n + 50` caps can become a cycle check that reports
   instead of dropping neighbours). The known-region skip of Case-2 facets is safe when the known region is
-  lexico-feasible. Open: KKT necessity, Case-2 completeness (a Lemke-type termination statement), and the
+  lexico-feasible. For the rank-1 enumeration of Case 2 (one vanishing slack row, zero pivot) they show that the
+  members A + {c} - {j} chosen by the smallest ratio lambda_j / mu_j are exactly the neighbours across the facet,
+  and that dropping known members first leaves the explored set unchanged; ties go to the walk, as in the code.
+  Open: KKT necessity, Case-2 completeness (a Lemke-type termination statement), and the
   facet-graph connectivity behind coverage. Tolerances and floating point are not modelled. The model traced the
   pop_001 overlap to absolute tolerances in the Case-2 sign test of `pivot_facet`; that is fixed (see "Bugs found
   and fixed" below and `bench/results/mplcp_case2_tolerance.md`).
