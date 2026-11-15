@@ -1,7 +1,7 @@
 //! Per problem: mplcp region count, number of lexico-infeasible regions, and a sampled coverage
 //! check (gaps: feasible θ in no region; overlaps: θ strictly inside two regions).
 //!
-//!   lexcheck <samples> <problem.json>...
+//!   [LEX_ALG=<algorithm>] lexcheck <samples> <problem.json>...
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use rpopt::algorithms::{solve_mpqp, MpqpAlgorithm};
@@ -34,10 +34,12 @@ fn region_hash(regs: &[rpopt::critical_region::CriticalRegion]) -> u64 {
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let ns: usize = a[1].parse().unwrap();
+    // LEX_ALG: algorithm to solve with (default mplcp)
+    let alg = MpqpAlgorithm::from_name(&std::env::var("LEX_ALG").unwrap_or_else(|_| "mplcp".into())).expect("algorithm");
     for f in &a[2..] {
         let prog = Arc::new(MpProgram::from_json_file(std::path::Path::new(f)).unwrap());
         let t0 = std::time::Instant::now();
-        let sol = solve_mpqp(&prog, MpqpAlgorithm::Mplcp);
+        let sol = solve_mpqp(&prog, alg);
         let dt = t0.elapsed().as_secs_f64();
         let hash = region_hash(&sol.critical_regions);
         let lexbad = rpopt::algorithms::mplcp::count_lex_infeasible(&prog, &sol.critical_regions);
