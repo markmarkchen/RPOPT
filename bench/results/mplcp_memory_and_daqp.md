@@ -283,18 +283,35 @@ the same rule restricted to entries on which two orders disagree and restricted 
 regions on masses5_N3. Restricting to twin rows leaves the problems without twins untouched (0 entries snapped on
 masses5_N3 and masses4_N3, 5,069 and 2,529 rebuilds).
 
-### Gate (tree `w1` = 61d3649, Negishi, 1-CPU tasks; the later commit only makes the twin table lazy)
+### Gate (tree `x1` = 09fc452, main 59b2afb plus these changes, Negishi, 1-CPU tasks)
 
 * 58 problems, default budget against budget 0: hashes and sorted-set hashes identical (58 of 58).
-* 58 problems at the stress budget (1 MB) against budget 0: sorted sets identical on 57 of 58. `pop_001` 3,529 (was 4,710),
-  `masses5_N3` 5,268, `masses2_N8`, `masses3_N3` to `N5`, `masses4_N3`, `pop_005`, `pop_007`, `pop_017` equal. The exception is `masses4_N4`
-  (16,313 against 16,312), a sliver that the unsnapped build shows as well (the snap does not act there).
-* `pop_002` (321,026 regions) and `pop_033` (860,655 regions) at the default budget, which takes the rebuild path past 512 MiB,
-  against budget 0: sorted sets identical (`cb70fefe84cd4bd8` and `1adc7e3c8d0b4eb3`); times 96.2 s against 88.8 s and
-  315.6 s against 296.6 s (single runs, +8% and +6%).
+* 58 problems at the stress budget (1 MB) against budget 0: sorted sets identical on 57 of 58: `pop_001` 3,529 (was 4,710),
+  `masses5_N3` 5,266 (both), `masses2_N8`, `masses3_N3` to `N5`, `masses4_N3`, `pop_005`, `pop_007`, `pop_017` equal. The
+  exception is `masses4_N4` (16,313 against 16,312), a sliver that the unsnapped build shows as well (the snap does not
+  act there).
+* `pop_002` (321,026 regions) and `pop_033` (860,655 regions) at the default budget, which takes the rebuild path past
+  512 MiB, against budget 0: sorted sets identical (`cb70fefe84cd4bd8` and `1adc7e3c8d0b4eb3`); times 94.8 s against
+  87.1 s and 311.2 s against 295.7 s (single runs, +9% and +5%).
+* Tests on `x1` as a 1-CPU array of 148 tests: 144 passed and 3 ignored; the 20-minute `pl_wnn::random_mpqp_theta8_b`
+  (it does not call mplcp) was still running when this was written.
+* Timing at the default budget against main 59b2afb, 14 problems at 2 to 16 parameters, 5 alternations (`x2` = 702e0f3,
+  after the rebuild, snap and fallback code was moved out of line and the twin search was made O(n log n)): geometric
+  mean of medians 1.0041, A/A 1.0017; per problem 0.996 to 1.008 except `di_N6` (0.1 ms per solve) 1.032, which is 3 us.
+  (The first version of this change measured 1.009 with `pop_005` +2.5%.)
 * Census at the 1 MB budget: `pop_001` 2,158 tableaux rebuilt and 22,803 entries set to zero (10.6 per rebuild);
   `masses5_N3` 5,069 rebuilt, 0 set to zero; `masses4_N3` 2,529 rebuilt, 0 set to zero. The counters are `SnapRebuilds` and
   `SnapEntries` in table 3j of `lp_census`.
+
+### Duplicated constraints in the benchmark (for the principled fix, `examples/dedupe_check.rs`)
+
+52 of the 150 benchmark problems (all `pop_*`) have constraint rows of [A | F | b] that are positive multiples of
+another row (1 to 16 pairs per problem; `pop_002` 16, `pop_033` 5). Solving the problem without the duplicates (kept row =
+lowest index) and mapping every twin to its kept row gives the same sorted active sets on 49 of the 51 problems measured:
+same region count, and no region of the full solve contains both a twin and its kept row. Differences: `pop_028` 82,116
+against 82,117 regions (one more sliver) and `pop_076` 15,006 against 15,006 with one set exchanged. Times: `pop_002`
+97.6 s to 86.7 s, `pop_019` 2.38 s to 1.25 s, `pop_076` 4.12 s to 2.74 s, but `pop_040` 0.16 s to 1.15 s (the reduced
+problem takes a slower path); `pop_033` was not measured (the check solves both in one 3.9 GB task and was killed).
 
 ### No region is skipped silently; comment fix
 
