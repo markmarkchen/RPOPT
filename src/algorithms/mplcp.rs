@@ -1912,10 +1912,36 @@ pub enum Method {
 /// The enumeration method has no perturbation: where several bases describe the same
 /// parameter set (degenerate mpLPs) it may return overlapping regions.
 pub fn solve(program: &MpProgram, seed: u64, method: Method) -> Result<Vec<CriticalRegion>, String> {
+    solve_with_dedupe(program, seed, method, DEDUPE.load(std::sync::atomic::Ordering::Relaxed))
+}
+
+static DEDUPE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// Switches the removal of duplicated constraints inside the pivoting methods (default on).
+pub fn set_dedupe(on: bool) {
+    DEDUPE.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// `solve` with the removal of duplicated constraints chosen explicitly. Inequality rows of [A | F | b] that are a positive
+/// multiple of an earlier inequality row describe the same half-space; the pivoting methods solve the program without them
+/// (a twin makes a tableau carry structural zeros, which a fresh factorization fills with rounding noise, and sends the
+/// rank-1 enumeration back to the facet walk) and the regions are reported in the numbering of `program`: every index of
+/// `active_set`, `lambda_set` and `regular_set` is the lowest-index row of its group, `regular_set.0` is recomputed for the
+/// full list of inactive constraints, and `c`, `d` keep one row per active constraint (the multiplier of the kept row is the
+/// total of the group). `omega_set` (rows of `A_t`) is unchanged; duplicates among those are not removed.
+pub fn solve_with_dedupe(program: &MpProgram, seed: u64, method: Method, dedupe: bool) -> Result<Vec<CriticalRegion>, String> {
     match method {
         Method::Pivot | Method::PivotParallel => {
             if program.q.is_none() {
                 return Err("mplcp: mpLP not supported by the pivoting method (use mplcp_enum)".into());
+            }
+            if dedupe {
+                if let Some((reduced, kept)) = dedupe_program(program) {
+                    if let Some(plcp) = Plcp::new(&reduced) {
+                        let regions = if method == Method::PivotParallel { pivot_solve_par(&reduced, &plcp, seed) } else { pivot_solve(&reduced, &plcp, seed) };
+                        return Ok(unreduce_regions(regions, &kept, program.a.rows));
+                    }
+                }
             }
             let plcp = Plcp::new(program).ok_or("mplcp: no pLCP form (Q not positive definite or singular equality block)")?;
             let regions = if method == Method::PivotParallel { pivot_solve_par(program, &plcp, seed) } else { pivot_solve(program, &plcp, seed) };
@@ -1923,6 +1949,114 @@ pub fn solve(program: &MpProgram, seed: u64, method: Method) -> Result<Vec<Criti
         }
         Method::Enumeration => enum_solve(program),
     }
+}
+
+/// For each constraint, the lowest-index inequality row of which it is a positive multiple (itself when there is none).
+/// Rows are compared as [A_i | F_i | b_i] to a relative 1e-11 of the row norm. Equality rows are never merged.
+pub fn duplicate_rows(program: &MpProgram) -> Vec<usize> {
+    let m = program.a.rows;
+    let rows: Vec<Vec<f64>> = (0..m)
+        .map(|i| {
+            let mut v = program.a.row(i).to_vec();
+            v.extend_from_slice(program.f.row(i));
+            v.push(program.b[i]);
+            v
+        })
+        .collect();
+    // norm of the constraint part [A_i | F_i]; a row with no constraint part is left alone
+    let norm2: Vec<f64> = rows.iter().map(|v| v[..v.len() - 1].iter().map(|x| x * x).sum::<f64>()).collect();
+    let is_eq = |i: usize| program.equality_indices.contains(&i);
+    // positive multiples have the same normalized sum of entries: sort by it (quantized) and compare only rows whose keys
+    // are equal or adjacent
+    let key: Vec<i64> = (0..m).map(|i| if norm2[i] > 0.0 && !is_eq(i) { (rows[i].iter().sum::<f64>() / norm2[i].sqrt() * 1e6).round() as i64 } else { i64::MIN }).collect();
+    let mut order: Vec<usize> = (0..m).collect();
+    order.sort_unstable_by_key(|&i| (key[i], i));
+    let mut rep: Vec<usize> = (0..m).collect();
+    for p in 0..m {
+        let i = order[p];
+        if key[i] == i64::MIN {
+            continue;
+        }
+        for &j in &order[p + 1..] {
+            if key[j] - key[i] > 1 {
+                break;
+            }
+            if key[j] == i64::MIN {
+                continue;
+            }
+            // i and j in either order of index: the lower index is the representative of the group
+            let (lo, hi) = if i < j { (i, j) } else { (j, i) };
+            let c = rows[lo][..rows[lo].len() - 1].iter().zip(&rows[hi]).map(|(a, b)| a * b).sum::<f64>() / norm2[hi];
+            if c > 0.0 && rows[lo].iter().zip(&rows[hi]).all(|(a, b)| (a - c * b).abs() <= 1e-11 * norm2[lo].sqrt().max(1e-300)) {
+                let r = rep[lo].min(lo);
+                rep[hi] = rep[hi].min(r);
+                rep[lo] = r;
+            }
+        }
+    }
+    // path compression: the representative of a representative
+    for i in 0..m {
+        let mut r = rep[i];
+        while rep[r] != r {
+            r = rep[r];
+        }
+        rep[i] = r;
+    }
+    rep
+}
+
+/// The program without its duplicated inequality rows and the index (in `program`) of each remaining row; `None` when it
+/// has no duplicates.
+fn dedupe_program(program: &MpProgram) -> Option<(MpProgram, Vec<usize>)> {
+    let m = program.a.rows;
+    let rep = duplicate_rows(program);
+    let kept: Vec<usize> = (0..m).filter(|&i| rep[i] == i).collect();
+    if kept.len() == m {
+        return None;
+    }
+    let mut new_idx = vec![usize::MAX; m];
+    for (k, &i) in kept.iter().enumerate() {
+        new_idx[i] = k;
+    }
+    let a = Mat::from_rows(&kept.iter().map(|&i| program.a.row(i).to_vec()).collect::<Vec<_>>());
+    let b: Vec<f64> = kept.iter().map(|&i| program.b[i]).collect();
+    let f = Mat::from_rows(&kept.iter().map(|&i| program.f.row(i).to_vec()).collect::<Vec<_>>());
+    let eq: Vec<usize> = program.equality_indices.iter().map(|&i| new_idx[i]).collect();
+    // from_raw_parts: the data is already processed (`MpProgram::new` would scale the rows a second time)
+    let reduced = MpProgram::from_raw_parts(a, b, program.c.clone(), program.h.clone(), program.q.clone(), program.a_t.clone(), program.b_t.clone(), f, program.c_c, program.c_t.clone(), program.q_t.clone(), eq);
+    Some((reduced, kept))
+}
+
+/// Maps the regions of the deduplicated program back to the numbering of the full program (`m` constraints, `kept[k]` the
+/// index of row `k` of the reduced program).
+fn unreduce_regions(mut regions: Vec<CriticalRegion>, kept: &[usize], m: usize) -> Vec<CriticalRegion> {
+    let mut active = vec![false; m];
+    let mut before = vec![0usize; m];
+    for r in regions.iter_mut() {
+        for v in r.active_set.iter_mut() {
+            *v = kept[*v];
+        }
+        for v in r.lambda_set.iter_mut() {
+            *v = kept[*v];
+        }
+        active.iter_mut().for_each(|a| *a = false);
+        for &i in &r.active_set {
+            active[i] = true;
+        }
+        // position of each constraint in the sorted list of inactive constraints
+        let mut c = 0;
+        for i in 0..m {
+            before[i] = c;
+            if !active[i] {
+                c += 1;
+            }
+        }
+        for (pos, idx) in r.regular_set.0.iter_mut().zip(r.regular_set.1.iter_mut()) {
+            *idx = kept[*idx];
+            *pos = before[*idx];
+        }
+    }
+    regions
 }
 
 /// `solve` for the dispatcher: an unsupported program gives an empty list and a warning on stderr.
@@ -3588,6 +3722,53 @@ fn lex_feasible_start(program: &MpProgram, init: &CriticalRegion) -> Option<Crit
         return None;
     }
     Some(cr)
+}
+
+/// Diagnostic for one region's basis: (lexico-feasible, rows whose theta part vanishes, smallest signed first significant entry of those rows' lexicographic vectors,
+/// smallest absolute first significant entry). A first entry of -1e-3 is a clear violation, one of +-1e-9 sits on the tolerance `ZTOL`.
+pub fn lex_diagnostic(program: &MpProgram, cr: &CriticalRegion) -> Option<(bool, usize, f64, f64)> {
+    let plcp = Plcp::new(program)?;
+    let tab = tableau_of(&plcp, cr)?;
+    let (n, w) = (tab.n, tab.w);
+    let mut wcol = vec![usize::MAX; n];
+    for (c, &v) in tab.col_var.iter().enumerate() {
+        if v < n {
+            wcol[v] = c;
+        }
+    }
+    let mut wrow = vec![usize::MAX; n];
+    for (r, &v) in tab.row_var.iter().enumerate() {
+        if v < n {
+            wrow[v] = r;
+        }
+    }
+    let mut v = vec![0.0; 1 + n];
+    let (mut rows, mut feas) = (0usize, true);
+    let (mut min_signed, mut min_abs) = (f64::INFINITY, f64::INFINITY);
+    for i in 0..n {
+        if (1..w).any(|k| tab.rv(i, k).abs() > ZTOL) {
+            continue;
+        }
+        rows += 1;
+        v[0] = tab.rv(i, 0);
+        for j in 0..n {
+            v[1 + j] = if wcol[j] != usize::MAX {
+                -tab.tv(i, wcol[j])
+            } else if wrow[j] == i {
+                1.0
+            } else {
+                0.0
+            };
+        }
+        if let Some(x) = v.iter().find(|x| x.abs() > ZTOL) {
+            if *x < 0.0 {
+                feas = false;
+            }
+            min_signed = min_signed.min(*x);
+            min_abs = min_abs.min(x.abs());
+        }
+    }
+    Some((feas, rows, min_signed, min_abs))
 }
 
 /// Diagnostic: number of `regions` whose basis is lexico-infeasible (0 for the output of `solve`).
