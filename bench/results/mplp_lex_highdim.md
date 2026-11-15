@@ -118,3 +118,86 @@ taken directly; the rows lose that tag in the shared region builder (`mpqp_utils
 which another teammate is changing. Proposed change for that builder: return, with each facet row of E, the index
 of the basis row or slack it came from. The 2n bounding-box LPs per region (30% here) are the other large share and
 are also in the shared builder.
+
+## Round 2: closing the three losses (direct facet crossing, bounding-box skip)
+
+### Fix 2, tried and not kept: cross a facet by one dual lexicographic pivot, no LP
+
+Mapping: no builder change needed. For H = 0 every facet of a region is the slack of an inactive constraint, and
+`regular_set.1` lists those constraints, so each facet row is recomputed as (A_j a - F_j) theta <= b_j - A_j b and matched
+to the facet by value; two matches (coincident rows, degenerate) or none fall back to the LP path. The pivot: j enters, the
+leaving row is the lexicographic minimum of lambda_p / T_jp with the true cost (a tie falls back); the result is checked by running the
+lexicographic simplex on the pivoted basis with synthetic slacks (1 for ordinary nonbasic rows, 0 for basic rows, j and rows
+identically zero in theta) and accepted only if it does not pivot. Mathematically the pivoted basis is primal feasible at theta0
+(other slacks are unchanged because s_j = 0 there) and dual feasible, so it is the neighbour.
+
+What the check showed on masses4inf_N2 (inf-norm, numerically marginal regions): the LP path itself returns the parent basis for 59 of
+its facets (the facet slack reads +1e-6 instead of 0 at scale 1e5, above the 1e-9 tolerance), and for 3 facets the two paths pick
+different bases of slivers with Chebyshev radius 2.6e-8 (two bases of one sliver, giving an overlapping duplicate region of radius
+7e-6). 250 of its 1,974 regions have radius below 1e-7. Restricting the direct path to regions with radius above 1e-4 (and verifying the reversed
+facet in the neighbour) restored identical region hashes on all 46 mpLPs (`bench/problems_lp` plus `bench/problems_lp_highdim`).
+
+Serial A/B on Negishi (build 45879692, array 45879693, 4 alternations per problem, base / candidate / base again shuffled, 1 CPU;
+base is the main code, which includes fix 1):
+
+| problem | n | cand/base median | range | A/A median | range | cand median ms |
+|---|---|---|---|---|---|---|
+| masses3inf_N2 | 4 | 1.229 | 1.227-1.245 | 1.002 | 1.000-1.008 | 229.8 |
+| masses3inf_N3 | 4 | 1.198 | 1.194-1.211 | 0.998 | 0.995-1.002 | 4382.4 |
+| masses3one_N2 | 4 | 1.074 | 1.065-1.082 | 1.003 | 0.998-1.011 | 3679.1 |
+| masses4inf_N2 | 4 | 1.150 | 1.148-1.154 | 0.998 | 0.997-1.005 | 2182.2 |
+| masses4one_N1 | 4 | 1.000 | 0.995-1.011 | 0.998 | 0.993-1.006 | 444.9 |
+| masses5inf_N1 | 4 | 1.300 | 1.298-1.308 | 1.000 | 1.000-1.007 | 38.0 |
+| masses5inf_N2 | 4 | 1.107 | 1.102-1.115 | 1.001 | 0.995-1.006 | 14231.8 |
+| masses5one_N1 | 4 | 0.997 | 0.995-1.000 | 1.001 | 0.999-1.005 | 3348.9 |
+| masses6inf_N1 | 4 | 1.257 | 1.250-1.261 | 1.002 | 0.997-1.008 | 76.8 |
+| masses6one_N1 | 4 | 0.987 | 0.983-0.989 | 1.000 | 0.989-1.013 | 23315.0 |
+| randlp_t5_x5_m40_s0 | 4 | 0.863 | 0.859-0.868 | 0.997 | 0.995-1.001 | 48.0 |
+| randlp_t5_x5_m40_s1 | 4 | 0.908 | 0.901-0.912 | 1.000 | 0.992-1.005 | 140.5 |
+| randlp_t6_x5_m40_s1 | 4 | 0.891 | 0.889-0.906 | 0.997 | 0.997-1.001 | 301.6 |
+| randlp_t8_x5_m40_s0 | 4 | 0.891 | 0.885-0.908 | 0.996 | 0.988-1.009 | 132.1 |
+| randlp_t10_x6_m50_s0 | 4 | 0.890 | 0.888-0.891 | 0.997 | 0.996-1.004 | 7874.5 |
+| randlp_t12_x5_m40_s0 | 4 | 0.947 | 0.937-0.953 | 1.004 | 0.989-1.014 | 7.2 |
+
+Result: slower by 7 to 30% on every inf-norm and 1-norm MPC problem with slivers (a pivot and a region build are spent on facets
+that then fall back to the LP path), no gain on masses4one_N1, 5 to 14% faster on the random mpLPs. Not kept (reverted in ab1d3ee).
+The census explains the ceiling: on masses4one_N1 the neighbour LPs are 14% of the time (31 of 220 ms), so even removing all of them
+cannot beat the cost of the pivot, the check and the failed attempts.
+
+### Bounding-box LPs, tried and not kept
+
+Skipping the 2n box LPs when a region has fewer than 50 live rows (mpLP only) is 15 to 22% faster on masses6inf_N1, masses5inf_N1 and
+masses4one_N1 on the laptop (gate profile, not a cluster measurement), but changes the row set at the tolerance level: facet rows
+differ by 2 to 3 of 220,000 to 260,000 on masses3one_N2, masses5one_N1 and diinf_N10, and on `geometric` for sys3x2inf_N3 (499
+regions against 490) when applied to all solvers. The rule was no change of rows, so it is not adopted. Without the box LPs, a row that only touches the
+region at a bounding-box vertex is decided by the projection test or by an LP instead of by the vertex test, which flips weakly
+redundant rows. If the user accepts tolerance-level row differences, this is the cheapest remaining gain.
+
+### Ratios against the best other solver, all 16 problems
+
+`mplp_lex` is the main code (fix 1), median of the base runs of the A/B tasks (8 runs; nodes differ from the step-1 runs, so ratios near 1
+carry about 10% uncertainty); the other solvers are from step 1.
+
+| problem | mplp_lex (main) ms | best other | its ms | lex / best other |
+|---|---:|---|---:|---:|
+| masses3inf_N2 | 187.0 | combinatorial | 657.4 | 0.28 |
+| masses3inf_N3 | 3653.3 | graph | 189854.9 | 0.02 |
+| masses3one_N2 | 3431.8 | geometric | 128204.5 | 0.03 |
+| masses4inf_N2 | 1900.2 | combinatorial_graph | 14585.1 | 0.13 |
+| masses4one_N1 | 443.6 | combinatorial | 468.3 | 0.95 |
+| masses5inf_N1 | 29.2 | combinatorial | 19.5 | 1.50 |
+| masses5inf_N2 | 12854.2 | - | nan | nan |
+| masses5one_N1 | 3360.1 | combinatorial | 4654.5 | 0.72 |
+| masses6inf_N1 | 61.2 | combinatorial | 42.0 | 1.46 |
+| masses6one_N1 | 23649.6 | combinatorial | 50442.6 | 0.47 |
+| randlp_t5_x5_m40_s0 | 55.5 | combinatorial_graph | 126.6 | 0.44 |
+| randlp_t5_x5_m40_s1 | 155.1 | combinatorial_graph | 276.6 | 0.56 |
+| randlp_t6_x5_m40_s1 | 338.0 | combinatorial_graph | 445.7 | 0.76 |
+| randlp_t8_x5_m40_s0 | 147.7 | combinatorial_graph | 167.9 | 0.88 |
+| randlp_t10_x6_m50_s0 | 8852.1 | combinatorial_graph | 8131.7 | 1.09 |
+| randlp_t12_x5_m40_s0 | 7.6 | geometric | 17.4 | 0.44 |
+
+`mplp_lex` is fastest on 12 of 15 problems where another solver finished (masses5inf_N2: none finished). It loses on masses5inf_N1 (1.50 to
+`combinatorial`), masses6inf_N1 (1.46) and randlp_t10_x6_m50_s0 (1.09 to `combinatorial_graph`, inside the node noise). masses4one_N1 is
+now 0.95. The two remaining losses are inf-norm problems with 48 to 52 regions where most regions are slivers of radius 2.6e-8: their
+facets cannot be crossed cheaply or reliably, and `combinatorial` does not need facets at all.
