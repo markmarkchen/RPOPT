@@ -85,6 +85,19 @@ pub mod s {
     pub const TIGHT_DIFF_W1: usize = 119; // symmetric difference of the tight-row sets, warm order 1 against engine
     pub const TIGHT_DIFF_W2: usize = 120;
     pub const BOX_REGIONS: usize = 121;
+    pub const E_V2_PIV: usize = 122; // engine chain, order 2, start at the previous vertex
+    pub const E_V2_NS: usize = 123;
+    pub const E_P2_PIV: usize = 124; // engine chain, order 2, start pushed 1e-4 towards the centre
+    pub const E_P2_NS: usize = 125;
+    pub const E_V2_VALDIFF: usize = 126;
+    pub const E_V2_TD: usize = 127;
+    pub const E_P2_VALDIFF: usize = 128;
+    pub const E_P2_TD: usize = 129;
+    pub const E_V1_PIV: usize = 130; // engine chain, order 1, vertex start
+    pub const E_V1_NS: usize = 131;
+    pub const E_V1_VALDIFF: usize = 132;
+    pub const E_FAIL: usize = 133;
+    pub const E_V1_TD: usize = 134;
     // Clarkson simulation, variant A (seed: parameter-set rows) at SIM_A, variant B (A + entry + parent's kept rows) at SIM_B
     pub const SIM_A: usize = 50;
     pub const SIM_B: usize = 62;
@@ -200,6 +213,41 @@ fn opt(e: &Mat, f: &[f64], x: &mut Vec<f64>, t: &mut Vec<usize>, c: &[f64]) -> O
     None
 }
 
+/// The engine's box LPs chained: each starts at the previous optimum (pushed `push` of the way to the centre).
+fn engine_chain(e: &Mat, f: &[f64], center: &[f64], order: &[usize], push: f64, target: &dyn Fn(usize) -> f64, slots: (usize, usize, usize, usize), cold_t: &[bool]) {
+    let n = e.cols;
+    let t = Instant::now();
+    let p0 = crate::census::piv_get();
+    let mut x = center.to_vec();
+    let mut pts: Vec<Vec<f64>> = vec![];
+    let mut diff = 0u64;
+    for &j in order {
+        let mut obj = vec![0.0; n];
+        obj[j / 2] = if j % 2 == 0 { 1.0 } else { -1.0 };
+        let x0: Vec<f64> = x.iter().zip(center).map(|(a, c)| a + push * (c - a)).collect();
+        match crate::solver::lp::lp_point_from(Some(&obj), e, f, &[], &x0) {
+            Some(y) => {
+                if (y[j / 2] - target(j)).abs() > 1e-9 * (1.0 + target(j).abs()) {
+                    diff += 1;
+                }
+                x = y.clone();
+                pts.push(y);
+            }
+            None => {
+                add(s::E_FAIL, 1);
+                return;
+            }
+        }
+    }
+    let ns = t.elapsed().as_nanos() as u64;
+    let piv = crate::census::piv_get() - p0;
+    add(slots.0, piv);
+    add(slots.1, ns);
+    add(slots.2, diff);
+    let wt: Vec<bool> = (0..e.rows).map(|i| pts.iter().any(|x| (dot(e.row(i), x) - f[i]).abs() <= 1e-9 * (1.0 + f[i].abs()))).collect();
+    add(slots.3, wt.iter().zip(cold_t).filter(|(a, b)| a != b).count() as u64);
+}
+
 fn box_study(e: &Mat, f: &[f64], center: &[f64], bx: &(Vec<f64>, Vec<f64>, Vec<Vec<f64>>)) {
     let n = e.cols;
     let (lo, hi, pts) = bx;
@@ -242,6 +290,9 @@ fn box_study(e: &Mat, f: &[f64], center: &[f64], bx: &(Vec<f64>, Vec<f64>, Vec<V
     let tight_set = |ps: &[Vec<f64>]| -> Vec<bool> { (0..e.rows).map(|i| ps.iter().any(|x| (dot(e.row(i), x) - f[i]).abs() <= 1e-9 * (1.0 + f[i].abs()))).collect() };
     let cold_t = tight_set(pts);
     add(s::TIGHT_ROWS_COLD, cold_t.iter().filter(|&&v| v).count() as u64);
+    engine_chain(e, f, center, &order2, 0.0, &target, (s::E_V2_PIV, s::E_V2_NS, s::E_V2_VALDIFF, s::E_V2_TD), &cold_t);
+    engine_chain(e, f, center, &order2, 1e-4, &target, (s::E_P2_PIV, s::E_P2_NS, s::E_P2_VALDIFF, s::E_P2_TD), &cold_t);
+    engine_chain(e, f, center, &order1, 0.0, &target, (s::E_V1_PIV, s::E_V1_NS, s::E_V1_VALDIFF, s::E_V1_TD), &cold_t);
     for (ord, st_slot, ns_slot, vd_slot, td_slot) in [(&order1, s::WARM1_STEPS, s::WARM1_NS, s::WARM1_VALDIFF, s::TIGHT_DIFF_W1), (&order2, s::WARM2_STEPS, s::WARM2_NS, s::WARM2_VALDIFF, s::TIGHT_DIFF_W2)] {
         let t = Instant::now();
         let (mut x, mut tt) = (center.to_vec(), vec![]);

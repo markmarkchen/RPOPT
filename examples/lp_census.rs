@@ -779,5 +779,22 @@ fn build_study(rows: &[Row]) {
             g(r, d::TIGHT_ROWS_COLD) / reg, g(r, d::TIGHT_DIFF_W1) / reg, g(r, d::TIGHT_DIFF_W2) / reg, g(r, d::WARM_FAIL) / reg
         );
     }
+    println!("\n### Build study 9: the engine's box LPs chained (each starts at the previous optimum), per box LP\n");
+    println!("| problem | cold pivots | cold us | chain order 2, vertex start: pivots | us | speed-up | bounds differing | tight-set diffs/region | chain order 2, start pushed 1e-4: pivots | us | speed-up | bounds differing | tight-set diffs/region | chain order 1, vertex start: pivots | us | speed-up | failures/region |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+    for r in &rs {
+        let lp = g(r, d::ENG_LPS).max(1.0);
+        let bb = g(r, d::BOX_BOUNDS).max(1.0);
+        let reg = g(r, d::BOX_REGIONS).max(1.0);
+        let cold = g(r, d::ENG_NS) / lp;
+        let sp = |slot: usize| format!("{:.2}x", cold / (g(r, slot) / bb).max(1e-9));
+        println!(
+            "| {} | {:.2} | {:.2} | {:.2} | {:.2} | {} | {} | {:.2} | {:.2} | {:.2} | {} | {} | {:.2} | {:.2} | {:.2} | {} | {:.3} |",
+            r.problem, g(r, d::ENG_PIV) / lp, cold / 1e3,
+            g(r, d::E_V2_PIV) / bb, g(r, d::E_V2_NS) / 1e3 / bb, sp(d::E_V2_NS), pc(g(r, d::E_V2_VALDIFF), bb), g(r, d::E_V2_TD) / reg,
+            g(r, d::E_P2_PIV) / bb, g(r, d::E_P2_NS) / 1e3 / bb, sp(d::E_P2_NS), pc(g(r, d::E_P2_VALDIFF), bb), g(r, d::E_P2_TD) / reg,
+            g(r, d::E_V1_PIV) / bb, g(r, d::E_V1_NS) / 1e3 / bb, sp(d::E_V1_NS), g(r, d::E_FAIL) / reg
+        );
+    }
     }
 }

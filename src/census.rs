@@ -521,7 +521,7 @@ mod imp {
     pub const EO_BASE: usize = WK_BASE + NWK * 5;
     /// build-study slots (see `census_diag`)
     pub const MD_BASE: usize = EO_BASE + 16;
-    pub const NC: usize = MD_BASE + 128;
+    pub const NC: usize = MD_BASE + 160;
     pub fn bump_slot(i: usize, n: u64) {
         MINE.with(|m| m.lock().unwrap().counters[i] += n);
     }
