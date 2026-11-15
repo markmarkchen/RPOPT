@@ -1,6 +1,6 @@
 # Time profile of mplcp against the other exact mpQP solvers
 
-**Status.** The `mplcp` rows are from main 62f7442 (dedupe, the box-chain check and the cold retry), rerun with the per-region counters; they **predate the neighbour pre-check**, which is not in main yet, and will be rerun once more when it lands. `mplcp`'s vertex-clip work budget (`mplcp_clip_budget.md`) is not in main either: the `mplcp` rows are taken with the budget off. The other five solvers are final.
+**Status.** The `mplcp` rows are from main 1feb98b (dedupe, the box-chain check, the cold retry and the refined gap-band rule), with the per-region counters; they **predate the neighbour pre-check**, which is not in main yet, and will be rerun once more when it lands. `mplcp`'s vertex-clip work budget (`mplcp_clip_budget.md`) is not in main either: the `mplcp` rows are taken with the budget off. The other five solvers are final.
 
 ## How it was measured
 
@@ -27,7 +27,7 @@ The phases partition the solve; the construction of the non-`mplcp` solvers can 
 ## sys3x2_N5
 | solver | regions | solve ms | neighbour search / candidate tests | row generation | bounding-box LPs | per-row redundancy tests | Chebyshev LP | other construction | tableau update | rest | source |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| mplcp | 973 | 24.0 | 7.9 (33%), Case 2 1.3 (rank-1 0.0) | 2.9 (12%) | 0.0 (0%) | 0.0 (0%) | 2.8 (12%) | 7.6 (32%) | 1.0 (4%) | 1.9 (8%) | census (this tree) |
+| mplcp | 973 | 25.3 | 8.4 (33%), Case 2 1.5 (rank-1 0.0) | 3.0 (12%) | 0.0 (0%) | 0.0 (0%) | 2.8 (11%) | 7.8 (31%) | 1.3 (5%) | 2.1 (8%) | census (this tree) |
 | graph | 973 | 195.3 | 20.2 (10%) | 15.3 (8%) | 0.0 (0%) | 0.0 (0%) | 2.1 (1%) | 0.0 (0%) | - | 157.7 (81%) | census (this tree) |
 | combinatorial_graph | 973 | 632.3 | 65.8 (10%) | 15.4 (2%) | 0.0 (0%) | 0.0 (0%) | 2.2 (0%) | 0.0 (0%) | - | 548.9 (87%) | census (this tree) |
 | parametric_daqp | 973 | 424.0 | 291.8 (69%) | 17.3 (4%) | 0.0 (0%) | 0.0 (0%) | 3.1 (1%) | 0.0 (0%) | - | 111.8 (26%) | census (this tree) |
@@ -36,7 +36,7 @@ The phases partition the solve; the construction of the non-`mplcp` solvers can 
 ## rand_t8_x5_m20_s0
 | solver | regions | solve ms | neighbour search / candidate tests | row generation | bounding-box LPs | per-row redundancy tests | Chebyshev LP | other construction | tableau update | rest | source |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| mplcp | 4,111 | 640.1 | 161.5 (25%), Case 2 107.9 (rank-1 0.0) | 12.0 (2%) | 300.6 (47%) | 79.1 (12%) | 31.9 (5%) | 41.5 (6%) | 3.3 (1%) | 10.3 (2%) | census (this tree) |
+| mplcp | 4,111 | 683.5 | 187.6 (27%), Case 2 121.3 (rank-1 0.0) | 14.4 (2%) | 301.6 (44%) | 79.2 (12%) | 33.7 (5%) | 46.4 (7%) | 7.4 (1%) | 13.3 (2%) | census (this tree) |
 | graph | 4,111 | 555.3 | 11.1 (2%) | 55.5 (10%) | 360.9 (65%) | 66.6 (12%) | 27.8 (5%) | 0.0 (0%) | - | 33.3 (6%) | cached report m1.graph.rand_t8_x5_m20_s0.md (shares rounded to 1%) |
 | combinatorial_graph | 4,111 | 572.3 | 20.3 (4%) | 57.2 (10%) | 362.4 (63%) | 66.7 (12%) | 29.8 (5%) | 0.0 (0%) | - | 36.0 (6%) | census (this tree) |
 | parametric_daqp | 4,105 | 572.9 | 28.0 (5%) | 51.6 (9%) | 366.7 (64%) | 68.7 (12%) | 40.1 (7%) | 0.0 (0%) | - | 17.8 (3%) | cached report d1.parametric_daqp.rand_t8_x5_m20_s0.md (shares rounded to 1%) |
@@ -45,7 +45,7 @@ The phases partition the solve; the construction of the non-`mplcp` solvers can 
 ## rand_t12_x5_m20_s0
 | solver | regions | solve ms | neighbour search / candidate tests | row generation | bounding-box LPs | per-row redundancy tests | Chebyshev LP | other construction | tableau update | rest | source |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| mplcp | 6,143 | 2711.2 | 1092.2 (40%), Case 2 920.1 (rank-1 589.4) | 26.9 (1%) | 1249.3 (46%) | 106.0 (4%) | 101.8 (4%) | 116.8 (4%) | 5.5 (0%) | 12.6 (0%) | census (this tree) |
+| mplcp | 6,143 | 2211.4 | 557.1 (25%), Case 2 365.4 (rank-1 3.4) | 29.2 (1%) | 1251.8 (57%) | 107.2 (5%) | 105.2 (5%) | 129.4 (6%) | 12.0 (1%) | 19.6 (1%) | census (this tree) |
 | graph | 6,143 | 2143.4 | 21.4 (1%) | 128.6 (6%) | 1757.6 (82%) | 85.7 (4%) | 85.7 (4%) | 0.0 (0%) | - | 64.3 (3%) | cached report m1.graph.rand_t12_x5_m20_s0.md (shares rounded to 1%) |
 | combinatorial_graph | 6,143 | 2212.1 | 50.9 (2%) | 153.3 (7%) | 1776.1 (80%) | 75.9 (3%) | 96.7 (4%) | 0.0 (0%) | - | 59.2 (3%) | census (this tree) |
 | parametric_daqp | 6,061 | 2163.6 | 53.0 (2%) | 151.5 (7%) | 1730.9 (80%) | 64.9 (3%) | 129.8 (6%) | 0.0 (0%) | - | 33.5 (2%) | cached report d1.parametric_daqp.rand_t12_x5_m20_s0.md (shares rounded to 1%) |
@@ -54,7 +54,7 @@ The phases partition the solve; the construction of the non-`mplcp` solvers can 
 ## pop_017
 | solver | regions | solve ms | neighbour search / candidate tests | row generation | bounding-box LPs | per-row redundancy tests | Chebyshev LP | other construction | tableau update | rest | source |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| mplcp | 4,142 | 515.8 | 171.2 (33%), Case 2 135.4 (rank-1 3.3) | 15.5 (3%) | 144.1 (28%) | 94.1 (18%) | 23.6 (5%) | 52.5 (10%) | 4.9 (1%) | 9.9 (2%) | census (this tree) |
+| mplcp | 4,142 | 545.4 | 188.9 (35%), Case 2 145.2 (rank-1 1.1) | 17.7 (3%) | 145.2 (27%) | 92.9 (17%) | 23.6 (4%) | 56.5 (10%) | 7.6 (1%) | 12.9 (2%) | census (this tree) |
 | graph | 4,143 | 444.7 | 26.7 (6%) | 66.7 (15%) | 182.3 (41%) | 84.5 (19%) | 22.2 (5%) | 0.0 (0%) | - | 62.3 (14%) | cached report m1.graph.pop_017.md (shares rounded to 1%) |
 | combinatorial_graph | 4,143 | 483.1 | 56.5 (12%) | 72.3 (15%) | 191.4 (40%) | 88.0 (18%) | 22.7 (5%) | 0.0 (0%) | - | 52.1 (11%) | census (this tree) |
 | parametric_daqp | 4,107 | 447.9 | 67.0 (15%) | 67.2 (15%) | 179.2 (40%) | 80.6 (18%) | 31.4 (7%) | 0.0 (0%) | - | 22.6 (5%) | cached report d1.parametric_daqp.pop_017.md (shares rounded to 1%) |
@@ -63,7 +63,7 @@ The phases partition the solve; the construction of the non-`mplcp` solvers can 
 ## pop_005
 | solver | regions | solve ms | neighbour search / candidate tests | row generation | bounding-box LPs | per-row redundancy tests | Chebyshev LP | other construction | tableau update | rest | source |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| mplcp | 10,289 | 2303.4 | 721.7 (31%), Case 2 561.8 (rank-1 296.0) | 63.0 (3%) | 582.1 (25%) | 616.7 (27%) | 88.9 (4%) | 187.4 (8%) | 21.1 (1%) | 22.5 (1%) | census (this tree) |
+| mplcp | 10,289 | 2190.0 | 591.8 (27%), Case 2 419.6 (rank-1 140.3) | 64.0 (3%) | 584.9 (27%) | 622.4 (28%) | 90.7 (4%) | 188.3 (9%) | 23.7 (1%) | 24.3 (1%) | census (this tree) |
 | graph | 10,287 | 2008.7 | 173.7 (9%) | 258.6 (13%) | 672.6 (33%) | 545.3 (27%) | 75.6 (4%) | 0.0 (0%) | - | 282.8 (14%) | census (this tree) |
 | combinatorial_graph | 10,289 | 3496.6 | 1055.3 (30%) | 261.6 (7%) | 673.6 (19%) | 546.0 (16%) | 76.1 (2%) | 0.0 (0%) | - | 884.0 (25%) | census (this tree) |
 | parametric_daqp | 10,273 | 2851.3 | 1096.0 (38%) | 256.6 (9%) | 655.8 (23%) | 541.7 (19%) | 114.1 (4%) | 0.0 (0%) | - | 187.1 (7%) | cached report d1.parametric_daqp.pop_005.md (shares rounded to 1%) |
@@ -72,7 +72,7 @@ The phases partition the solve; the construction of the non-`mplcp` solvers can 
 ## masses3_N4
 | solver | regions | solve ms | neighbour search / candidate tests | row generation | bounding-box LPs | per-row redundancy tests | Chebyshev LP | other construction | tableau update | rest | source |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| mplcp | 3,643 | 976.5 | 246.7 (25%), Case 2 200.1 (rank-1 45.7) | 40.6 (4%) | 233.1 (24%) | 300.7 (31%) | 51.3 (5%) | 91.2 (9%) | 4.3 (0%) | 8.6 (1%) | census (this tree) |
+| mplcp | 3,643 | 933.4 | 214.3 (23%), Case 2 164.6 (rank-1 9.5) | 35.0 (4%) | 233.6 (25%) | 298.6 (32%) | 51.2 (5%) | 89.7 (10%) | 3.6 (0%) | 7.4 (1%) | census (this tree) |
 | graph | 3,642 | 1022.0 | 66.5 (7%) | 91.4 (9%) | 348.8 (34%) | 318.6 (31%) | 76.2 (7%) | 0.0 (0%) | - | 120.5 (12%) | census (this tree) |
 | combinatorial_graph | 3,642 | 1333.7 | 247.5 (19%) | 98.0 (7%) | 366.0 (27%) | 329.9 (25%) | 92.4 (7%) | 0.0 (0%) | - | 200.0 (15%) | census (this tree) |
 | parametric_daqp | 3,431 | 974.3 | 241.0 (25%) | 77.9 (8%) | 282.5 (29%) | 253.3 (26%) | 58.5 (6%) | 0.0 (0%) | - | 61.0 (6%) | cached report d1.parametric_daqp.masses3_N4.md (shares rounded to 1%) |
@@ -81,7 +81,7 @@ The phases partition the solve; the construction of the non-`mplcp` solvers can 
 ## masses4_N3
 | solver | regions | solve ms | neighbour search / candidate tests | row generation | bounding-box LPs | per-row redundancy tests | Chebyshev LP | other construction | tableau update | rest | source |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| mplcp | 2,953 | 2124.8 | 821.6 (39%), Case 2 762.3 (rank-1 554.5) | 30.7 (1%) | 527.9 (25%) | 393.1 (19%) | 109.1 (5%) | 231.5 (11%) | 2.7 (0%) | 8.1 (0%) | census (this tree) |
+| mplcp | 2,953 | 1586.3 | 282.0 (18%), Case 2 222.3 (rank-1 8.8) | 31.0 (2%) | 529.0 (33%) | 390.7 (25%) | 109.6 (7%) | 235.0 (15%) | 2.4 (0%) | 6.7 (0%) | census (this tree) |
 | graph | 2,891 | 1651.0 | 49.5 (3%) | 99.1 (6%) | 726.4 (44%) | 528.3 (32%) | 165.1 (10%) | 16.5 (1%) | - | 66.0 (4%) | cached report m1.graph.masses4_N3.md (shares rounded to 1%) |
 | combinatorial_graph | 2,891 | 1822.8 | 84.3 (5%) | 106.7 (6%) | 790.1 (43%) | 519.1 (28%) | 255.3 (14%) | 0.0 (0%) | - | 67.4 (4%) | census (this tree) |
 | parametric_daqp | 2,291 | 938.5 | 59.0 (6%) | 65.7 (7%) | 441.1 (47%) | 253.4 (27%) | 84.5 (9%) | 0.0 (0%) | - | 34.9 (4%) | cached report d1.parametric_daqp.masses4_N3.md (shares rounded to 1%) |
@@ -90,7 +90,7 @@ The phases partition the solve; the construction of the non-`mplcp` solvers can 
 ## masses5_N3
 | solver | regions | solve ms | neighbour search / candidate tests | row generation | bounding-box LPs | per-row redundancy tests | Chebyshev LP | other construction | tableau update | rest | source |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| mplcp | 5,273 | 10123.4 | 3181.5 (31%), Case 2 2969.0 (rank-1 2219.6) | 104.8 (1%) | 988.5 (10%) | 626.3 (6%) | 474.3 (5%) | 4728.0 (47%) | 3.2 (0%) | 16.8 (0%) | census (this tree) |
+| mplcp | 5,273 | 7972.8 | 1009.6 (13%), Case 2 818.8 (rank-1 56.9) | 96.3 (1%) | 1014.8 (13%) | 630.8 (8%) | 474.9 (6%) | 4729.9 (59%) | 2.9 (0%) | 13.6 (0%) | census (this tree) |
 | graph | 5,075 | 8410.8 | 107.9 (1%) | 296.3 (4%) | 3438.2 (41%) | 3225.9 (38%) | 1093.8 (13%) | 0.0 (0%) | - | 248.8 (3%) | census (this tree) |
 | combinatorial_graph | 5,076 | 8669.9 | 212.5 (2%) | 302.1 (3%) | 3695.2 (43%) | 2460.6 (28%) | 1851.8 (21%) | 0.0 (0%) | - | 147.6 (2%) | census (this tree) |
 | parametric_daqp | 3,503 | 3123.7 | 104.5 (3%) | 151.6 (5%) | 1582.5 (51%) | 921.5 (29%) | 308.1 (10%) | 0.0 (0%) | - | 55.5 (2%) | census (this tree) |
@@ -99,7 +99,7 @@ The phases partition the solve; the construction of the non-`mplcp` solvers can 
 ## pop_002
 | solver | regions | solve ms | neighbour search / candidate tests | row generation | bounding-box LPs | per-row redundancy tests | Chebyshev LP | other construction | tableau update | rest | source |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| mplcp | 321,026 | 73598.5 | 9466.9 (13%), Case 2 2721.3 (rank-1 143.8) | 2194.4 (3%) | 19381.3 (26%) | 26067.2 (35%) | 4237.3 (6%) | 6045.6 (8%) | 5415.1 (7%) | 790.7 (1%) | census (this tree) |
+| mplcp | 321,026 | 73591.5 | 9675.0 (13%), Case 2 2682.3 (rank-1 140.2) | 2208.1 (3%) | 19410.2 (26%) | 26088.7 (35%) | 4238.0 (6%) | 5971.1 (8%) | 5225.0 (7%) | 775.6 (1%) | census (this tree) |
 | graph | 321,026 | 78441.7 | 3456.3 (4%) | 8870.8 (11%) | 30146.1 (38%) | 24388.1 (31%) | 4239.7 (5%) | 0.0 (0%) | - | 7340.6 (9%) | census (this tree) |
 | combinatorial_graph | 321,026 | 160716.5 | 57211.5 (36%) | 9339.2 (6%) | 31113.3 (19%) | 24892.4 (15%) | 4503.8 (3%) | 0.0 (0%) | - | 33656.3 (21%) | census (this tree) |
 | parametric_daqp | 317,175 | 127718.6 | 51331.6 (40%) | 9187.1 (7%) | 29532.9 (23%) | 23274.8 (18%) | 6228.5 (5%) | 0.0 (0%) | - | 8163.7 (6%) | census (this tree) |
@@ -108,65 +108,65 @@ The phases partition the solve; the construction of the non-`mplcp` solvers can 
 ## Summary table
 | problem | solver | solve ms | largest phase | its share | LPs of the build (box + per-row + Chebyshev) |
 |---|---|---:|---|---:|---:|
-| sys3x2_N5 | mplcp | 24.0 | neighbour search / candidate tests | 33% | 12% |
+| sys3x2_N5 | mplcp | 25.3 | neighbour search / candidate tests | 33% | 11% |
 | sys3x2_N5 | graph | 195.3 | rest | 81% | 1% |
 | sys3x2_N5 | combinatorial_graph | 632.3 | rest | 87% | 0% |
 | sys3x2_N5 | parametric_daqp | 424.0 | neighbour search / candidate tests | 69% | 1% |
 | sys3x2_N5 | geometric | 39.9 | row generation | 38% | 7% |
 | sys3x2_N5 | combinatorial | 15735.0 | rest | 67% | 0% |
-| rand_t8_x5_m20_s0 | mplcp | 640.1 | bounding-box LPs | 47% | 64% |
+| rand_t8_x5_m20_s0 | mplcp | 683.5 | bounding-box LPs | 44% | 61% |
 | rand_t8_x5_m20_s0 | graph | 555.3 | bounding-box LPs | 65% | 82% |
 | rand_t8_x5_m20_s0 | combinatorial_graph | 572.3 | bounding-box LPs | 63% | 80% |
 | rand_t8_x5_m20_s0 | parametric_daqp | 572.9 | bounding-box LPs | 64% | 83% |
 | rand_t8_x5_m20_s0 | geometric | 2516.4 | neighbour search / candidate tests | 46% | 19% |
 | rand_t8_x5_m20_s0 | combinatorial | 573.9 | bounding-box LPs | 63% | 83% |
-| rand_t12_x5_m20_s0 | mplcp | 2711.2 | bounding-box LPs | 46% | 54% |
+| rand_t12_x5_m20_s0 | mplcp | 2211.4 | bounding-box LPs | 57% | 66% |
 | rand_t12_x5_m20_s0 | graph | 2143.4 | bounding-box LPs | 82% | 90% |
 | rand_t12_x5_m20_s0 | combinatorial_graph | 2212.1 | bounding-box LPs | 80% | 88% |
 | rand_t12_x5_m20_s0 | parametric_daqp | 2163.6 | bounding-box LPs | 80% | 89% |
 | rand_t12_x5_m20_s0 | geometric | 48046.4 | neighbour search / candidate tests | 59% | 4% |
 | rand_t12_x5_m20_s0 | combinatorial | 2207.1 | bounding-box LPs | 79% | 88% |
-| pop_017 | mplcp | 515.8 | neighbour search / candidate tests | 33% | 51% |
+| pop_017 | mplcp | 545.4 | neighbour search / candidate tests | 35% | 48% |
 | pop_017 | graph | 444.7 | bounding-box LPs | 41% | 65% |
 | pop_017 | combinatorial_graph | 483.1 | bounding-box LPs | 40% | 63% |
 | pop_017 | parametric_daqp | 447.9 | bounding-box LPs | 40% | 65% |
 | pop_017 | geometric | 4977.9 | rest | 76% | 6% |
 | pop_017 | combinatorial | 462.5 | bounding-box LPs | 39% | 68% |
-| pop_005 | mplcp | 2303.4 | neighbour search / candidate tests | 31% | 56% |
+| pop_005 | mplcp | 2190.0 | per-row redundancy tests | 28% | 59% |
 | pop_005 | graph | 2008.7 | bounding-box LPs | 33% | 64% |
 | pop_005 | combinatorial_graph | 3496.6 | neighbour search / candidate tests | 30% | 37% |
 | pop_005 | parametric_daqp | 2851.3 | neighbour search / candidate tests | 38% | 46% |
 | pop_005 | geometric | 5335.9 | rest | 47% | 27% |
 | pop_005 | combinatorial | 4544.0 | neighbour search / candidate tests | 25% | 39% |
-| masses3_N4 | mplcp | 976.5 | per-row redundancy tests | 31% | 60% |
+| masses3_N4 | mplcp | 933.4 | per-row redundancy tests | 32% | 63% |
 | masses3_N4 | graph | 1022.0 | bounding-box LPs | 34% | 73% |
 | masses3_N4 | combinatorial_graph | 1333.7 | bounding-box LPs | 27% | 59% |
 | masses3_N4 | parametric_daqp | 974.3 | bounding-box LPs | 29% | 61% |
 | masses3_N4 | geometric | 331870.6 | neighbour search / candidate tests | 51% | 0% |
 | masses3_N4 | combinatorial | 1079.4 | bounding-box LPs | 28% | 70% |
-| masses4_N3 | mplcp | 2124.8 | neighbour search / candidate tests | 39% | 48% |
+| masses4_N3 | mplcp | 1586.3 | bounding-box LPs | 33% | 65% |
 | masses4_N3 | graph | 1651.0 | bounding-box LPs | 44% | 86% |
 | masses4_N3 | combinatorial_graph | 1822.8 | bounding-box LPs | 43% | 86% |
 | masses4_N3 | parametric_daqp | 938.5 | bounding-box LPs | 47% | 83% |
 | masses4_N3 | geometric | 232574.0 | neighbour search / candidate tests | 62% | 1% |
 | masses4_N3 | combinatorial | 1304.6 | bounding-box LPs | 44% | 88% |
-| masses5_N3 | mplcp | 10123.4 | other construction | 47% | 21% |
+| masses5_N3 | mplcp | 7972.8 | other construction | 59% | 27% |
 | masses5_N3 | graph | 8410.8 | bounding-box LPs | 41% | 92% |
 | masses5_N3 | combinatorial_graph | 8669.9 | bounding-box LPs | 43% | 92% |
 | masses5_N3 | parametric_daqp | 3123.7 | bounding-box LPs | 51% | 90% |
 | masses5_N3 | combinatorial | 5534.5 | bounding-box LPs | 45% | 94% |
-| pop_002 | mplcp | 73598.5 | per-row redundancy tests | 35% | 68% |
+| pop_002 | mplcp | 73591.5 | per-row redundancy tests | 35% | 68% |
 | pop_002 | graph | 78441.7 | bounding-box LPs | 38% | 75% |
 | pop_002 | combinatorial_graph | 160716.5 | neighbour search / candidate tests | 36% | 38% |
 | pop_002 | parametric_daqp | 127718.6 | neighbour search / candidate tests | 40% | 46% |
 
 ## Reading
 
-* **From about 8 parameters up, the bounding-box LPs are the largest phase of every solver except `mplcp`**: 63% to 82% of the solve for `graph`, `combinatorial_graph`, `parametric_daqp` and `combinatorial` on rand_t8 and rand_t12 (they share one region builder). `mplcp` has them at 46% to 47% there, even after the chain, because its neighbour search (25% to 40%) comes on top.
-* **`mplcp`'s other large cost is the neighbour search**, 25% to 40% on the 8 to 12 parameter problems, mostly Case 2 (rank-1 is 54% of the search on rand_t12 and 67% on masses4_N3). The other solvers pay 1% to 9% for candidate tests (`parametric_daqp`'s DAQP tests: 40% on pop_002, 5% on rand_t8).
+* **On rand_t8 and rand_t12 the bounding-box LPs are the largest phase of every solver**: 63% to 82% of the solve for `graph`, `combinatorial_graph`, `parametric_daqp` and `combinatorial` (they share one region builder), 44% and 57% for `mplcp` after the chain. On masses5_N3 `mplcp` shows only 13% in the box LPs and 59% in 'other construction' because the fallback guard switched the chain off (the shared-builder part is not split).
+* **`mplcp`'s other large cost is the neighbour search**: 25% to 35% on rand_t8, rand_t12, pop_017 and pop_005, 18% to 23% on the masses problems, 13% on pop_002. Since the refined gap-band rule it is mostly Case-2 walks (rand_t12: 365 ms of 557 ms), and the rank-1 share has become small. The other solvers pay 1% to 9% for candidate tests (`parametric_daqp`'s DAQP tests: 40% on pop_002, 5% on rand_t8).
 * **Row generation is small** (0% to 13% in all rows except `geometric` on sys3x2_N5, 38%).
 * **`geometric` is far slower than the rest from 6 parameters up** (4.5x on rand_t8, 22x on rand_t12, 140x to 360x on masses4_N3 and masses3_N4).
-* **pop_005**: with the dedupe and the chain in main, `mplcp`'s build is no longer twice `graph`'s. Per region both take 62.0 rows into the redundancy step and 20.0 per-row LPs; box 582 ms against 673 ms, per-row tests 617 against 545 (+13%, census noise included), Chebyshev 89 against 76. The 2x in the provisional version came from the tree before the dedupe. No further census.
+* **pop_005**: with the dedupe and the chain in main, `mplcp`'s build is no longer twice `graph`'s. Per region both take 62.0 rows into the redundancy step and 20.0 per-row LPs; box 585 ms against 673 ms, per-row tests 622 against 545 (+14%, census noise included), Chebyshev 91 against 76. The 2x in the provisional version came from the tree before the dedupe. No further census.
 
 ## Would a region be cheaper to search the mplcp way or the graph-family way?
 
@@ -174,15 +174,17 @@ Per region popped by `mplcp` (counters in the same census solve, `mplcp.<problem
 
 | problem | regions popped | daqp us/test | source | mplcp search ms | priced as DAQP tests ms | regions where mplcp is cheaper | per-region ideal choice ms | saving, share of solve | per-facet-type ideal ms | saving, share of solve |
 |---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|
-| sys3x2_N5 | 973 | 0.52 | census | 7.9 | 23.1 | 97% | 7.6 | 0.9% | 2.5 | 22.2% |
-| rand_t8_x5_m20_s0 | 4111 | 0.78 | cached report | 162.0 | 47.6 | 0% | 47.6 | 17.9% | 23.0 | 21.7% |
-| rand_t12_x5_m20_s0 | 6143 | 0.93 | cached report | 1092.6 | 92.5 | 0% | 92.5 | 36.9% | 57.3 | 38.2% |
-| pop_017 | 4142 | 1.04 | cached report | 171.6 | 96.9 | 23% | 92.0 | 15.4% | 19.0 | 29.6% |
-| pop_005 | 10289 | 1.66 | cached report | 713.3 | 712.5 | 84% | 414.7 | 13.0% | 63.9 | 28.2% |
-| masses3_N4 | 3643 | 1.07 | cached report | 247.0 | 199.4 | 59% | 153.9 | 9.5% | 17.5 | 23.5% |
-| masses4_N3 | 2953 | 0.68 | cached report | 819.0 | 93.7 | 6% | 92.8 | 34.2% | 21.0 | 37.6% |
-| masses5_N3 | 5273 | 0.71 | census | 3181.9 | 192.6 | 2% | 192.1 | 29.5% | 81.3 | 30.6% |
-| pop_002 | 321026 | 2.31 | census | 9492.2 | 37472.0 | 99% | 9360.4 | 0.2% | 2237.9 | 9.9% |
+| sys3x2_N5 | 973 | 0.52 | census | 8.4 | 23.1 | 96% | 8.1 | 1.4% | 2.9 | 21.8% |
+| rand_t8_x5_m20_s0 | 4111 | 0.78 | cached report | 187.9 | 47.6 | 0% | 47.6 | 20.5% | 32.4 | 22.8% |
+| rand_t12_x5_m20_s0 | 6143 | 0.93 | cached report | 559.5 | 93.3 | 0% | 93.3 | 21.1% | 67.7 | 22.2% |
+| pop_017 | 4142 | 1.04 | cached report | 189.3 | 96.9 | 16% | 93.7 | 17.5% | 24.4 | 30.2% |
+| pop_005 | 10289 | 1.66 | cached report | 591.0 | 712.9 | 84% | 425.5 | 7.6% | 73.2 | 23.6% |
+| masses3_N4 | 3643 | 1.07 | cached report | 214.6 | 199.5 | 59% | 154.6 | 6.4% | 20.7 | 20.8% |
+| masses4_N3 | 2953 | 0.68 | cached report | 282.2 | 94.0 | 7% | 93.0 | 11.9% | 22.0 | 16.4% |
+| masses5_N3 | 5273 | 0.71 | census | 1010.0 | 193.0 | 1% | 192.7 | 10.3% | 58.3 | 11.9% |
+| pop_002 | 321026 | 2.31 | census | 9700.0 | 37472.0 | 99% | 9561.9 | 0.2% | 2487.4 | 9.8% |
+
+Reading. `mplcp`'s search is cheaper than the graph family's tests in almost every region only on the small problem (96% of regions on sys3x2_N5) and on pop_002 (99%, where `parametric_daqp` pays 2.3 us per test on 321,026 regions) and on pop_005 (84%, a tie in total: 591 ms against 713 ms); on rand_t8 and rand_t12 it is cheaper in no region, on masses4_N3 and masses5_N3 in 7% and 1%. The ceiling of an ideal per-region choice is 0.2% (pop_002) to 21% (rand_t8, rand_t12) of the solve; an ideal per-facet-type choice 9.8% to 30%, but see the caveats below.
 
 'regions where mplcp is cheaper' compares, region by region, `mplcp`'s search time with unseen one-index changes x us per test. 'per-region ideal choice' takes the cheaper side in every region; 'saving' is the whole search time minus that, as a share of the solve (a ceiling, assuming the choice is free).
 
@@ -190,17 +192,17 @@ By facet type, `mplcp`'s time against DAQP tests of the same candidates (the can
 
 | problem | Case-1 facets: mplcp ms | DAQP ms (same candidates) | cheaper | rank-1: mplcp ms | DAQP ms | cheaper | walks: mplcp ms | DAQP ms | cheaper | search time not in these (none, overhead) ms |
 |---|---:|---:|---|---:|---:|---|---:|---:|---|---:|
-| sys3x2_N5 | 4.5 | 0.5 | DAQP | 0.0 | 0.0 | mplcp | 1.3 | 0.0 | DAQP | 2.0 |
-| rand_t8_x5_m20_s0 | 33.8 | 2.6 | DAQP | 0.0 | 0.7 | mplcp | 107.7 | 0.0 | DAQP | 20.5 |
-| rand_t12_x5_m20_s0 | 120.3 | 4.5 | DAQP | 589.6 | 1.1 | DAQP | 330.8 | 0.8 | DAQP | 51.9 |
-| pop_017 | 20.3 | 3.1 | DAQP | 3.3 | 1.2 | DAQP | 132.0 | 0.0 | DAQP | 15.9 |
-| pop_005 | 112.7 | 13.8 | DAQP | 288.0 | 2.9 | DAQP | 264.3 | 1.6 | DAQP | 48.4 |
-| masses3_N4 | 31.2 | 1.5 | DAQP | 45.7 | 2.7 | DAQP | 154.3 | 0.3 | DAQP | 15.7 |
-| masses4_N3 | 39.8 | 0.7 | DAQP | 552.7 | 1.6 | DAQP | 206.8 | 0.6 | DAQP | 19.6 |
-| masses5_N3 | 133.7 | 0.8 | DAQP | 2219.6 | 5.1 | DAQP | 749.4 | 1.5 | DAQP | 79.2 |
-| pop_002 | 5204.9 | 671.2 | DAQP | 143.8 | 72.5 | DAQP | 2577.5 | 0.8 | DAQP | 1566.0 |
+| sys3x2_N5 | 4.5 | 0.5 | DAQP | 0.0 | 0.0 | mplcp | 1.5 | 0.0 | DAQP | 2.4 |
+| rand_t8_x5_m20_s0 | 36.7 | 2.6 | DAQP | 0.0 | 0.7 | mplcp | 121.3 | 0.0 | DAQP | 29.8 |
+| rand_t12_x5_m20_s0 | 129.4 | 4.5 | DAQP | 3.5 | 1.1 | DAQP | 363.5 | 0.0 | DAQP | 63.1 |
+| pop_017 | 22.7 | 3.1 | DAQP | 1.1 | 1.2 | mplcp | 144.1 | 0.0 | DAQP | 21.3 |
+| pop_005 | 113.6 | 13.8 | DAQP | 139.5 | 3.1 | DAQP | 279.2 | 0.7 | DAQP | 58.7 |
+| masses3_N4 | 31.0 | 1.5 | DAQP | 9.5 | 2.7 | DAQP | 155.1 | 0.1 | DAQP | 19.1 |
+| masses4_N3 | 38.9 | 0.7 | DAQP | 8.8 | 1.6 | DAQP | 213.5 | 0.3 | DAQP | 21.0 |
+| masses5_N3 | 134.2 | 0.8 | DAQP | 56.9 | 5.1 | DAQP | 761.9 | 0.7 | DAQP | 57.0 |
+| pop_002 | 5202.2 | 671.2 | DAQP | 140.2 | 72.5 | DAQP | 2542.0 | 0.8 | DAQP | 1815.5 |
 
-Caveats. (1) The per-facet-type comparison prices only the fresh candidates a facet returned, while `mplcp`'s time also covers the facets whose neighbours were already known, which the graph family never looks at because it enumerates one-index changes instead of facets; the 'DAQP ms' columns are therefore lower bounds on the graph-family side for those facets and the per-facet ceilings are optimistic. (2) The DAQP price per test comes from `parametric_daqp`'s whole census, not from `mplcp`'s candidates (a candidate that mplcp returns is a neighbour, so its test may cost more than the mean). (3) 'search time not in these' is the search time outside the Case-1, rank-1 and walk counters (facets without a zero row, bookkeeping).
+Caveats. (1) The per-facet-type comparison prices only the fresh candidates a facet returned, while `mplcp`'s time also covers the facets whose neighbours were already known, which the graph family never looks at because it enumerates one-index changes instead of facets; the 'DAQP ms' columns are therefore lower bounds on the graph-family side for those facets and the per-facet ceilings are optimistic. (2) The DAQP price per test comes from `parametric_daqp`'s whole census, not from `mplcp`'s candidates (a candidate that mplcp returns is a neighbour, which is a nonempty test, dearer than the mean). (3) 'search time not in these' is the search time outside the Case-1, rank-1 and walk counters (facets without a zero row, bookkeeping).
 
 ## Task 86: the small-problem outliers (one census each, mplcp against combinatorial; `~/rpopt/mplcp-regbuild/small_out2/`)
 
