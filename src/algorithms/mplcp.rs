@@ -1365,7 +1365,7 @@ pub fn regions(program: &MpProgram, seed: u64, method: Method) -> Vec<CriticalRe
 const REFACTOR: usize = 32;
 
 /// Bound on the coordinates of a sub-facet polytope, used to check an infeasibility certificate of DAQP.
-const DAQP_COORD_BOUND: f64 = 1e6;
+const DAQP_COORD_BOUND: f64 = 1e3;
 
 static DAQP_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
@@ -1374,8 +1374,25 @@ pub fn set_daqp_tests(on: bool) {
     DAQP_ON.store(on, std::sync::atomic::Ordering::Relaxed);
 }
 
+/// The filter pays only when most of its calls end in a certified empty (a call that does not costs a DAQP solve and
+/// then the LP as well). Per thread, after each window of `DQ_WINDOW` calls with fewer than `DQ_MIN_SHARE` percent
+/// certified, the next `DQ_PAUSE` tests skip DAQP and go straight to the LP, then it is tried again.
+const DQ_WINDOW: u32 = 512;
+const DQ_MIN_SHARE: u32 = 60;
+const DQ_PAUSE: u32 = 8192;
+
+#[derive(Default)]
+struct DqState {
+    dq: crate::algorithms::pdaqp::daqp::Daqp,
+    cols: Vec<f64>,
+    rhs: Vec<f64>,
+    calls: u32,
+    empties: u32,
+    pause: u32,
+}
+
 thread_local! {
-    static DQ_WS: std::cell::RefCell<(crate::algorithms::pdaqp::daqp::Daqp, Vec<f64>, Vec<f64>)> = std::cell::RefCell::new(Default::default());
+    static DQ_WS: std::cell::RefCell<DqState> = std::cell::RefCell::new(DqState::default());
 }
 
 /// True when `{x in R^d1 : e x <= f}` is certainly empty: DAQP reports it infeasible and its certificate checks.
@@ -1393,7 +1410,12 @@ fn daqp_certainly_empty(e: &Mat, f: &[f64], d1: usize) -> bool {
     let t0 = std::time::Instant::now();
     let n = e.rows;
     let empty = DQ_WS.with(|ws| {
-        let (dq, cols, rhs) = &mut *ws.borrow_mut();
+        let st = &mut *ws.borrow_mut();
+        if st.pause > 0 {
+            st.pause -= 1;
+            return None;
+        }
+        let DqState { dq, cols, rhs, .. } = &mut *st;
         cols.clear();
         cols.resize(n * d1, 0.0);
         rhs.clear();
@@ -1402,7 +1424,7 @@ fn daqp_certainly_empty(e: &Mat, f: &[f64], d1: usize) -> bool {
             let row = e.row(i);
             let nrm = row.iter().map(|v| v * v).sum::<f64>().sqrt();
             if !(nrm > 1e-12) {
-                return false;
+                return Some(false);
             }
             for t in 0..d1 {
                 cols[t * n + i] = row[t] / nrm;
@@ -1410,28 +1432,43 @@ fn daqp_certainly_empty(e: &Mat, f: &[f64], d1: usize) -> bool {
             rhs[i] = f[i] / nrm;
         }
         let rows = Rows { cols: &cols[..], stride: n, b: &rhs[..], n, dim: d1 };
-        if dq.solve(&rows, 0) != Status::Infeasible {
-            return false;
+        let certified = dq.solve(&rows, 0) == Status::Infeasible && {
+            let (w, p) = dq.certificate();
+            let sp: f64 = p.iter().sum();
+            if !(sp > 0.0) || p.iter().any(|v| !v.is_finite()) {
+                false
+            } else {
+                // a multiplier that came out slightly negative is charged to the residual
+                let neg: f64 = p.iter().map(|&v| (-v).max(0.0)).sum();
+                let gap: f64 = w.iter().zip(p).map(|(&i, &v)| v * rhs[i]).sum();
+                let res: f64 = (0..d1).map(|t| w.iter().zip(p).map(|(&i, &v)| v * cols[t * n + i]).sum::<f64>().abs()).sum();
+                gap + (res + neg) * DAQP_COORD_BOUND < -1e-10 * sp
+            }
+        };
+        st.calls += 1;
+        st.empties += certified as u32;
+        if st.calls == DQ_WINDOW {
+            if st.empties * 100 < DQ_MIN_SHARE * DQ_WINDOW {
+                st.pause = DQ_PAUSE;
+            }
+            st.calls = 0;
+            st.empties = 0;
         }
-        let (w, p) = dq.certificate();
-        let sp: f64 = p.iter().sum();
-        if !(sp > 0.0) || p.iter().any(|v| !v.is_finite()) {
-            return false;
-        }
-        // a multiplier that came out slightly negative is charged to the residual below
-        let neg: f64 = p.iter().map(|&v| (-v).max(0.0)).sum();
-        let gap: f64 = w.iter().zip(p).map(|(&i, &v)| v * rhs[i]).sum();
-        let res: f64 = (0..d1).map(|t| w.iter().zip(p).map(|(&i, &v)| v * cols[t * n + i]).sum::<f64>().abs()).sum();
-        gap + (res + neg) * DAQP_COORD_BOUND < -1e-10 * sp
+        Some(certified)
     });
     #[cfg(feature = "lp_census")]
     crate::census::bump(crate::census::Counter::DqNanos, t0.elapsed().as_nanos() as u64);
-    if empty {
-        crate::census_bump!(DqEmpty, 1);
-    } else {
-        crate::census_bump!(DqFallback, 1);
+    match empty {
+        Some(true) => {
+            crate::census_bump!(DqEmpty, 1);
+            true
+        }
+        Some(false) => {
+            crate::census_bump!(DqFallback, 1);
+            false
+        }
+        None => false,
     }
-    empty
 }
 
 const WITNESS_MARGIN: f64 = 1e-8;
