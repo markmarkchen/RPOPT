@@ -471,7 +471,9 @@ time of `graph` (119 problems solved).
   slack column (a Schur complement of the positive semidefinite M), so a measure above 1e-6 certifies Case 1 and
   a zero pivot forces the zero column the rank-1 case needs. The DAQP emptiness filter of the sub-facet tests is
   exact with multipliers clamped to be nonnegative and the Euclidean radius of the parameter box, and a tableau
-  rebuilt from an active set is the same in any pivot order.
+  rebuilt from an active set is the same in any pivot order. Removing duplicated constraints keeps the feasible set
+  and the optimizer, and the full program's multipliers are exactly the splits of the reduced ones among the twins.
+  The lexicographic partition can change only where a twin group takes part in a primal degeneracy.
   For `mplp_lex` they show that a facet whose direct crossing finds no inequality row able to leave the basis has
   no feasible point beyond it (so skipping it without an LP is exact), and that the success-rate gate choosing
   between the direct crossing and the facet LP changes only the speed, not the regions.
