@@ -154,7 +154,7 @@ function. Every exact method returns the same set of critical regions as PPOPT o
 | `combinatorial_graph`, `combinatorial_graph_parallel` | Arnström, Axehill 2024, as simplified in PPOPT | PPOPT | breadth-first visit order |
 | `parametric_daqp` | Arnström, Axehill 2024, as published | paper | least-distance transformation and DAQP subproblems; 1.5x to 2.9x faster than the authors' `pdaqp` |
 | `ahmadi` | Ahmadi-Moshkenani, Johansen, Olaru 2018 | paper | handles LICQ and strict-complementarity violations (PPOPT ships an empty stub) |
-| `mplcp`, `mplcp_parallel` | Jones, Morari 2006, mp-LCP pivoting | paper | the fastest serial mpQP solver on the benchmark; lexicographic perturbation: no gaps or overlaps at degenerate vertices; mpLPs are routed to `mplp_lex`; the neighbour search on the facet a region was entered through by a single pivot is skipped (it can only return the parent; about 2% faster serial, same regions; measured on Negishi, median ratio 1.02 to 1.03 against an A/A noise band of 0.99 to 1.01 on the larger problems, see `bench/results/negishi_entry_skip_ab.md`; no resolvable gain at 16 threads); each region's law is read from the pivot tableau instead of a fresh KKT solve (same regions; coefficients agree with the KKT solve to about 6e-9 relative, so not bit-identical; `mplcp::set_tableau_law(false)` restores the KKT solve) |
+| `mplcp`, `mplcp_parallel` | Jones, Morari 2006, mp-LCP pivoting | paper | the fastest serial mpQP solver on the benchmark; lexicographic perturbation: no gaps or overlaps at degenerate vertices; mpLPs are routed to `mplp_lex`; the neighbour search on the facet a region was entered through by a single pivot is skipped (it can only return the parent; about 2% faster serial, same regions; measured on Negishi, median ratio 1.02 to 1.03 against an A/A noise band of 0.99 to 1.01 on the larger problems, see `bench/results/negishi_entry_skip_ab.md`; no resolvable gain at 16 threads); each region's law is read from the pivot tableau instead of a fresh KKT solve (same regions; coefficients agree with the KKT solve to about 6e-9 relative, so not bit-identical; `mplcp::set_tableau_law(false)` restores the KKT solve); the region build no longer repeats the KKT rows and the Chebyshev LP when it falls back to the LP path, and uses vertex clipping only up to 5 parameters (6 parameters: 1.6x to 21x faster, 7 to 10 parameters: 1.01x to 1.04x, 3 to 5 parameters: 1.01x to 1.06x, see `bench/results/mplcp_build_speed.md`) |
 | `mplcp_enum` | Herceg, Jones, Kvasnica, Morari 2015 | paper | basis enumeration for general M (mpQP and mpLP); exponential |
 | `mplp_lex` | Jones, Kerrigan, Maciejowski 2007 | paper | lexicographic mpLP: unique, gap- and overlap-free partition for degenerate mpLPs; the fastest mpLP solver on the benchmark |
 | `algorithms::dp::solve_mpc_dp` | Mitze, Mönnigmann 2020, 2022; Mitze, Kvasnica, Mönnigmann 2023 | paper | active-set dynamic programming over the MPC horizon; takes the MPC model (`mpc::MpcProblem`) |
@@ -351,7 +351,21 @@ regions are identical, except for mpLP `graph`, whose old partitions had gaps an
   (`bench/results/lp_census.md`).
 - **LP census at 3 to 10 parameters** (`bench/results/lp_census_highdim.md`, `--features lp_census`): why `mplcp` and
   `geometric` lose ground to `graph` as the parameter count grows (neighbour search per facet; vertex clipping is
-  compiled only for 2 to 6 parameters, and lifting that cap was measured 1.1x to 15x slower, so it is not kept).
+  compiled only for 2 to 5 parameters, and lifting that cap was measured 1.1x to 15x slower, so it is not kept).
+- **Region build by parameter count** (`bench/results/mplcp_build_speed.md`, Negishi, serial, paired per task, A/A
+  band 0.99 to 1.01 on the larger problems). Speedup over the previous main:
+
+  | parameters | `mplcp` | `graph` | `geometric` |
+  |---|---|---|---|
+  | 2 to 4 | 1.01x to 1.06x (median 1.02x) | 1.00x (4 parameters) | 1.01x (4 parameters) |
+  | 5 | 0.99x to 1.04x (median 1.01x) | not timed | not timed |
+  | 6 | 1.66x (rand_t6), 3.5x (masses3_N3), 12x (masses3_N4), 21x (pop_017) | 1.8x to 32x | 1.1x to 4.3x |
+  | 7 to 10 | 1.01x to 1.04x | 1.01x (8 parameters) | 0.98x (8 parameters) |
+
+  The 6-parameter gain comes from stopping vertex clipping at 5 parameters in the shared builder and in
+  `mplcp`'s builder: on 6 parameters the clip needed hundreds of vertices per region (up to 40 ms) and, when it
+  gave up, ran twice before the LP path (about 0.1 ms) took over. Rows differ from the previous clip results on a few
+  regions of the tolerance-edge kind, see the results file.
 
 **Against the authors' implementation of Arnström-Axehill 2024** (`pdaqp` 0.7.1, ParametricDAQP.jl):
 `parametric_daqp` is 1.5x to 2.9x faster on the larger problems. `geometric` is about 14x faster than `pdaqp` on
