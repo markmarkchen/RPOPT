@@ -101,6 +101,44 @@ theorem active_row_multiple {E : Matrix κ π ℝ} {f : κ → ℝ} {g : π → 
   have : f k = -(c * b₀) := by rw [← hk, e0]; linear_combination c * hθ₀
   rw [this]; ring
 
+/-- **A point on the facet plane that satisfies every other row strictly is a relative-interior
+point of the facet** (the `hrel` hypothesis above). This justifies mplp_lex's shortcut (663a59e):
+the foot of the region's Chebyshev centre on the facet plane, accepted when it clears every other
+row with a margin. Rows on the same plane hold on the whole plane (second alternative). -/
+theorem relint_of_strict {E : Matrix κ π ℝ} {f : κ → ℝ} {g : π → ℝ} {b₀ : ℝ} {θ₀ : π → ℝ}
+    (hθ₀ : g ⬝ᵥ θ₀ + b₀ = 0)
+    (hrows : ∀ k, (E *ᵥ θ₀) k < f k ∨ ∀ θ, g ⬝ᵥ θ + b₀ = 0 → (E *ᵥ θ) k ≤ f k) (u : π → ℝ)
+    (hu : g ⬝ᵥ u = 0) :
+    ∃ t : ℝ, 0 < t ∧ θ₀ + t • u ∈ Polyhedron E f ∩ {θ | g ⬝ᵥ θ + b₀ = 0} ∧
+      θ₀ - t • u ∈ Polyhedron E f ∩ {θ | g ⬝ᵥ θ + b₀ = 0} := by
+  have hplane : ∀ t : ℝ, g ⬝ᵥ (θ₀ + t • u) + b₀ = 0 ∧ g ⬝ᵥ (θ₀ - t • u) + b₀ = 0 := by
+    intro t
+    simp only [dotProduct_add, dotProduct_sub, dotProduct_smul, smul_eq_mul, hu, mul_zero]
+    constructor <;> linarith
+  have hcont : ∀ v : π → ℝ, Continuous fun t : ℝ => θ₀ + t • v :=
+    fun v => continuous_const.add (continuous_id.smul continuous_const)
+  have hev : ∀ k, ∀ᶠ t in nhds (0 : ℝ), (E *ᵥ θ₀) k < f k →
+      (E *ᵥ (θ₀ + t • u)) k < f k ∧ (E *ᵥ (θ₀ - t • u)) k < f k := by
+    intro k
+    by_cases hk : (E *ᵥ θ₀) k < f k
+    · have c1 := ((continuous_mulVec_apply E k).comp (hcont u)).continuousAt (x := 0)
+      have c2 := ((continuous_mulVec_apply E k).comp (hcont (-u))).continuousAt (x := 0)
+      have e1 := c1.eventually (gt_mem_nhds (by simpa using hk))
+      have e2 := c2.eventually (gt_mem_nhds (by simpa using hk))
+      filter_upwards [e1, e2] with t h1 h2 _
+      refine ⟨h1, ?_⟩
+      simpa [sub_eq_add_neg, smul_neg] using h2
+    · exact Filter.Eventually.of_forall fun _ h => absurd h hk
+  obtain ⟨t, ht, hpos⟩ := ((Filter.eventually_all.mpr hev).filter_mono nhdsWithin_le_nhds
+    |>.and (self_mem_nhdsWithin : Set.Ioi (0 : ℝ) ∈ nhdsWithin 0 (Set.Ioi 0))).exists
+  refine ⟨t, hpos, ⟨fun k => ?_, (hplane t).1⟩, ⟨fun k => ?_, (hplane t).2⟩⟩
+  · rcases hrows k with hk | hk
+    · exact (ht k hk).1.le
+    · exact hk _ (hplane t).1
+  · rcases hrows k with hk | hk
+    · exact (ht k hk).2.le
+    · exact hk _ (hplane t).2
+
 /-- **`R` covers its side of `F`.** If `F ⊆ R`, `F` lies in the hyperplane, `θ₀` is a
 relative-interior point of `F`, and `R` has a point strictly on its side, then `R` contains every
 point near `θ₀` on that side. -/

@@ -91,3 +91,6 @@ import RpoptProofs
 #print axioms Rpopt.walkStep_injective_inv
 #print axioms Rpopt.walk_no_repeat
 #print axioms Rpopt.walk_repeat_returns
+-- Round 3b: region construction and start fallback
+#print axioms Rpopt.relint_of_strict
+#print axioms Rpopt.chebyshev_ball_feasible

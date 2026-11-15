@@ -2,6 +2,7 @@
 -- See README.md for the status table and the Rust correspondence.
 import RpoptProofs.Foundations.QP
 import RpoptProofs.Foundations.LCP
+import RpoptProofs.Foundations.Chebyshev
 import RpoptProofs.Tableau
 import RpoptProofs.Pivot
 import RpoptProofs.Lex
