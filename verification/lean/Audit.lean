@@ -129,3 +129,12 @@ import RpoptProofs
 #print axioms Rpopt.row_j_combination
 #print axioms Rpopt.infeasible_beyond
 #print axioms Rpopt.reach_congr
+-- Round 10: scale-free pivot measure (7457656)
+#print axioms Rpopt.tableau_delta
+#print axioms Rpopt.tableau_off_psd
+#print axioms Rpopt.tableau_off_symm
+#print axioms Rpopt.pivot_nonneg
+#print axioms Rpopt.pivot_cauchy_schwarz
+#print axioms Rpopt.slack_column_zero_of_pivot_zero
+#print axioms Rpopt.tableau_diag_le
+#print axioms Rpopt.column_le_pivot
