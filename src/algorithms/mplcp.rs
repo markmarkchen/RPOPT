@@ -1346,16 +1346,15 @@ fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>
         let hint = mk_hint();
         for nb in nbrs {
             if let Nbr::Across(pt) = &nb {
-                // fallback: the QP just across the facet gives the neighbouring active set
-                match program.active_set_at(pt) {
-                    Some(act) => {
+                // fallback: the lexicographic Lemke basis at the probe point just across the facet (the QP's
+                // optimal active set can be a lexico-infeasible twin); a basis whose tableau does not exist
+                // (rank-deficient active set) or is not lexico-feasible is rejected
+                let basis = lex_lemke(plcp, pt).filter(|z| tableau_for(plcp, z).map_or(false, |t| lex_feasible(&t)));
+                let _ = program;
+                match basis {
+                    Some(z) => {
                         crate::census_bump!(FallbackAcross, 1);
-                        let mut v: Vec<usize> = act.into_iter().filter(|c| !plcp.eq.contains(c)).collect();
-                        v.sort_unstable();
-                        v.dedup();
-                        let mut aset = plcp.eq.clone();
-                        aset.extend(v);
-                        cands.push(Cand { aset, hint: Some(pt.clone()), piv: None, entry: None, cert: None });
+                        cands.push(Cand { aset: plcp.active_set(z.into_iter()), hint: Some(pt.clone()), piv: None, entry: None, cert: None });
                     }
                     None => {
                         crate::census_bump!(FallbackFail, 1);
