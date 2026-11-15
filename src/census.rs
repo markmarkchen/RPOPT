@@ -338,6 +338,8 @@ mod imp {
         /// calls whose pivot measure lies between the zero and nonzero thresholds (left to the walk)
         FastRel,
         PivotGap,
+        /// fast-path calls with tve above PTOL whose pivot measure is at most MEASURE_ZERO (sent to rank-1)
+        FastDemoted,
         R1Handled,
         R1Fallback,
         R1Emitted,

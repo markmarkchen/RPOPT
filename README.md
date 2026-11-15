@@ -401,12 +401,14 @@ time of `graph` (119 problems solved).
   measurement against every exact solver on 111 problems of 2 to 16 parameters (main f234e64, with the rank-1
   enumeration) is in `bench/results/mplcp_goal_status.md`: `mplcp` is fastest on 38. The best other solver is
   `parametric_daqp` on 37 of the other 73, `graph` on 17, `combinatorial_graph` on 14 and `combinatorial` on 5.
-- **Scale-free pivot test (Case 1 fast path).** `adjacent` and `rank1_case2` now decide "nonzero pivot" and "zero pivot" with
+- **Scale-free pivot test (Case 1 fast path).** `adjacent` and `rank1_case2` decide "nonzero pivot" and "zero pivot" with
   one scale-free measure (thresholds 1e-6 and 1e-9, the measured gap), where an absolute `PTOL` had sent Case-1 facets of badly
-  scaled problems to the Case-2 walk. Paired serial time against main c345cdc: masses from 6 parameters geometric mean
-  0.754 (masses5_N3 0.43, masses4_N4 0.56, masses5_N4 492 s, against 1800 s before this change and the rank-1 enumeration, and 153 s for `graph`); every other problem 1.005 (A/A 0.98 to 1.02);
-  masses8_N2 is 1.48x slower, unexplained. 93 of 111 region sets are hash-identical and the other 18 differ by
-  slivers, with 0 gaps, 0 overlaps and 0 lexico-infeasible regions on all 111. Details in
+  scaled problems to the Case-2 walk; a toggle taken through the relative test hands over its basis only, and a fast-path call
+  with `tve` above `PTOL` but a measure at most 1e-9 goes to rank-1. Paired serial time against main c345cdc (fix 04d4ca9):
+  masses from 6 parameters geometric mean 0.667 (masses5_N3 0.38, masses4_N4 0.55, masses8_N2 0.74; masses5_N4 492 s against
+  1800 s before the change and the rank-1 enumeration, and 153 s for `graph`); masses of 2 to 5 parameters 1.033 and 13 other
+  problems of 2 to 16 parameters 1.010 (A/A 0.99 to 1.01). The fix has 0 gaps, 0 overlaps and 0 lexico-infeasible regions on all 111
+  problems and the same region hash as main on 94 of them (the others differ by slivers). Details in
   `bench/results/mplcp_scale_free_pivot.md`.
 
 ## Correctness
