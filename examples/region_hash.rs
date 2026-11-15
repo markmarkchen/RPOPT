@@ -10,7 +10,12 @@ use std::sync::Arc;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if let Ok(m) = std::env::var("RPOPT_CERT") {
+        rpopt::algorithms::mplcp::set_certificate(m.parse().unwrap());
+    }
     let alg = MpqpAlgorithm::from_name(&args[1]).expect("algorithm");
+    // RPOPT_HASH_SCALE: rounding scale of E and f (default 1e9)
+    let scale: f64 = std::env::var("RPOPT_HASH_SCALE").ok().and_then(|v| v.parse().ok()).unwrap_or(1e9);
     for f in &args[2..] {
         let p = Arc::new(MpProgram::from_json_file(std::path::Path::new(f)).unwrap());
         let t0 = std::time::Instant::now();
@@ -24,8 +29,8 @@ fn main() {
                 a.sort_unstable();
                 let mut v = vec![r.e.rows as i64];
                 for k in 0..r.e.rows {
-                    v.extend(r.e.row(k).iter().map(|x| (x * 1e9).round() as i64));
-                    v.push((r.f[k] * 1e9).round() as i64);
+                    v.extend(r.e.row(k).iter().map(|x| (x * scale).round() as i64));
+                    v.push((r.f[k] * scale).round() as i64);
                 }
                 (a, v)
             })

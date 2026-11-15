@@ -223,8 +223,17 @@ mod imp {
         PfDepth5,
         PfDepth6,
         PfDepth7,
+        /// mplcp facet certificate: facets examined, certified (known single neighbour), certified
+        /// ones that `adjacent` took the slow / fast path on (audit mode), time spent in the check,
+        /// and certified facets whose search also reached a new region
+        CertFacets,
+        CertHit,
+        CertNanos,
+        CertExtra,
+        AdjCertSkip,
+        AdjCertSkipNanos,
     }
-    pub const NC: usize = 63;
+    pub const NC: usize = 69;
 
     #[derive(Clone, Debug)]
     pub struct Stats {

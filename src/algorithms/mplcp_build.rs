@@ -11,7 +11,11 @@ use crate::linalg::Mat;
 use crate::program::MpProgram;
 use std::cmp::Ordering;
 
-pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Option<&[f64]>, law: Option<crate::program::ControlLaw>) -> Option<(CriticalRegion, Vec<f64>)> {
+/// The region, its Chebyshev center, and (only when the fast clip succeeded) the vertices of the
+/// region polytope, flattened (nt coordinates each).
+pub(super) type Built = (CriticalRegion, Vec<f64>, Option<Vec<f64>>);
+
+pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Option<&[f64]>, law: Option<crate::program::ControlLaw>, want_verts: bool) -> Option<Built> {
     use crate::mpqp_utils::kkt_region_from_law;
     crate::census_purpose!(Chebyshev);
     use crate::utils::{numerically_nonzero_rows, remove_duplicate_rows};
@@ -69,12 +73,16 @@ pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Opti
     let slack: Vec<f64> = (0..e.rows).map(|i| f[i] - crate::linalg::dot(e.row(i), &center)).collect();
     // ties broken by the row index: the order of the stable sort
     order.sort_unstable_by(|&x, &y| slack[x].partial_cmp(&slack[y]).unwrap_or(Ordering::Equal).then(x.cmp(&y)));
-    let flags: Vec<bool> = match clip_flags(&e, &f, &order, &blo, &bhi) {
-        Some(fl) => fl.iter().enumerate().map(|(p, &v)| if v >= 0 { v == 1 } else { crate::solver::lp::lp_feasible_from(&e, &f, &[p], &center) }).collect(),
+    let verts: Option<Vec<f64>>;
+    let flags: Vec<bool> = match clip_flags(&e, &f, &order, &blo, &bhi, want_verts) {
+        Some((fl, vt)) => {
+            verts = if want_verts { Some(vt) } else { None };
+            fl.iter().enumerate().map(|(p, &v)| if v >= 0 { v == 1 } else { crate::solver::lp::lp_feasible_from(&e, &f, &[p], &center) }).collect()
+        }
         None => {
             #[cfg(feature = "lp_census")]
             let _mute = crate::census::MuteClip::new();
-            return crate::mpqp_utils::gen_cr_from_law_hinted(program, active_set, law.clone(), hint);
+            return crate::mpqp_utils::gen_cr_from_law_hinted(program, active_set, law.clone(), hint).map(|(cr, c)| (cr, c, None));
         }
     };
     let mut kept_lambda = vec![];
@@ -128,6 +136,7 @@ pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Opti
             cheb_radius,
         },
         center,
+        verts,
     ))
 }
 
@@ -151,7 +160,7 @@ fn cheb_from(a: &Mat, b: &[f64], x0: &[f64]) -> Option<crate::solver::lp::LpSolu
     Some(crate::solver::lp::LpSolution { x, obj, dual: vec![], slack: vec![], active_set: vec![] })
 }
 
-fn clip_flags(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &[f64]) -> Option<Vec<i8>> {
+fn clip_flags(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &[f64], want: bool) -> Option<(Vec<i8>, Vec<f64>)> {
     crate::census_bump!(ClipCalls, 1);
     if lo.iter().chain(hi).any(|v| !v.is_finite()) {
         crate::census_bump!(ClipInfBox, 1);
@@ -162,11 +171,11 @@ fn clip_flags(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &[f64]) -> Op
         return None;
     }
     let r = match e.cols {
-        2 => clip_n::<2>(e, f, order, lo, hi),
-        3 => clip_n::<3>(e, f, order, lo, hi),
-        4 => clip_n::<4>(e, f, order, lo, hi),
-        5 => clip_n::<5>(e, f, order, lo, hi),
-        6 => clip_n::<6>(e, f, order, lo, hi),
+        2 => clip_n::<2>(e, f, order, lo, hi, want),
+        3 => clip_n::<3>(e, f, order, lo, hi, want),
+        4 => clip_n::<4>(e, f, order, lo, hi, want),
+        5 => clip_n::<5>(e, f, order, lo, hi, want),
+        6 => clip_n::<6>(e, f, order, lo, hi, want),
         _ => {
             crate::census_bump!(ClipNtOut, 1);
             None
@@ -190,7 +199,7 @@ fn dotn<const N: usize>(a: &[f64], x: &[f64; N]) -> f64 {
 
 /// Vertex clipping of the box by the rows: per row 1 when it is tight at a vertex of box ∩ region,
 /// 0 when it clears every vertex by 1e-7 (relative), -1 when undecided.
-fn clip_n<const N: usize>(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &[f64]) -> Option<Vec<i8>> {
+fn clip_n<const N: usize>(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &[f64], want: bool) -> Option<(Vec<i8>, Vec<f64>)> {
     let m = e.rows;
     let mut pts: Vec<[f64; N]> = Vec::with_capacity(64);
     let mut tight: Vec<u128> = Vec::with_capacity(64);
@@ -367,5 +376,13 @@ fn clip_n<const N: usize>(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &
             -1
         });
     }
-    Some(out)
+    // the vertices of box ∩ region (the box contains the parameter set and its rows are in `e`,
+    // so these are the vertices of the region itself)
+    let mut flat = Vec::with_capacity(if want { pts.len() * N } else { 0 });
+    if want {
+        for x in &pts {
+            flat.extend_from_slice(x);
+        }
+    }
+    Some((out, flat))
 }
