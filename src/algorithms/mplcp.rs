@@ -315,6 +315,11 @@ fn tableau_for(p: &Plcp, z: &[usize]) -> Option<Tab> {
 
 const ZTOL: f64 = 1e-9;
 const PTOL: f64 = 1e-10;
+/// Pivot tolerance relative to the largest entry of the entering column (see `pivot_facet`).
+fn prel() -> f64 {
+    static V: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
+    *V.get_or_init(|| std::env::var("PREL").ok().and_then(|v| v.parse().ok()).unwrap_or(0.0))
+}
 
 fn comp(var: usize, n: usize) -> usize {
     if var < n {
@@ -432,7 +437,13 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
             }
         };
         let rowmax = |i: usize| (0..1 + d1).fold(0.0f64, |m, k| m.max(tab.rv(i, k).abs()));
-        let pset: Vec<usize> = (0..n).filter(|&i| a[i] > PTOL).collect();
+        // a candidate leaving row must decrease by more than rounding noise relative to the column:
+        // with entries of 1e2 to 1e3 the noise is far above the absolute PTOL, and pivoting on it
+        // (pop_011: a = 1.6e-10 in a column of 1.5e2) gave bases with multipliers of 1e13 whose regions
+        // overlapped the true ones
+        let amax = (0..n).fold(0.0f64, |m, i| m.max(a[i].abs()));
+        let pthr = PTOL.max(prel() * amax);
+        let pset: Vec<usize> = (0..n).filter(|&i| a[i] > pthr).collect();
         let in_z = |i: usize| rowmax(i) <= ZTOL * fpoly.sc[tab.row_var[i]];
         let pz: Vec<usize> = pset.iter().cloned().filter(|&i| in_z(i)).collect();
         let alpha_row = tab.row_var.iter().position(|&v| v == alpha);
@@ -442,7 +453,7 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
         // pivot had exchanged a dependent pair (pop_081: parallel rows of a one-variable program).
         if pz.is_empty() {
             if let Some(ra) = alpha_row {
-                if tab.tv(ra, e) > PTOL {
+                if tab.tv(ra, e) > pthr {
                     out.push(z_after(tab, n, ra, e));
                     return;
                 }
