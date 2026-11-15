@@ -513,9 +513,13 @@ fn test_set(ldp: &Ldp, key: u128, a: &[usize], w: &mut Work) -> Test {
     let nc = nt + 1;
     let neq = ldp.neq;
     let m = ldp.m;
+    #[cfg(feature = "lp_census")]
+    let t_ldl = std::time::Instant::now();
     if k > ldp.nx || a.iter().any(|&i| ldp.parallel[i] & key != 0) || !ldl_gram(ldp, a, w) {
         return Test::Licq;
     }
+    #[cfg(feature = "lp_census")]
+    crate::census::bump(crate::census::Counter::PdLdlNanos, t_ldl.elapsed().as_nanos() as u64);
     // [Λ | λ0] = -G_AA^{-1} [D_A | d0_A]
     w.x.clear();
     w.x.resize(k * nc, 0.0);
@@ -573,6 +577,7 @@ fn test_set(ldp: &Ldp, key: u128, a: &[usize], w: &mut Work) -> Test {
                     mx += (row[t] * lo[t]).max(row[t] * hi[t]);
                 }
                 if mx < -10.0 * daqp::PRIMAL_TOL * nrm {
+                    crate::census_bump!(PdEarlyEmpty, 1);
                     return Test::Empty;
                 }
             }
@@ -592,7 +597,12 @@ fn test_set(ldp: &Ldp, key: u128, a: &[usize], w: &mut Work) -> Test {
     w.rhs[nl..n1].copy_from_slice(&ldp.th_rhs);
     // stage 1: λ and θ rows only
     let rows1 = Rows { cols: &w.cols, stride: n, b: &w.rhs, n: n1, dim: nt };
+    #[cfg(feature = "lp_census")]
+    let t_d1 = std::time::Instant::now();
     let st1 = w.daqp.solve(&rows1, 0);
+    crate::census_bump!(PdDaqp1, 1);
+    #[cfg(feature = "lp_census")]
+    crate::census::bump(crate::census::Counter::PdDaqpNanos, t_d1.elapsed().as_nanos() as u64);
     if st1 == Status::Infeasible {
         return Test::Empty;
     }
@@ -655,7 +665,12 @@ fn test_set(ldp: &Ldp, key: u128, a: &[usize], w: &mut Work) -> Test {
         }
     }
     let rows = Rows { cols: &w.cols, stride: n, b: &w.rhs, n, dim: nt };
+    #[cfg(feature = "lp_census")]
+    let t_d2 = std::time::Instant::now();
     let st = if st1 == Status::Feasible { w.daqp.resume(&rows, 0) } else { w.daqp.solve(&rows, 0) };
+    crate::census_bump!(PdDaqp2, 1);
+    #[cfg(feature = "lp_census")]
+    crate::census::bump(crate::census::Counter::PdDaqpNanos, t_d2.elapsed().as_nanos() as u64);
     match st {
         Status::Feasible => Test::Region,
         Status::Infeasible => Test::Empty,
@@ -667,6 +682,7 @@ fn test_set(ldp: &Ldp, key: u128, a: &[usize], w: &mut Work) -> Test {
                     e[(i, t)] = w.cols[t * n + i];
                 }
             }
+            crate::census_bump!(PdLpFallback, 1);
             if crate::solver::lp::lp_feasible(&e, &w.rhs, &[]) { Test::Region } else { Test::Empty }
         }
     }
@@ -733,10 +749,25 @@ pub fn pdaqp(program: &MpProgram) -> Vec<CriticalRegion> {
             a.push(r.trailing_zeros() as usize);
             r &= r - 1;
         }
-        let (sup, sub) = match test_set(&ldp, k, &a, &mut work) {
-            Test::Licq => (false, true),
-            Test::Empty => (false, false),
+        #[cfg(feature = "lp_census")]
+        let t_test = std::time::Instant::now();
+        let outcome = test_set(&ldp, k, &a, &mut work);
+        #[cfg(feature = "lp_census")]
+        crate::census::bump(crate::census::Counter::PdTestNanos, t_test.elapsed().as_nanos() as u64);
+        crate::census_bump!(PdTests, 1);
+        let (sup, sub) = match outcome {
+            Test::Licq => {
+                crate::census_bump!(PdLicq, 1);
+                (false, true)
+            }
+            Test::Empty => {
+                crate::census_bump!(PdEmpty, 1);
+                (false, false)
+            }
             Test::Region => {
+                crate::census_bump!(PdRegion, 1);
+                #[cfg(feature = "lp_census")]
+                let t_build = std::time::Instant::now();
                 let nc = ldp.nt + 1;
                 let x = &work.x;
                 let law = ControlLaw {
@@ -749,6 +780,8 @@ pub fn pdaqp(program: &MpProgram) -> Vec<CriticalRegion> {
                 if let Some(cr) = gen_cr_from_kkt(program, &a, kkt, true) {
                     regions.push(cr);
                 }
+                #[cfg(feature = "lp_census")]
+                crate::census::bump(crate::census::Counter::PdBuildNanos, t_build.elapsed().as_nanos() as u64);
                 (true, true)
             }
         };
