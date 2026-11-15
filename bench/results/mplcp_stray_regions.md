@@ -164,7 +164,7 @@ task, median over 3 to 5 tasks; the heavy problems run one pair per task. Ratio 
 
 The check costs 1 to 2% on the 3 to 60 ms problems (sys3x2 and masses2: 0.98 to 1.00 against an A/A of 0.99 to 1.01) and
 is neutral or a gain (3 to 7%) on the large ones (fewer garbage regions to build). pop_032 was not timed (its pair tasks
-did not finish at 1.9 GB / the time limit). The binary timed predates the change that also tries the final rows' centre for
+were OOM-killed at 1900 MB; it needs a 2-CPU allocation). The binary timed predates the change that also tries the final rows' centre for
 flagged candidates; that change touches only flagged candidates (rare).
 
 ## Tests
