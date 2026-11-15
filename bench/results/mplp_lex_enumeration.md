@@ -224,3 +224,84 @@ only for the rows the builder decides by an LP (the others are decided by the bo
 which is the foot already used here). So the export cannot win this problem and was not implemented; no code changed.
 The facet LPs are 1.97 s of 8.7 s with the census overhead; their cold cost per LP is already small (the 202,733 LPs average 9.7 us with the census
 clock reads, 5.1 us without), so the walk is near the floor of its facet-by-facet design on this problem.
+
+## Round 7: direct crossing again, with a gate that targets where it lost
+
+Direction check: the round-2 ratios were candidate time over base time, so direct crossing was 5 to 14% faster on the random mpLPs (0.86 to 0.95)
+and 7 to 40% slower on the problems with slivers and on the 2 to 4 parameter problems. This round re-applies it (same pivot, same safeguards: neighbour
+radius above 1e-4, reversed facet present, rows matched by value, ties fall back to the LP path) behind a gate.
+
+Why it lost, from timers inside the walk (laptop): (1) on the sliver MPC problems 30 to 45% of the attempts end in a fresh `gen_cr` of a neighbour that is
+then rejected (a numerically marginal or empty facet, where the LP path would have skipped the facet), 11 us each against a 6 us LP saved; the
+per-region context and probes add a few percent more; (2) at 2 to 4 parameters the facet LP costs 1 to 5 us, no more than the pivot, the
+check and the reverse-facet test.
+
+The gate (all exact criteria or counts, no clocks, so runs are reproducible):
+- direct crossing only for 5 or more parameters (`DIRECT_MIN_NT`);
+- a running success rate s and a running rate q of attempts that fail after a fresh region build (averages over the last 32 attempts) decide per
+  region: try the region when s > 0.17 + 1.8 q (an attempt costs about 0.17 of the LP it saves, a wasted build 1.8 of it, measured on the 6 to 12
+  parameter problems); the first 8 regions are tried; otherwise a region is tried as a probe, and each lost probe doubles the wait for the next (4, 8, ..., at most 256 regions).
+Both paths return the same neighbour or the LP path decides, so the gate changes speed only.
+
+Gates passed:
+- Region hashes identical to the walk without direct crossing on all 46 mpLPs, with `MPLP_LEX_MODE=1` (walk) and with the default path (enumeration on the two small
+  problems). The enumeration code is untouched. `examples/overlap_check` (every region's Chebyshev centre lies in that region only): 0 overlaps on
+  masses4inf_N2, masses3inf_N2, randlp_t5_x5_m40_s1 and randlp_t6_x5_m40_s1; `tests/mplp_lex_enum.rs` passes.
+- Serial A/B on Negishi (build 45887919, array 45887920): 46 problems, 3 alternations each, one 1-CPU task per (problem, alternation), base (main) / candidate / base again
+  in shuffled order; region counts equal and 0 gaps/errors on all.
+
+| problem | cand/base median | range | A/A median | A/A range | cand ms | regions equal, 0 gaps/errs |
+|---|---:|---|---:|---|---:|---|
+| diinf_N10 | 1.003 | 0.997-1.004 | 1.000 | 0.997-1.011 | 53.6 | yes |
+| diinf_N2 | 1.002 | 1.001-1.017 | 0.997 | 0.997-0.999 | 0.3 | yes |
+| diinf_N3 | 1.008 | 1.007-1.013 | 0.997 | 0.995-1.006 | 0.9 | yes |
+| diinf_N4 | 1.012 | 0.998-1.012 | 1.002 | 0.994-1.002 | 1.9 | yes |
+| diinf_N5 | 0.994 | 0.992-1.004 | 0.996 | 0.996-0.998 | 3.8 | yes |
+| diinf_N6 | 1.004 | 1.001-1.006 | 1.005 | 0.999-1.008 | 7.4 | yes |
+| diinf_N8 | 1.001 | 0.997-1.005 | 1.003 | 0.994-1.005 | 21.2 | yes |
+| dione_N10 | 1.004 | 0.998-1.010 | 1.006 | 1.005-1.008 | 30.1 | yes |
+| dione_N2 | 1.008 | 1.001-1.014 | 0.996 | 0.989-1.012 | 0.3 | yes |
+| dione_N3 | 1.019 | 1.018-1.020 | 1.004 | 1.000-1.009 | 0.9 | yes |
+| dione_N4 | 1.001 | 0.999-1.013 | 1.003 | 1.000-1.005 | 1.9 | yes |
+| dione_N5 | 1.005 | 1.002-1.006 | 1.005 | 0.992-1.005 | 3.8 | yes |
+| dione_N6 | 1.005 | 1.003-1.012 | 0.992 | 0.990-1.010 | 6.2 | yes |
+| dione_N8 | 0.996 | 0.996-1.002 | 1.000 | 0.998-1.000 | 14.5 | yes |
+| masses2inf_N2 | 0.995 | 0.945-1.029 | 1.025 | 1.005-1.105 | 15.6 | yes |
+| masses2inf_N3 | 0.996 | 0.996-0.999 | 0.999 | 0.998-1.002 | 93.1 | yes |
+| masses2inf_N4 | 0.995 | 0.991-0.996 | 1.002 | 0.995-1.004 | 367.4 | yes |
+| masses2inf_N5 | 0.998 | 0.995-1.005 | 1.000 | 0.997-1.004 | 1114.2 | yes |
+| masses2one_N2 | 1.002 | 0.983-1.013 | 0.998 | 0.985-1.005 | 48.5 | yes |
+| masses2one_N3 | 1.001 | 0.998-1.005 | 0.997 | 0.997-1.002 | 316.1 | yes |
+| masses2one_N4 | 1.035 | 0.969-1.062 | 1.027 | 0.972-1.034 | 1446.8 | yes |
+| masses2one_N5 | 0.995 | 0.992-1.002 | 1.031 | 1.026-1.032 | 4769.4 | yes |
+| masses3inf_N2 | 1.015 | 1.008-1.015 | 0.999 | 0.999-1.001 | 181.0 | yes |
+| masses3inf_N3 | 1.000 | 0.996-1.000 | 0.999 | 0.997-1.001 | 3557.9 | yes |
+| masses3one_N2 | 0.989 | 0.982-1.009 | 0.978 | 0.974-0.996 | 3528.9 | yes |
+| masses4inf_N2 | 1.013 | 0.996-1.048 | 0.998 | 0.987-1.051 | 1983.8 | yes |
+| masses4one_N1 | 0.994 | 0.968-1.050 | 0.999 | 0.995-1.013 | 450.6 | yes |
+| masses5inf_N1 | 1.014 | 1.005-1.023 | 1.001 | 0.998-1.001 | 19.0 | yes |
+| masses5inf_N2 | 0.980 | 0.964-1.003 | 0.999 | 0.952-1.027 | 12919.0 | yes |
+| masses5one_N1 | 0.978 | 0.973-0.988 | 0.998 | 0.988-1.007 | 3205.5 | yes |
+| masses6inf_N1 | 0.997 | 0.994-1.008 | 0.999 | 0.996-0.999 | 34.5 | yes |
+| masses6one_N1 | 0.970 | 0.969-0.971 | 1.001 | 0.992-1.009 | 22410.1 | yes |
+| randlp_t10_x6_m50_s0 | 0.898 | 0.896-0.912 | 1.000 | 0.991-1.003 | 7709.8 | yes |
+| randlp_t12_x5_m40_s0 | 0.948 | 0.946-0.949 | 1.002 | 0.998-1.007 | 7.1 | yes |
+| randlp_t5_x5_m40_s0 | 0.868 | 0.855-0.870 | 0.992 | 0.991-1.008 | 47.6 | yes |
+| randlp_t5_x5_m40_s1 | 0.916 | 0.882-0.977 | 0.998 | 0.923-1.008 | 153.5 | yes |
+| randlp_t6_x5_m40_s1 | 0.864 | 0.800-0.909 | 0.977 | 0.891-1.007 | 335.9 | yes |
+| randlp_t8_x5_m40_s0 | 0.891 | 0.882-0.990 | 1.094 | 0.977-1.095 | 142.3 | yes |
+| sys3x2inf_N2 | 1.000 | 0.994-1.005 | 0.996 | 0.980-1.002 | 7.4 | yes |
+| sys3x2inf_N3 | 0.993 | 0.985-1.006 | 0.988 | 0.988-1.013 | 37.6 | yes |
+| sys3x2inf_N4 | 0.988 | 0.929-1.014 | 1.010 | 0.932-1.011 | 140.1 | yes |
+| sys3x2inf_N5 | 1.017 | 1.012-1.018 | 1.008 | 1.001-1.008 | 421.1 | yes |
+| sys3x2one_N2 | 1.000 | 0.997-1.006 | 1.000 | 0.995-1.010 | 10.8 | yes |
+| sys3x2one_N3 | 1.009 | 0.993-1.021 | 1.001 | 1.000-1.013 | 60.3 | yes |
+| sys3x2one_N4 | 0.994 | 0.993-1.005 | 0.999 | 0.995-1.006 | 236.7 | yes |
+| sys3x2one_N5 | 0.999 | 0.999-1.001 | 1.001 | 0.994-1.005 | 773.5 | yes |
+
+The 2 to 4 parameter problems and the sliver MPC problems are at 0.97 to 1.02 (A/A 0.95 to 1.03 on the noisy ones); the largest values (masses2one_N4 1.035) have
+an A/A of 1.027 in the same row. The random mpLPs are 5 to 14% faster (randlp_t10_x6_m50_s0 0.898), the large 1-norm MPC problems 2 to 3% faster.
+
+Paired against `combinatorial_graph` on randlp_t10_x6_m50_s0 (array 45887921, 5 alternations, both solvers in the same task, shuffled; one run each):
+`mplp_lex` 7,747 / 7,691 / 7,687 / 7,715 / 7,757 ms, `combinatorial_graph` 7,973 / 7,954 / 7,970 / 7,953 / 7,975 ms: ratio 0.972, 0.967, 0.964, 0.970, 0.973 (median
+0.970). `mplp_lex` now wins that problem by 3%, so it is the fastest solver on every mpLP of both sets that has a valid competitor.
