@@ -258,8 +258,41 @@ mod imp {
         WitnessAccept,
         WitnessNoCuts,
         WitnessFail,
+        /// rank-1 Case-2 census: calls and ns by class, |P-| histogram, members of S and their Seen / empty status, ties, walk depth
+        R1Calls0,
+        R1Calls1,
+        R1Calls2,
+        R1Calls3,
+        R1Calls4,
+        R1Calls5,
+        R1Nanos0,
+        R1Nanos1,
+        R1Nanos2,
+        R1Nanos3,
+        R1Nanos4,
+        R1Nanos5,
+        R1P0,
+        R1P1,
+        R1P2,
+        R1P3,
+        R1P4,
+        R1P5,
+        R1P6,
+        R1P7,
+        R1Members,
+        R1Unseen,
+        R1AllSeen,
+        R1UnseenEmpty,
+        R1UnseenNonEmpty,
+        R1Ties,
+        R1D0,
+        R1D1,
+        R1D2,
+        R1D3to5,
+        R1D6p,
+        R1Out,
     }
-    pub const NC: usize = 83;
+    pub const NC: usize = 115;
 
     #[derive(Clone, Debug)]
     pub struct Stats {
@@ -451,6 +484,19 @@ mod imp {
     }
     pub fn basis_reset() {
         BASES.with(|b| b.borrow_mut().clear());
+    }
+
+    thread_local! {
+        static CALL_MAXD: Cell<usize> = const { Cell::new(0) };
+    }
+    pub fn depth_reset() {
+        CALL_MAXD.with(|c| c.set(0));
+    }
+    pub fn depth_note(d: usize) {
+        CALL_MAXD.with(|c| c.set(c.get().max(d)));
+    }
+    pub fn depth_take() -> usize {
+        CALL_MAXD.with(|c| c.get())
     }
 
     #[inline]

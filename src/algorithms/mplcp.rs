@@ -378,6 +378,8 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
     let alpha = 2 * n;
     let mut e = e;
     let mut first = first;
+    #[cfg(feature = "lp_census")]
+    crate::census::depth_note(depth);
     crate::census_bump!(PfCalls, 1);
     match depth {
         0 => {
@@ -850,6 +852,14 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         crate::census_bump!(AdjCertSkipNanos, _cen_t.elapsed().as_nanos());
         return (vec![], certified);
     }
+    #[cfg(feature = "lp_census")]
+    let (r1_class, r1_kk, r1_pminus, r1_mu, r1_c, r1_overhead) = {
+        let t0 = std::time::Instant::now();
+        let (cl, kk, pm, mu, cc) = rank1_probe(p, tab, &zrows, &pv, &gam);
+        (cl, kk, pm, mu, cc, t0.elapsed().as_nanos())
+    };
+    #[cfg(feature = "lp_census")]
+    crate::census::depth_reset();
     let nb = null_basis(&g);
     let w = 1 + d1;
     // work tableau: n x (n+1) with the α column last
@@ -888,6 +898,8 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
     let mut out = vec![];
     #[cfg(feature = "lp_census")]
     crate::census::basis_reset();
+    #[cfg(feature = "lp_census")]
+    let r1_overhead = if r1_class == 0 { r1_overhead + rank1_census(p, tab, &work, &ef, &ff, d1, seen, &r1_pminus, &r1_mu, r1_c, r1_kk) } else { r1_overhead };
     // the old hint (parent centre on the row) in facet coordinates: N' hint (N is orthogonal to g)
     let hint_f: Option<Vec<f64>> = region_centre.map(|c| {
         let sft = frhs - erow.iter().zip(c).map(|(x, y)| x * y).sum::<f64>();
@@ -908,6 +920,25 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
     *ws = Some(work);
     crate::census_bump!(AdjCase2, 1);
     crate::census_bump!(AdjCase2Nanos, _cen_t.elapsed().as_nanos());
+    #[cfg(feature = "lp_census")]
+    {
+        use crate::census::Counter as C;
+        let calls = [C::R1Calls0, C::R1Calls1, C::R1Calls2, C::R1Calls3, C::R1Calls4, C::R1Calls5];
+        let nanos = [C::R1Nanos0, C::R1Nanos1, C::R1Nanos2, C::R1Nanos3, C::R1Nanos4, C::R1Nanos5];
+        crate::census::bump(calls[r1_class], 1);
+        crate::census::bump(nanos[r1_class], (_cen_t.elapsed().as_nanos().saturating_sub(r1_overhead)) as u64);
+        if r1_class == 0 {
+            let d = crate::census::depth_take();
+            let dc = match d {
+                0 => C::R1D0,
+                1 => C::R1D1,
+                2 => C::R1D2,
+                3..=5 => C::R1D3to5,
+                _ => C::R1D6p,
+            };
+            crate::census::bump(dc, 1);
+        }
+    }
     // theta = N theta_f - g b
     let nbrs = out
         .into_iter()
@@ -938,6 +969,117 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         }
     }
     (nbrs, certified)
+}
+
+/// Census only: classifies a Case-2 call by the number and type of the rows that vanish on the facet and
+/// returns, for the rank-1 class, the column kk of the complement of the vanishing row, the rows P- (z rows with
+/// -T[i,kk] > PTOL), their multipliers mu = -T[i,kk] and the vanishing row. Classes: 0 one slack row with a zero
+/// pivot and zero slack columns, 1 the same with a nonzero slack column, 2 one slack row otherwise, 3 one
+/// multiplier row, 4 two rows, 5 three or more.
+#[cfg(feature = "lp_census")]
+fn rank1_probe(p: &Plcp, tab: &Tab, zrows: &[usize], pv: &[usize], gam: &[f64]) -> (usize, usize, Vec<usize>, Vec<f64>, usize) {
+    let n = p.n;
+    match zrows.len() {
+        0 => (5, 0, vec![], vec![], 0),
+        1 => {
+            let c = zrows[0];
+            let var = tab.row_var[c];
+            if var >= n {
+                return (3, 0, vec![], vec![], c);
+            }
+            let kk = tab.col_of(comp(var, n));
+            let zero_pivot = pv.len() == 1 && pv[0] == c && tab.t[c * n + kk].abs() <= PTOL * gam[c].abs().max(1.0);
+            if !zero_pivot {
+                return (2, kk, vec![], vec![], c);
+            }
+            let slack_zero = (0..n).all(|i| i == c || tab.row_var[i] >= n || tab.t[i * n + kk].abs() <= 1e-8);
+            if !slack_zero {
+                return (1, kk, vec![], vec![], c);
+            }
+            let pm: Vec<usize> = (0..n).filter(|&i| tab.row_var[i] >= n && tab.row_var[i] < 2 * n && -tab.t[i * n + kk] > PTOL).collect();
+            let mu: Vec<f64> = pm.iter().map(|&i| -tab.t[i * n + kk]).collect();
+            (0, kk, pm, mu, c)
+        }
+        2 => (4, 0, vec![], vec![], 0),
+        _ => (5, 0, vec![], vec![], 0),
+    }
+}
+
+/// Census only, for the rank-1 class: the |P-| histogram, the members of S = A + {c} - {j} (j in P-), how many are in
+/// `Seen`, for the unseen ones whether their sub-facet F and {lambda_j / mu_j <= lambda_k / mu_k for all k in P-} is
+/// empty (Chebyshev LP), and whether two ratios are identical as affine functions on F. Returns the time spent.
+#[cfg(feature = "lp_census")]
+#[allow(clippy::too_many_arguments)]
+fn rank1_census(p: &Plcp, tab: &Tab, work: &Tab, ef: &Mat, ff: &[f64], d1: usize, seen: Option<&Seen>, pm: &[usize], mu: &[f64], c: usize, _kk: usize) -> u128 {
+    use crate::census::{bump, Counter as C};
+    let t0 = std::time::Instant::now();
+    let n = p.n;
+    let hist = [C::R1P0, C::R1P1, C::R1P2, C::R1P3, C::R1P4, C::R1P5, C::R1P6, C::R1P7];
+    bump(hist[pm.len().min(7)], 1);
+    if pm.is_empty() {
+        return t0.elapsed().as_nanos();
+    }
+    let w = 1 + d1;
+    let zc = z_rows(tab, n);
+    let cvar = tab.row_var[c] as usize; // slack w_c: the constraint index is cvar
+    let mut all_seen = true;
+    // lambda_i(theta_f) = rho row i of the work tableau
+    let lam = |i: usize| -> &[f64] { &work.rho[i * w..(i + 1) * w] };
+    let mut tie = false;
+    for a in 0..pm.len() {
+        for b in a + 1..pm.len() {
+            let (ia, ib) = (pm[a], pm[b]);
+            let diff: Vec<f64> = (0..w).map(|k| mu[b] * lam(ia)[k] - mu[a] * lam(ib)[k]).collect();
+            let sc = 1.0 + (0..w).fold(0.0f64, |m, k| m.max((mu[b] * lam(ia)[k]).abs()).max((mu[a] * lam(ib)[k]).abs()));
+            if diff.iter().all(|v| v.abs() <= 1e-9 * sc) {
+                tie = true;
+            }
+        }
+    }
+    if tie {
+        bump(C::R1Ties, 1);
+    }
+    for (a, &ia) in pm.iter().enumerate() {
+        let zj = tab.row_var[ia] - n;
+        let mut z: Vec<usize> = zc.iter().cloned().filter(|&x| x != zj).collect();
+        let cz = cvar; // the slack index equals the z index of its complement
+        z.push(cz);
+        z.sort_unstable();
+        z.dedup();
+        bump(C::R1Members, 1);
+        let known = seen.map_or(false, |s| s.contains_key(&p.active_set(z.iter().copied())));
+        if known {
+            continue;
+        }
+        all_seen = false;
+        bump(C::R1Unseen, 1);
+        // sub-facet: F and mu_k lambda_j - mu_j lambda_k <= 0 for k in P-, k != j
+        let mut e2 = ef.clone();
+        let mut f2 = ff.to_vec();
+        if d1 > 0 {
+            for (b, &ib) in pm.iter().enumerate() {
+                if b == a {
+                    continue;
+                }
+                let g: Vec<f64> = (0..w).map(|k| mu[b] * lam(ia)[k] - mu[a] * lam(ib)[k]).collect();
+                let nrm = g[1..].iter().map(|v| v * v).sum::<f64>().sqrt();
+                if nrm <= 1e-12 {
+                    continue;
+                }
+                e2.push_row(&g[1..].iter().map(|v| v / nrm).collect::<Vec<_>>());
+                f2.push(-g[0] / nrm);
+            }
+            let empty = match chebyshev_ball(&e2, &f2, &[]) {
+                Some(s) => s.x[d1] <= 1e-9,
+                None => true,
+            };
+            bump(if empty { C::R1UnseenEmpty } else { C::R1UnseenNonEmpty }, 1);
+        }
+    }
+    if all_seen {
+        bump(C::R1AllSeen, 1);
+    }
+    t0.elapsed().as_nanos()
 }
 
 /// Which pLCP method `solve` runs.
