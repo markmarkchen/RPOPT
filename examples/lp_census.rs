@@ -31,6 +31,10 @@ fn child(path: &str, alg: &str) {
     if let Some(b) = std::env::var("MPLCP_TAB_BUDGET").ok().and_then(|v| v.parse().ok()) {
         rpopt::algorithms::mplcp::set_tab_budget(b);
     }
+    // MPLCP_NO_DEDUPE=1: solve with the duplicated constraints
+    if std::env::var("MPLCP_NO_DEDUPE").is_ok() {
+        rpopt::algorithms::mplcp::set_dedupe(false);
+    }
     // RPOPT_CERT=0|1|2|3|4: mplcp facet certificate off (default), on (3 to 5 parameters), audit, on at 2 to 6, audit at 2 to 6
     if let Ok(m) = std::env::var("RPOPT_CERT") {
         rpopt::algorithms::mplcp::set_certificate(m.parse().unwrap());
