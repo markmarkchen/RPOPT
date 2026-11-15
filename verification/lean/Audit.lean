@@ -20,6 +20,7 @@ import RpoptProofs
 #print axioms Rpopt.pivot_isTableau
 #print axioms Rpopt.pivot_agree_on_facet
 #print axioms Rpopt.tableauFor_isTableau
+#print axioms Rpopt.pivotSeq_eq_of_isTableau
 -- A4 Case-1 adjacency
 #print axioms Rpopt.Case1.isTableau'
 #print axioms Rpopt.Case1.cr_le
