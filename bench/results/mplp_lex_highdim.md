@@ -201,3 +201,64 @@ carry about 10% uncertainty); the other solvers are from step 1.
 `combinatorial`), masses6inf_N1 (1.46) and randlp_t10_x6_m50_s0 (1.09 to `combinatorial_graph`, inside the node noise). masses4one_N1 is
 now 0.95. The two remaining losses are inf-norm problems with 48 to 52 regions where most regions are slivers of radius 2.6e-8: their
 facets cannot be crossed cheaply or reliably, and `combinatorial` does not need facets at all.
+
+## Round 3: are the slivers real, and what do they cost
+
+### The slivers are genuine regions
+
+Check in exact rational arithmetic (`/tmp`-style script, not committed: rows of the processed program as exact fractions; for each
+region basis B, x(theta) = A_B^-1 (b_B + F_B theta), the slack rows and the parameter-set rows are formed exactly, and the Chebyshev
+radius is maximised by an exact simplex over Fractions; the multipliers lambda = -A_B^-T c are computed exactly).
+
+- masses5inf_N1: all 48 regions have an exact Chebyshev radius above zero (20 of them below 1e-4: 3.3e-2, 6.9e-4, 5.8e-6, 2.9e-7 and 14 of
+  about 2.6e-8, the exact radii agree with the floating point ones to 4 digits), and every multiplier is strictly positive
+  (smallest 0.38), so each basis is the unique optimum on its region: no dual degeneracy, no lexicographic tie, nothing for the
+  perturbation to decide.
+- masses6inf_N1: same for all 52 regions (radii down to 2.5e-8, all multipliers positive).
+- `combinatorial` returns the same 48 and 52 active sets, with the same radii (`examples/sliver_check.rs`).
+
+So they are not numerical artifacts and nothing needs fixing in `mplp_lex`. They come in a family: for every i, a region with
+slab width w_i (6.7e-2, 1.4e-3, 1.2e-5, 1.8e-1, 7.5e-3, 9.5e-5, 5.7e-7) next to a copy whose radius is limited to 2.6e-8 by another direction.
+(The earlier artifact seen on masses4inf_N2 is a separate matter: there the existing LP path misreads facet slacks at scale 1e5.)
+
+### What a sliver costs
+
+Per-region counters (laptop, masses6inf_N1, 32 fat regions of radius above 1e-4 and 20 thin ones):
+
+| | fat | thin |
+|---|---:|---:|
+| facet rows | 67 | 63 |
+| facets tried (not known from the other side) | 24 | 27 |
+| settled by the region-center foot (no LP) | 9.5 | 0.2 |
+| facet LPs | 14.9 | 27.1 |
+| of the LPs, empty facet (row touches the region only on a lower-dimensional face) | 10.4 | 16.0 |
+| time per region | 0.71 ms | 0.58 ms |
+
+So a sliver does not cost more than a fat region. What costs is that 64% of all facet LPs (652 of 1,020 on masses6inf_N1, 527 of 881 on
+masses5inf_N1) are on rows that are kept by the builder (they touch the region) but are not facets. Each such LP answers "no neighbour". A foot
+point cannot settle them, and nothing cheap identifies them exactly: the builder keeps a row if its hyperplane touches the region at any
+point (bounding-box vertex, projection of the center, or an LP), and that includes rows touching only at a vertex or an edge.
+Even if every empty-facet LP cost nothing, `mplp_lex` would go from 34 to about 24 ms on masses6inf_N1, still above `combinatorial`'s 18 ms
+(the 10 ms of bounding-box LPs are common to both): the two remaining losses cannot be closed by cheaper facet handling alone. The remaining
+exact ways are (a) record in the builder which kept rows have a full-dimensional facet (a new field next to `lambda_set` and `regular_set`; the
+row set stays the same), which removes the empty-facet LPs and gives a facet interior point for free, and (b) a hybrid that enumerates
+bases combinatorially when the region count is small, which is another algorithm.
+
+### Kept: one shared facet matrix per region (no row copies)
+
+The facet LP of a region is now given the region's matrix of unit facet rows directly (equality index k) instead of a per-facet copy with the
+same-plane rows removed; the copy is only made when a coincident row exists. Region hashes identical to main on all 46 mpLPs
+(`bench/problems_lp`, `bench/problems_lp_highdim`). Serial A/B on Negishi (build 45880660, array 45880661, 5 alternations, base
+(fix 1) / candidate / base again shuffled, 1 CPU):
+
+| problem | n | cand/base median | range | A/A median | range | cand median ms |
+|---|---|---|---|---|---|---|
+| masses6inf_N1 | 5 | 0.974 | 0.956-0.979 | 0.999 | 0.980-1.005 | 59.5 |
+| masses5inf_N1 | 5 | 0.964 | 0.951-0.971 | 0.999 | 0.989-1.004 | 28.0 |
+| masses4one_N1 | 5 | 0.984 | 0.976-0.993 | 1.001 | 0.996-1.026 | 434.5 |
+| masses5one_N1 | 5 | 0.969 | 0.955-0.979 | 0.990 | 0.980-1.003 | 3283.6 |
+| randlp_t10_x6_m50_s0 | 5 | 0.966 | 0.964-0.972 | 0.998 | 0.992-1.003 | 8592.1 |
+| randlp_t5_x5_m40_s0 | 5 | 0.973 | 0.967-0.975 | 1.002 | 0.994-1.006 | 54.1 |
+
+A gain of 2 to 4% on every problem, A/A within 0.99 to 1.00. It does not change the ratios to `combinatorial` materially (masses5inf_N1
+about 1.45, masses6inf_N1 about 1.42).

@@ -516,6 +516,7 @@ pub fn solve(program: &MpProgram, seed: u64) -> Result<Vec<CriticalRegion>, Stri
             (0..cr.e.rows).filter_map(|k| unit(cr.e.row(k), cr.f[k])).collect()
         };
         let mut centre: Option<Option<Vec<f64>>> = None;
+        let mut all_rows: Option<(Mat, Vec<f64>)> = None;
         for k in 0..facets.len() {
             let (nk, fk) = (&facets[k].0, facets[k].1);
             // facet on the boundary of Θ
@@ -530,11 +531,10 @@ pub fn solve(program: &MpProgram, seed: u64) -> Result<Vec<CriticalRegion>, Stri
             // facet row with a margin (no LP). Otherwise the facet's own Chebyshev center (rows on the
             // same plane are dropped).
             if centre.is_none() {
-                let rows: Vec<Vec<f64>> = facets.iter().map(|(n, _)| n.clone()).collect();
-                let rhs: Vec<f64> = facets.iter().map(|(_, f)| *f).collect();
+                let (am, ar) = all_rows.get_or_insert_with(|| (Mat::from_rows(&facets.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>()), facets.iter().map(|(_, f)| *f).collect::<Vec<f64>>()));
                 centre = Some({
                     crate::census_purpose!(Neighbour);
-                    chebyshev_ball(&Mat::from_rows(&rows), &rhs, &[]).map(|b| b.x[..nt].to_vec())
+                    chebyshev_ball(am, ar, &[]).map(|b| b.x[..nt].to_vec())
                 });
             }
             let mut foot: Option<Vec<f64>> = None;
@@ -555,17 +555,23 @@ pub fn solve(program: &MpProgram, seed: u64) -> Result<Vec<CriticalRegion>, Stri
             if let Some(p) = foot {
                 ball_x = p;
             } else {
-                let mut rows: Vec<Vec<f64>> = vec![];
-                let mut rhs: Vec<f64> = vec![];
-                for (i, (ni, fi)) in facets.iter().enumerate() {
-                    if i != k && ni.iter().zip(nk).all(|(a, b)| (a - b).abs() < 1e-7) && (fi - fk).abs() < 1e-7 * (1.0 + fk.abs()) {
-                        continue;
+                let dup = facets.iter().enumerate().any(|(i, (ni, fi))| i != k && ni.iter().zip(nk).all(|(a, b)| (a - b).abs() < 1e-7) && (fi - fk).abs() < 1e-7 * (1.0 + fk.abs()));
+                let ball = if !dup {
+                    // all facet rows: the region's shared matrix, no copies
+                    let (am, ar) = all_rows.get_or_insert_with(|| (Mat::from_rows(&facets.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>()), facets.iter().map(|(_, f)| *f).collect::<Vec<f64>>()));
+                    crate::census_purpose!(Neighbour);
+                    chebyshev_ball(am, ar, &[k])
+                } else {
+                    let mut rows: Vec<Vec<f64>> = vec![];
+                    let mut rhs: Vec<f64> = vec![];
+                    for (i, (ni, fi)) in facets.iter().enumerate() {
+                        if i != k && ni.iter().zip(nk).all(|(a, b)| (a - b).abs() < 1e-7) && (fi - fk).abs() < 1e-7 * (1.0 + fk.abs()) {
+                            continue;
+                        }
+                        rows.push(ni.clone());
+                        rhs.push(*fi);
                     }
-                    rows.push(ni.clone());
-                    rhs.push(*fi);
-                }
-                let kk = rows.iter().position(|r| r == nk).unwrap_or(0);
-                let ball = {
+                    let kk = rows.iter().position(|r| r == nk).unwrap_or(0);
                     crate::census_purpose!(Neighbour);
                     chebyshev_ball(&Mat::from_rows(&rows), &rhs, &[kk])
                 };
