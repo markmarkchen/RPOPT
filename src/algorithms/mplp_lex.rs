@@ -577,8 +577,6 @@ pub fn solve(program: &MpProgram, seed: u64) -> Result<Vec<CriticalRegion>, Stri
             };
             if boundary {
                 // nothing beyond this facet: counts as a success of the attempt (it saved the LP)
-                s_avg += (1.0 - s_avg) / 32.0;
-                q_avg -= q_avg / 32.0;
                 continue;
             }
             // the neighbour must have the reversed facet as one of its facets; otherwise (a numerically
