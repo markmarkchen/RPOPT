@@ -1248,6 +1248,29 @@ fn candidate_law(plcp: &Plcp, parent: &Tab, c: &Cand) -> Option<(crate::program:
 /// candidate basis is rejected (see `build_cand`).
 const TIGHT_TOL: f64 = 1e-3;
 
+static TIGHT_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// Switches the tightness flag of `build_cand` (default on); off reproduces the walk without it,
+/// for the comparison tools.
+pub fn set_tight_check(on: bool) {
+    TIGHT_ON.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Does the direct QP at the region's centre agree with the region: same active set, or the same
+/// primal solution as the region's law (to 1e-6 relative)?
+fn qp_agrees(program: &MpProgram, cr: &CriticalRegion, centre: &[f64]) -> bool {
+    let Some(out) = program.solve_theta(centre) else { return false };
+    let mut qa = out.active_set.clone();
+    qa.sort_unstable();
+    let mut ca = cr.active_set.clone();
+    ca.sort_unstable();
+    if qa == ca {
+        return true;
+    }
+    let x = cr.evaluate(centre);
+    x.len() == out.sol.len() && x.iter().zip(&out.sol).all(|(a, b)| (a - b).abs() <= 1e-6 * (1.0 + b.abs()))
+}
+
 /// Largest relative violation, at the region's centre, of "the active constraints are tight under
 /// the region's primal law". A basis that is singular in exact arithmetic (two parallel rows both
 /// active) gets a garbage law that cannot satisfy both, whatever size its coefficients have.
@@ -1278,12 +1301,18 @@ fn build_cand(program: &MpProgram, plcp: &Plcp, parent: &Tab, c: &Cand, want_ver
             (None, None)
         };
         let (cr, ce, verts) = build::build_region(program, &c.aset, c.hint.as_deref(), law, want_verts)?;
-        // a basis that is singular in exact arithmetic (parallel rows both active) can pass every
+        // A basis that is singular in exact arithmetic (parallel rows both active) can pass every
         // other test with a garbage law; its region then overlaps the true ones (pop_005, pop_007,
-        // pop_011). Legitimate regions have residuals up to 1e-5 (masses5_N3), garbage ones 1e-1.
-        if tight_residual(program, &cr, &ce) > TIGHT_TOL {
-            crate::census_bump!(TightReject, 1);
-            return None;
+        // pop_011). Legitimate regions have residuals up to 1e-5 (masses5_N3), garbage ones 1e-1. The
+        // residual only flags a candidate; a direct QP at the region's centre decides, so a genuine
+        // sliver in an ill-conditioned problem is kept.
+        if TIGHT_ON.load(std::sync::atomic::Ordering::Relaxed) && tight_residual(program, &cr, &ce) > TIGHT_TOL {
+            crate::census_bump!(TightFlagged, 1);
+            if !qp_agrees(program, &cr, &ce) {
+                crate::census_bump!(TightRejected, 1);
+                return None;
+            }
+            crate::census_bump!(TightKeptByQp, 1);
         }
         Some((cr, Some(ce), own, verts))
     } else {

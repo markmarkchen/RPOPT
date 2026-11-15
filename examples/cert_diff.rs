@@ -21,7 +21,8 @@ fn main() {
     let prog = Arc::new(MpProgram::from_json_file(std::path::Path::new(&a[1])).unwrap());
     set_certificate(0);
     let off = solve_mpqp(&prog, MpqpAlgorithm::Mplcp);
-    set_certificate(3);
+    // CERT_MODE: 1 (default range 3 to 5 parameters), 3 (2 to 6); default 3
+    set_certificate(std::env::var("CERT_MODE").ok().and_then(|v| v.parse().ok()).unwrap_or(3));
     let on = solve_mpqp(&prog, MpqpAlgorithm::Mplcp);
     println!("off {} regions, on {} regions", off.critical_regions.len(), on.critical_regions.len());
     let mo: BTreeMap<Vec<usize>, &CriticalRegion> = off.critical_regions.iter().map(|r| (sorted(r), r)).collect();

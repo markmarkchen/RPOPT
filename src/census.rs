@@ -233,7 +233,9 @@ mod imp {
         AdjCertSkip,
         AdjCertSkipNanos,
         /// candidate regions rejected because their active constraints are not tight under their law
-        TightReject,
+        TightFlagged,
+        TightKeptByQp,
+        TightRejected,
     }
     pub const NC: usize = 70;
 
