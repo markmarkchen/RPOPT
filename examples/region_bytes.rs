@@ -8,7 +8,7 @@ use rpopt::program::MpProgram;
 use std::sync::Arc;
 
 #[cfg(target_os = "linux")]
-extern "C" {
+unsafe extern "C" {
     fn malloc_trim(pad: usize) -> i32;
 }
 
