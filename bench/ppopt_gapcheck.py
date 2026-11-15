@@ -5,7 +5,8 @@ import json
 import os
 import sys
 
-sys.path.insert(0, os.environ['PPOPT_SRC'])
+if os.environ.get('PPOPT_SRC'):
+    sys.path.insert(0, os.environ['PPOPT_SRC'])  # otherwise use an installed `ppopt`, as bench_ppopt.py does
 import numpy  # noqa: E402
 from ppopt.mplp_program import MPLP_Program  # noqa: E402
 from ppopt.mp_solvers.solve_mpqp import solve_mpqp, mpqp_algorithm  # noqa: E402
@@ -13,7 +14,8 @@ from ppopt.mp_solvers.solve_mpqp import solve_mpqp, mpqp_algorithm  # noqa: E402
 path, alg = sys.argv[1], sys.argv[2]
 n = int(sys.argv[3]) if len(sys.argv) > 3 else 2000
 d = json.load(open(path))
-m = {k: (numpy.array(v, dtype=float) if k != 'equality_indices' else v) for k, v in d.items()}
+m = {k: (numpy.array(v, dtype=float) if k != 'equality_indices' else v) for k, v in d.items()
+     if not isinstance(v, dict)}  # skip metadata such as the 'mpc' plant description
 prog = MPLP_Program(m['A'], m['b'], m['c'], m['H'], m['A_t'], m['b_t'], m['F'], equality_indices=m['equality_indices'])
 with contextlib.redirect_stdout(io.StringIO()):
     sol = solve_mpqp(prog, getattr(mpqp_algorithm, alg))
@@ -32,7 +34,9 @@ for _ in range(n):
         gaps += 1
         continue
     x = r.evaluate(th).flatten()
-    obj = float(prog.evaluate_objective(x.reshape(-1, 1), th))
-    if abs(obj - float(s.obj)) > 1e-6 * (1 + abs(float(s.obj))):
+    # .item(): numpy >= 2.5 no longer converts 1x1 arrays with float()
+    obj = numpy.asarray(prog.evaluate_objective(x.reshape(-1, 1), th)).item()
+    s_obj = numpy.asarray(s.obj).item()
+    if abs(obj - s_obj) > 1e-6 * (1 + abs(s_obj)):
         wrong += 1
 print(f"{os.path.basename(path)} {alg}: regions {len(sol.critical_regions)}, feasible samples {feas}, gaps {gaps} ({100.0 * gaps / max(feas, 1):.1f}%), wrong objective {wrong}")

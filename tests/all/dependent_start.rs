@@ -12,11 +12,13 @@ use rpopt::program::MpProgram;
 use std::path::Path;
 use std::sync::Arc;
 
-fn check(name: &str, algo: MpqpAlgorithm) {
+/// `merge = false` keeps the twin rows (the regression is about dependent active rows, which the
+/// preprocessing merge of duplicate rows removes from these programs); `merge = true` is the default.
+fn check(name: &str, algo: MpqpAlgorithm, merge: bool) {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("bench/problems_large").join(format!("{name}.json"));
-    let prog = Arc::new(MpProgram::from_json_file(&path).unwrap());
+    let prog = Arc::new(MpProgram::from_json_file_opts(&path, merge).unwrap());
     let sol = solve_mpqp(&prog, algo);
-    assert!(!sol.critical_regions.is_empty(), "{name} {algo:?}: no critical regions");
+    assert!(!sol.critical_regions.is_empty(), "{name} {algo:?} merge={merge}: no critical regions");
     // every feasible sampled parameter lies in a region and the law matches a direct solve
     let mut rng = StdRng::seed_from_u64(5);
     let (mut feasible, mut bad) = (0, 0);
@@ -29,30 +31,34 @@ fn check(name: &str, algo: MpqpAlgorithm) {
             }
         }
     }
-    assert!(feasible > 100, "{name}: too few feasible samples");
-    assert!(bad == 0, "{name} {algo:?}: {bad} of {feasible} feasible samples uncovered or wrong");
+    assert!(feasible > 100, "{name} merge={merge}: too few feasible samples");
+    assert!(bad == 0, "{name} {algo:?} merge={merge}: {bad} of {feasible} feasible samples uncovered or wrong");
 }
 
 #[test]
 fn mplcp_dependent_start() {
     for n in ["pop_031", "pop_052", "pop_071"] {
-        check(n, MpqpAlgorithm::Mplcp);
+        for merge in [false, true] {
+            check(n, MpqpAlgorithm::Mplcp, merge);
+        }
     }
 }
 
 #[test]
 fn geometric_dependent_start() {
     for n in ["pop_031", "pop_052", "pop_071"] {
-        check(n, MpqpAlgorithm::Geometric);
+        for merge in [false, true] {
+            check(n, MpqpAlgorithm::Geometric, merge);
+        }
     }
 }
 
 /// `mplcp` must not return the same parameter set under two index sets (rows that bind together:
 /// a basis with an identically zero multiplier or slack is lexico-infeasible). Sampled check:
 /// no sampled parameter lies strictly inside two regions, and none lies in no region.
-fn no_overlap(name: &str) {
+fn no_overlap(name: &str, merge: bool) {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("bench/problems_large").join(format!("{name}.json"));
-    let prog = Arc::new(MpProgram::from_json_file(&path).unwrap());
+    let prog = Arc::new(MpProgram::from_json_file_opts(&path, merge).unwrap());
     let sol = solve_mpqp(&prog, MpqpAlgorithm::Mplcp);
     let mut rng = StdRng::seed_from_u64(11);
     let (mut feasible, mut overlaps, mut gaps) = (0, 0, 0);
@@ -84,22 +90,25 @@ fn no_overlap(name: &str) {
             gaps += 1;
         }
     }
-    assert!(feasible > 100, "{name}: too few feasible samples");
-    assert_eq!(overlaps, 0, "{name}: {overlaps} of {feasible} feasible samples inside two regions");
-    assert_eq!(gaps, 0, "{name}: {gaps} of {feasible} feasible samples in no region");
+    assert!(feasible > 100, "{name} merge={merge}: too few feasible samples");
+    assert_eq!(overlaps, 0, "{name} merge={merge}: {overlaps} of {feasible} feasible samples inside two regions");
+    assert_eq!(gaps, 0, "{name} merge={merge}: {gaps} of {feasible} feasible samples in no region");
 }
 
 #[test]
 fn mplcp_no_overlap_dependent_rows() {
     for n in ["pop_019", "pop_031", "pop_052", "pop_071"] {
-        no_overlap(n);
+        for merge in [false, true] {
+            no_overlap(n, merge);
+        }
     }
 }
 
 /// pop_001 (about 3,500 regions): a facet pivot, not the start, lands on the lexico-infeasible twin.
 #[test]
 fn mplcp_no_overlap_pop_001() {
-    no_overlap("pop_001");
+    no_overlap("pop_001", false);
+    no_overlap("pop_001", true);
 }
 
 /// pop_081 (one variable, parallel duplicate bounds): the Case-2 walk returned before it tested whether
@@ -107,7 +116,8 @@ fn mplcp_no_overlap_pop_001() {
 /// and three quarters of the feasible parameters lay in no region.
 #[test]
 fn mplcp_no_gap_pop_081() {
-    no_overlap("pop_081");
+    no_overlap("pop_081", false);
+    no_overlap("pop_081", true);
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("bench/problems_large/pop_081.json");
     let prog = Arc::new(MpProgram::from_json_file(&path).unwrap());
     assert_eq!(solve_mpqp(&prog, MpqpAlgorithm::Mplcp).critical_regions.len(), 4);
@@ -118,7 +128,8 @@ fn mplcp_no_gap_pop_081() {
 /// feasible parameters inside two regions). The tightness check on the candidate's law rejects it.
 #[test]
 fn mplcp_no_overlap_pop_011() {
-    no_overlap("pop_011");
+    no_overlap("pop_011", false);
+    no_overlap("pop_011", true);
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("bench/problems_large/pop_011.json");
     let prog = Arc::new(MpProgram::from_json_file(&path).unwrap());
     assert_eq!(solve_mpqp(&prog, MpqpAlgorithm::Mplcp).critical_regions.len(), 397);

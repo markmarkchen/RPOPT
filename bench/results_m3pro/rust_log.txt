@@ -1,0 +1,656 @@
+== di_N10: x=10 t=2 constraints=42 (eq 0) build 0.379 ms
+  combinatorial                    11 regions    7671.876 ms  (min 7671.876, runs 1)  LPs 6739352 (PPOPT-equivalent LPs 20807911 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_parallel           11 regions    1616.039 ms  (min 1421.944, runs 2)  LPs 6739348 (PPOPT-equivalent LPs 20807911 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_kp                 11 regions    9545.470 ms  (min 9545.470, runs 1)  LPs 6746413 (PPOPT-equivalent LPs 20807912 QPs 281)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_kp_parallel        11 regions    2281.691 ms  (min 2281.691, runs 1)  LPs 6745904 (PPOPT-equivalent LPs 20807912 QPs 281)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                            11 regions       0.267 ms  (min 0.253, runs 1125)  LPs 248 (PPOPT-equivalent LPs 699 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_exp                        11 regions       0.265 ms  (min 0.248, runs 1111)  LPs 248 (PPOPT-equivalent LPs 699 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_parallel                   11 regions       0.534 ms  (min 0.442, runs 536)  LPs 248 (PPOPT-equivalent LPs 699 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph              11 regions       0.360 ms  (min 0.345, runs 814)  LPs 780 (PPOPT-equivalent LPs 1181 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph_parallel     11 regions       0.605 ms  (min 0.418, runs 425)  LPs 780 (PPOPT-equivalent LPs 1181 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric                        11 regions       0.139 ms  (min 0.133, runs 2000)  LPs 65 (PPOPT-equivalent LPs 529 QPs 25)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric_parallel               11 regions       0.267 ms  (min 0.207, runs 1074)  LPs 65 (PPOPT-equivalent LPs 529 QPs 25)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                           11 regions       0.319 ms  (min 0.307, runs 941)  LPs 567 (PPOPT-equivalent LPs 1072 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                            11 regions       0.079 ms  (min 0.074, runs 2000)  LPs 14 (PPOPT-equivalent LPs 487 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp_enum                       11 regions    4682.979 ms  (min 4682.979, runs 1)  LPs 180409 (PPOPT-equivalent LPs 487 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplp_lex                         11 regions       0.139 ms  (min 0.133, runs 2000)  LPs 65 (PPOPT-equivalent LPs 529 QPs 25)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  parametric_daqp                  11 regions       0.245 ms  (min 0.232, runs 1218)  LPs 23 (PPOPT-equivalent LPs 488 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp_parallel                   11 regions       0.083 ms  (min 0.080, runs 2000)  LPs 14 (PPOPT-equivalent LPs 487 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+  geometry: 22 planes, 10 adjacencies, 12 domain planes, 0 facets with 2+ neighbours (0.3 ms)
+  trajectories (random_walk): 100000 points from 1000 x 100 steps
+  built sequential in 0.0 ms
+  built sequential (early exit) in 0.0 ms
+  linear machine check: centers 11/11 correct, max vertex violation 2.66e-15, min center margin 1.25e-1, certified true
+  built descriptor function in 0.0 ms
+  built hash table in 0.1 ms
+  built hash table in 0.1 ms
+  built hash table in 0.2 ms
+  built hash table (limit 1x old16) in 1.7 ms
+  built hash table (limit 4x old16) in 4.4 ms
+  built hash table (limit 16x old16) in 2.9 ms
+  built hash table (limit 64x old16) in 3.1 ms
+  built hash table (limit 1 MB) in 3.1 ms
+  built hash table (limit 8 MB) in 3.0 ms
+  built hash table (limit 64 MB) in 3.7 ms
+  built YANN in 0.0 ms
+  sequential                 uniform       98.3 ns/q  trajectory       88.5 ns/q  storage       156 floats  build      0.02 ms  mismatches 0/0  {}
+  sequential (early exit)    uniform       39.2 ns/q  trajectory       21.1 ns/q  storage       156 floats  build      0.00 ms  mismatches 0/0  {}
+  binary search tree         uniform       50.0 ns/q  trajectory       26.2 ns/q  storage       217 floats  build      0.02 ms  mismatches 0/0  {"depth":4,"nodes":21}
+  multiway tree              uniform       49.4 ns/q  trajectory       29.3 ns/q  storage       232 floats  build      0.00 ms  mismatches 0/0  {"height":2,"levels":2,"order":3}
+  multiway tree              uniform       46.7 ns/q  trajectory       28.8 ns/q  storage       257 floats  build      0.00 ms  mismatches 0/0  {"height":2,"levels":3,"order":7}
+  multiway tree              uniform       46.0 ns/q  trajectory       31.7 ns/q  storage       228 floats  build      0.00 ms  mismatches 0/0  {"height":1,"levels":4,"order":15}
+  linear machine             uniform       39.7 ns/q  trajectory       30.0 ns/q  storage       189 floats  build      0.20 ms  mismatches 0/0  {"centers_correct":11,"certified":true,"max_vertex_violation":2.6645352591003757e-15,"min_center_margin":0.12488361186704378}
+  descriptor function        uniform       54.9 ns/q  trajectory       40.5 ns/q  storage       233 floats  build      0.01 ms  mismatches 0/0  {"compared_facets":20,"explicit_rows":32}
+  hash table                 uniform       38.6 ns/q  trajectory       15.0 ns/q  storage       271 floats  build      0.09 ms  mismatches 0/0  {"cells":9,"max_candidates":6,"mean_candidates":4.111111111111111,"mixed_cells":9,"rows_per_mixed":12.444444444444445}
+  hash table                 uniform       26.9 ns/q  trajectory       15.9 ns/q  storage       454 floats  build      0.11 ms  mismatches 0/0  {"cells":49,"max_candidates":4,"mean_candidates":2.85,"mixed_cells":40,"rows_per_mixed":6.35}
+  hash table                 uniform       23.7 ns/q  trajectory       15.2 ns/q  storage       745 floats  build      0.16 ms  mismatches 0/0  {"cells":169,"max_candidates":4,"mean_candidates":2.142857142857143,"mixed_cells":112,"rows_per_mixed":3.5}
+  hash table (limit 1x old16) uniform       27.1 ns/q  trajectory       15.6 ns/q  storage       538 floats  build      1.70 ms  mismatches 0/0  {"base_cells":81,"fits":true,"limit_bytes":4728,"mean_candidates":2.4516129032258065,"mixed_leaves":62,"rows_per_mixed":4.709677419354839,"storage_bytes":4304}
+  hash table (limit 4x old16) uniform       17.0 ns/q  trajectory       13.3 ns/q  storage      1658 floats  build      4.36 ms  mismatches 0/0  {"base_cells":729,"fits":true,"limit_bytes":18912,"mean_candidates":1.84375,"mixed_leaves":320,"rows_per_mixed":2.34375,"storage_bytes":13264}
+  hash table (limit 16x old16) uniform       11.0 ns/q  trajectory       12.0 ns/q  storage      3834 floats  build      2.94 ms  mismatches 0/0  {"base_cells":2809,"fits":true,"limit_bytes":75648,"mean_candidates":1.7732558139534884,"mixed_leaves":688,"rows_per_mixed":2.0261627906976742,"storage_bytes":30672}
+  hash table (limit 64x old16) uniform       11.3 ns/q  trajectory       12.1 ns/q  storage      3834 floats  build      3.14 ms  mismatches 0/0  {"base_cells":2809,"fits":true,"limit_bytes":302592,"mean_candidates":1.7732558139534884,"mixed_leaves":688,"rows_per_mixed":2.0261627906976742,"storage_bytes":30672}
+  hash table (limit 1 MB)    uniform       11.4 ns/q  trajectory       12.1 ns/q  storage      3834 floats  build      3.12 ms  mismatches 0/0  {"base_cells":2809,"fits":true,"limit_bytes":1048576,"mean_candidates":1.7732558139534884,"mixed_leaves":688,"rows_per_mixed":2.0261627906976742,"storage_bytes":30672}
+  hash table (limit 8 MB)    uniform       11.1 ns/q  trajectory       12.1 ns/q  storage      3834 floats  build      3.01 ms  mismatches 0/0  {"base_cells":2809,"fits":true,"limit_bytes":8388608,"mean_candidates":1.7732558139534884,"mixed_leaves":688,"rows_per_mixed":2.0261627906976742,"storage_bytes":30672}
+  hash table (limit 64 MB)   uniform       11.2 ns/q  trajectory       11.5 ns/q  storage      3834 floats  build      3.74 ms  mismatches 0/0  {"base_cells":2809,"fits":true,"limit_bytes":67108864,"mean_candidates":1.7732558139534884,"mixed_leaves":688,"rows_per_mixed":2.0261627906976742,"storage_bytes":30672}
+  YANN                       uniform      120.7 ns/q  trajectory      116.1 ns/q  storage       498 floats  build      0.01 ms  mismatches 0/0  {}
+== di_N4: x=4 t=2 constraints=18 (eq 0) build 0.036 ms
+  combinatorial                     9 regions       0.479 ms  (min 0.448, runs 628)  LPs 1132 (PPOPT-equivalent LPs 2513 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_parallel            9 regions       0.453 ms  (min 0.373, runs 659)  LPs 1128 (PPOPT-equivalent LPs 2513 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_kp                  9 regions       0.480 ms  (min 0.431, runs 629)  LPs 1128 (PPOPT-equivalent LPs 2513 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_kp_parallel         9 regions       0.269 ms  (min 0.209, runs 1091)  LPs 1128 (PPOPT-equivalent LPs 2513 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                             9 regions       0.111 ms  (min 0.105, runs 2000)  LPs 154 (PPOPT-equivalent LPs 309 QPs 91)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_exp                         9 regions       0.108 ms  (min 0.103, runs 2000)  LPs 154 (PPOPT-equivalent LPs 309 QPs 91)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_parallel                    9 regions       0.329 ms  (min 0.266, runs 902)  LPs 154 (PPOPT-equivalent LPs 309 QPs 91)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph               9 regions       0.108 ms  (min 0.102, runs 2000)  LPs 266 (PPOPT-equivalent LPs 409 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph_parallel      9 regions       0.323 ms  (min 0.242, runs 928)  LPs 266 (PPOPT-equivalent LPs 409 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric                         9 regions       0.061 ms  (min 0.059, runs 2000)  LPs 55 (PPOPT-equivalent LPs 223 QPs 21)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric_parallel                9 regions       0.165 ms  (min 0.130, runs 1807)  LPs 55 (PPOPT-equivalent LPs 223 QPs 21)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                            9 regions       0.106 ms  (min 0.101, runs 2000)  LPs 207 (PPOPT-equivalent LPs 406 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                             9 regions       0.036 ms  (min 0.035, runs 2000)  LPs 12 (PPOPT-equivalent LPs 187 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp_enum                        9 regions       0.773 ms  (min 0.746, runs 387)  LPs 383 (PPOPT-equivalent LPs 187 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplp_lex                          9 regions       0.061 ms  (min 0.060, runs 2000)  LPs 55 (PPOPT-equivalent LPs 223 QPs 21)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  parametric_daqp                   9 regions       0.080 ms  (min 0.077, runs 2000)  LPs 19 (PPOPT-equivalent LPs 188 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp_parallel                    9 regions       0.038 ms  (min 0.036, runs 2000)  LPs 12 (PPOPT-equivalent LPs 187 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+  geometry: 20 planes, 8 adjacencies, 12 domain planes, 0 facets with 2+ neighbours (0.3 ms)
+  trajectories (random_walk): 100000 points from 1000 x 100 steps
+  built sequential in 0.0 ms
+  built sequential (early exit) in 0.0 ms
+  linear machine check: centers 9/9 correct, max vertex violation 3.55e-15, min center margin 2.81e-1, certified true
+  built descriptor function in 0.0 ms
+  built hash table in 0.1 ms
+  built hash table in 0.1 ms
+  built hash table in 0.2 ms
+  built hash table (limit 1x old16) in 1.5 ms
+  built hash table (limit 4x old16) in 4.1 ms
+  built hash table (limit 16x old16) in 2.8 ms
+  built hash table (limit 64x old16) in 2.8 ms
+  built hash table (limit 1 MB) in 2.8 ms
+  built hash table (limit 8 MB) in 2.8 ms
+  built hash table (limit 64 MB) in 2.7 ms
+  built YANN in 0.0 ms
+  sequential                 uniform       87.4 ns/q  trajectory       78.2 ns/q  storage       132 floats  build      0.00 ms  mismatches 0/0  {}
+  sequential (early exit)    uniform       37.4 ns/q  trajectory       20.7 ns/q  storage       132 floats  build      0.00 ms  mismatches 0/0  {}
+  binary search tree         uniform       42.8 ns/q  trajectory       24.9 ns/q  storage       181 floats  build      0.01 ms  mismatches 0/0  {"depth":4,"nodes":17}
+  multiway tree              uniform       42.8 ns/q  trajectory       28.3 ns/q  storage       200 floats  build      0.00 ms  mismatches 0/0  {"height":2,"levels":2,"order":3}
+  multiway tree              uniform       40.0 ns/q  trajectory       27.4 ns/q  storage       195 floats  build      0.00 ms  mismatches 0/0  {"height":2,"levels":3,"order":7}
+  multiway tree              uniform       38.6 ns/q  trajectory       27.6 ns/q  storage       196 floats  build      0.00 ms  mismatches 0/0  {"height":1,"levels":4,"order":15}
+  linear machine             uniform       36.7 ns/q  trajectory       26.9 ns/q  storage       159 floats  build      0.12 ms  mismatches 0/0  {"centers_correct":9,"certified":true,"max_vertex_violation":3.552713678800501e-15,"min_center_margin":0.2805537998898706}
+  descriptor function        uniform       49.1 ns/q  trajectory       36.4 ns/q  storage       199 floats  build      0.00 ms  mismatches 0/0  {"compared_facets":16,"explicit_rows":28}
+  hash table                 uniform       39.5 ns/q  trajectory       15.2 ns/q  storage       241 floats  build      0.06 ms  mismatches 0/0  {"cells":9,"max_candidates":5,"mean_candidates":3.888888888888889,"mixed_cells":9,"rows_per_mixed":11.777777777777779}
+  hash table                 uniform       29.7 ns/q  trajectory       14.5 ns/q  storage       365 floats  build      0.11 ms  mismatches 0/0  {"cells":36,"max_candidates":5,"mean_candidates":2.75,"mixed_cells":32,"rows_per_mixed":6.1875}
+  hash table                 uniform       22.9 ns/q  trajectory       14.3 ns/q  storage       648 floats  build      0.16 ms  mismatches 0/0  {"cells":144,"max_candidates":4,"mean_candidates":2.1914893617021276,"mixed_cells":94,"rows_per_mixed":3.8085106382978724}
+  hash table (limit 1x old16) uniform       24.6 ns/q  trajectory       15.4 ns/q  storage       366 floats  build      1.55 ms  mismatches 0/0  {"base_cells":144,"fits":true,"limit_bytes":4040,"mean_candidates":2.1914893617021276,"mixed_leaves":94,"rows_per_mixed":10.297872340425531,"storage_bytes":2924}
+  hash table (limit 4x old16) uniform       17.1 ns/q  trajectory       12.6 ns/q  storage      1372 floats  build      4.07 ms  mismatches 0/0  {"base_cells":576,"fits":true,"limit_bytes":16160,"mean_candidates":1.8208955223880596,"mixed_leaves":268,"rows_per_mixed":2.373134328358209,"storage_bytes":10972}
+  hash table (limit 16x old16) uniform       11.1 ns/q  trajectory       11.6 ns/q  storage      3214 floats  build      2.83 ms  mismatches 0/0  {"base_cells":2304,"fits":true,"limit_bytes":64640,"mean_candidates":1.7432432432432432,"mixed_leaves":592,"rows_per_mixed":1.9932432432432432,"storage_bytes":25708}
+  hash table (limit 64x old16) uniform       11.2 ns/q  trajectory       11.3 ns/q  storage      3214 floats  build      2.75 ms  mismatches 0/0  {"base_cells":2304,"fits":true,"limit_bytes":258560,"mean_candidates":1.7432432432432432,"mixed_leaves":592,"rows_per_mixed":1.9932432432432432,"storage_bytes":25708}
+  hash table (limit 1 MB)    uniform       11.1 ns/q  trajectory       11.5 ns/q  storage      3214 floats  build      2.78 ms  mismatches 0/0  {"base_cells":2304,"fits":true,"limit_bytes":1048576,"mean_candidates":1.7432432432432432,"mixed_leaves":592,"rows_per_mixed":1.9932432432432432,"storage_bytes":25708}
+  hash table (limit 8 MB)    uniform       11.0 ns/q  trajectory       11.4 ns/q  storage      3214 floats  build      2.85 ms  mismatches 0/0  {"base_cells":2304,"fits":true,"limit_bytes":8388608,"mean_candidates":1.7432432432432432,"mixed_leaves":592,"rows_per_mixed":1.9932432432432432,"storage_bytes":25708}
+  hash table (limit 64 MB)   uniform       10.9 ns/q  trajectory       11.4 ns/q  storage      3214 floats  build      2.67 ms  mismatches 0/0  {"base_cells":2304,"fits":true,"limit_bytes":67108864,"mean_candidates":1.7432432432432432,"mixed_leaves":592,"rows_per_mixed":1.9932432432432432,"storage_bytes":25708}
+  YANN                       uniform       99.6 ns/q  trajectory      100.1 ns/q  storage       250 floats  build      0.01 ms  mismatches 0/0  {}
+== di_N6: x=6 t=2 constraints=26 (eq 0) build 0.057 ms
+  combinatorial                    11 regions      10.480 ms  (min 10.282, runs 29)  LPs 20378 (PPOPT-equivalent LPs 51503 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_parallel           11 regions       3.303 ms  (min 2.913, runs 91)  LPs 20374 (PPOPT-equivalent LPs 51503 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_kp                 11 regions      10.485 ms  (min 10.153, runs 29)  LPs 20374 (PPOPT-equivalent LPs 51503 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_kp_parallel        11 regions       5.190 ms  (min 4.240, runs 57)  LPs 20374 (PPOPT-equivalent LPs 51503 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                            11 regions       0.186 ms  (min 0.176, runs 1604)  LPs 248 (PPOPT-equivalent LPs 523 QPs 91)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_exp                        11 regions       0.180 ms  (min 0.172, runs 1659)  LPs 248 (PPOPT-equivalent LPs 523 QPs 91)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_parallel                   11 regions       0.464 ms  (min 0.369, runs 639)  LPs 248 (PPOPT-equivalent LPs 523 QPs 91)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph              11 regions       0.266 ms  (min 0.250, runs 1122)  LPs 592 (PPOPT-equivalent LPs 829 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph_parallel     11 regions       0.460 ms  (min 0.379, runs 647)  LPs 592 (PPOPT-equivalent LPs 829 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric                        11 regions       0.098 ms  (min 0.095, runs 2000)  LPs 65 (PPOPT-equivalent LPs 353 QPs 25)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric_parallel               11 regions       0.231 ms  (min 0.190, runs 1260)  LPs 65 (PPOPT-equivalent LPs 353 QPs 25)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                           11 regions       0.211 ms  (min 0.202, runs 1398)  LPs 363 (PPOPT-equivalent LPs 692 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                            11 regions       0.054 ms  (min 0.052, runs 2000)  LPs 14 (PPOPT-equivalent LPs 311 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp_enum                       11 regions      11.386 ms  (min 11.267, runs 27)  LPs 2358 (PPOPT-equivalent LPs 311 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplp_lex                         11 regions       0.098 ms  (min 0.093, runs 2000)  LPs 65 (PPOPT-equivalent LPs 353 QPs 25)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  parametric_daqp                  11 regions       0.173 ms  (min 0.164, runs 1726)  LPs 23 (PPOPT-equivalent LPs 312 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp_parallel                   11 regions       0.057 ms  (min 0.056, runs 2000)  LPs 14 (PPOPT-equivalent LPs 311 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+  geometry: 22 planes, 10 adjacencies, 12 domain planes, 0 facets with 2+ neighbours (0.3 ms)
+  trajectories (random_walk): 100000 points from 1000 x 100 steps
+  built sequential in 0.0 ms
+  built sequential (early exit) in 0.0 ms
+  linear machine check: centers 11/11 correct, max vertex violation 2.66e-15, min center margin 1.25e-1, certified true
+  built descriptor function in 0.0 ms
+  built hash table in 0.1 ms
+  built hash table in 0.1 ms
+  built hash table in 0.2 ms
+  built hash table (limit 1x old16) in 1.7 ms
+  built hash table (limit 4x old16) in 4.3 ms
+  built hash table (limit 16x old16) in 3.0 ms
+  built hash table (limit 64x old16) in 2.9 ms
+  built hash table (limit 1 MB) in 2.9 ms
+  built hash table (limit 8 MB) in 2.9 ms
+  built hash table (limit 64 MB) in 3.0 ms
+  built YANN in 0.0 ms
+  sequential                 uniform       97.2 ns/q  trajectory       88.1 ns/q  storage       156 floats  build      0.00 ms  mismatches 0/0  {}
+  sequential (early exit)    uniform       39.2 ns/q  trajectory       21.0 ns/q  storage       156 floats  build      0.00 ms  mismatches 0/0  {}
+  binary search tree         uniform       50.8 ns/q  trajectory       26.1 ns/q  storage       217 floats  build      0.01 ms  mismatches 0/0  {"depth":4,"nodes":21}
+  multiway tree              uniform       49.8 ns/q  trajectory       29.3 ns/q  storage       232 floats  build      0.00 ms  mismatches 0/0  {"height":2,"levels":2,"order":3}
+  multiway tree              uniform       45.2 ns/q  trajectory       28.9 ns/q  storage       257 floats  build      0.00 ms  mismatches 0/0  {"height":2,"levels":3,"order":7}
+  multiway tree              uniform       46.1 ns/q  trajectory       31.8 ns/q  storage       228 floats  build      0.00 ms  mismatches 0/0  {"height":1,"levels":4,"order":15}
+  linear machine             uniform       39.9 ns/q  trajectory       30.1 ns/q  storage       189 floats  build      0.14 ms  mismatches 0/0  {"centers_correct":11,"certified":true,"max_vertex_violation":2.6645352591003757e-15,"min_center_margin":0.12488361186705088}
+  descriptor function        uniform       54.4 ns/q  trajectory       40.7 ns/q  storage       233 floats  build      0.00 ms  mismatches 0/0  {"compared_facets":20,"explicit_rows":32}
+  hash table                 uniform       39.8 ns/q  trajectory       15.7 ns/q  storage       271 floats  build      0.05 ms  mismatches 0/0  {"cells":9,"max_candidates":6,"mean_candidates":4.111111111111111,"mixed_cells":9,"rows_per_mixed":12.444444444444445}
+  hash table                 uniform       28.2 ns/q  trajectory       15.0 ns/q  storage       454 floats  build      0.08 ms  mismatches 0/0  {"cells":49,"max_candidates":4,"mean_candidates":2.85,"mixed_cells":40,"rows_per_mixed":6.35}
+  hash table                 uniform       22.4 ns/q  trajectory       14.3 ns/q  storage       745 floats  build      0.17 ms  mismatches 0/0  {"cells":169,"max_candidates":4,"mean_candidates":2.142857142857143,"mixed_cells":112,"rows_per_mixed":3.5}
+  hash table (limit 1x old16) uniform       26.9 ns/q  trajectory       15.1 ns/q  storage       538 floats  build      1.67 ms  mismatches 0/0  {"base_cells":81,"fits":true,"limit_bytes":4728,"mean_candidates":2.4516129032258065,"mixed_leaves":62,"rows_per_mixed":4.709677419354839,"storage_bytes":4304}
+  hash table (limit 4x old16) uniform       16.3 ns/q  trajectory       12.7 ns/q  storage      1658 floats  build      4.30 ms  mismatches 0/0  {"base_cells":729,"fits":true,"limit_bytes":18912,"mean_candidates":1.84375,"mixed_leaves":320,"rows_per_mixed":2.34375,"storage_bytes":13264}
+  hash table (limit 16x old16) uniform       10.9 ns/q  trajectory       11.4 ns/q  storage      3834 floats  build      2.97 ms  mismatches 0/0  {"base_cells":2809,"fits":true,"limit_bytes":75648,"mean_candidates":1.7732558139534884,"mixed_leaves":688,"rows_per_mixed":2.0261627906976742,"storage_bytes":30672}
+  hash table (limit 64x old16) uniform       10.7 ns/q  trajectory       11.2 ns/q  storage      3834 floats  build      2.87 ms  mismatches 0/0  {"base_cells":2809,"fits":true,"limit_bytes":302592,"mean_candidates":1.7732558139534884,"mixed_leaves":688,"rows_per_mixed":2.0261627906976742,"storage_bytes":30672}
+  hash table (limit 1 MB)    uniform       10.9 ns/q  trajectory       11.4 ns/q  storage      3834 floats  build      2.89 ms  mismatches 0/0  {"base_cells":2809,"fits":true,"limit_bytes":1048576,"mean_candidates":1.7732558139534884,"mixed_leaves":688,"rows_per_mixed":2.0261627906976742,"storage_bytes":30672}
+  hash table (limit 8 MB)    uniform       10.7 ns/q  trajectory       11.2 ns/q  storage      3834 floats  build      2.92 ms  mismatches 0/0  {"base_cells":2809,"fits":true,"limit_bytes":8388608,"mean_candidates":1.7732558139534884,"mixed_leaves":688,"rows_per_mixed":2.0261627906976742,"storage_bytes":30672}
+  hash table (limit 64 MB)   uniform       10.9 ns/q  trajectory       11.1 ns/q  storage      3834 floats  build      2.95 ms  mismatches 0/0  {"base_cells":2809,"fits":true,"limit_bytes":67108864,"mean_candidates":1.7732558139534884,"mixed_leaves":688,"rows_per_mixed":2.0261627906976742,"storage_bytes":30672}
+  YANN                       uniform      115.3 ns/q  trajectory      114.8 ns/q  storage       366 floats  build      0.01 ms  mismatches 0/0  {}
+== di_N8: x=8 t=2 constraints=34 (eq 0) build 0.088 ms
+  combinatorial                    11 regions     272.739 ms  (min 270.235, runs 7)  LPs 376492 (PPOPT-equivalent LPs 1050213 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_parallel           11 regions      59.986 ms  (min 55.555, runs 7)  LPs 376488 (PPOPT-equivalent LPs 1050213 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_kp                 11 regions     275.786 ms  (min 272.164, runs 7)  LPs 376488 (PPOPT-equivalent LPs 1050213 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_kp_parallel        11 regions     113.315 ms  (min 110.954, runs 7)  LPs 376488 (PPOPT-equivalent LPs 1050213 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                            11 regions       0.223 ms  (min 0.211, runs 1337)  LPs 248 (PPOPT-equivalent LPs 611 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_exp                        11 regions       0.219 ms  (min 0.211, runs 1364)  LPs 248 (PPOPT-equivalent LPs 611 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_parallel                   11 regions       0.530 ms  (min 0.406, runs 567)  LPs 248 (PPOPT-equivalent LPs 611 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph              11 regions       0.302 ms  (min 0.289, runs 991)  LPs 690 (PPOPT-equivalent LPs 1005 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph_parallel     11 regions       0.514 ms  (min 0.394, runs 574)  LPs 690 (PPOPT-equivalent LPs 1005 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric                        11 regions       0.114 ms  (min 0.109, runs 2000)  LPs 65 (PPOPT-equivalent LPs 441 QPs 25)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric_parallel               11 regions       0.241 ms  (min 0.172, runs 1208)  LPs 65 (PPOPT-equivalent LPs 441 QPs 25)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                           11 regions       0.263 ms  (min 0.251, runs 1129)  LPs 469 (PPOPT-equivalent LPs 886 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                            11 regions       0.065 ms  (min 0.062, runs 2000)  LPs 14 (PPOPT-equivalent LPs 399 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp_enum                       11 regions     222.705 ms  (min 221.294, runs 7)  LPs 19412 (PPOPT-equivalent LPs 399 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplp_lex                         11 regions       0.113 ms  (min 0.110, runs 2000)  LPs 65 (PPOPT-equivalent LPs 441 QPs 25)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  parametric_daqp                  11 regions       0.208 ms  (min 0.198, runs 1434)  LPs 23 (PPOPT-equivalent LPs 400 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp_parallel                   11 regions       0.067 ms  (min 0.064, runs 2000)  LPs 14 (PPOPT-equivalent LPs 399 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+  geometry: 22 planes, 10 adjacencies, 12 domain planes, 0 facets with 2+ neighbours (0.3 ms)
+  trajectories (random_walk): 100000 points from 1000 x 100 steps
+  built sequential in 0.0 ms
+  built sequential (early exit) in 0.0 ms
+  linear machine check: centers 11/11 correct, max vertex violation 4.44e-15, min center margin 1.25e-1, certified true
+  built descriptor function in 0.0 ms
+  built hash table in 0.1 ms
+  built hash table in 0.1 ms
+  built hash table in 0.2 ms
+  built hash table (limit 1x old16) in 1.8 ms
+  built hash table (limit 4x old16) in 4.3 ms
+  built hash table (limit 16x old16) in 3.0 ms
+  built hash table (limit 64x old16) in 3.1 ms
+  built hash table (limit 1 MB) in 3.1 ms
+  built hash table (limit 8 MB) in 3.1 ms
+  built hash table (limit 64 MB) in 3.1 ms
+  built YANN in 0.0 ms
+  sequential                 uniform       97.7 ns/q  trajectory       87.6 ns/q  storage       156 floats  build      0.00 ms  mismatches 0/0  {}
+  sequential (early exit)    uniform       39.1 ns/q  trajectory       21.1 ns/q  storage       156 floats  build      0.00 ms  mismatches 0/0  {}
+  binary search tree         uniform       50.6 ns/q  trajectory       26.3 ns/q  storage       217 floats  build      0.01 ms  mismatches 0/0  {"depth":4,"nodes":21}
+  multiway tree              uniform       51.8 ns/q  trajectory       29.9 ns/q  storage       232 floats  build      0.00 ms  mismatches 0/0  {"height":2,"levels":2,"order":3}
+  multiway tree              uniform       47.3 ns/q  trajectory       29.2 ns/q  storage       257 floats  build      0.00 ms  mismatches 0/0  {"height":2,"levels":3,"order":7}
+  multiway tree              uniform       46.0 ns/q  trajectory       32.0 ns/q  storage       228 floats  build      0.00 ms  mismatches 0/0  {"height":1,"levels":4,"order":15}
+  linear machine             uniform       40.6 ns/q  trajectory       29.9 ns/q  storage       189 floats  build      0.15 ms  mismatches 0/0  {"centers_correct":11,"certified":true,"max_vertex_violation":4.440892098500626e-15,"min_center_margin":0.12488361186705088}
+  descriptor function        uniform       55.2 ns/q  trajectory       40.2 ns/q  storage       233 floats  build      0.00 ms  mismatches 0/0  {"compared_facets":20,"explicit_rows":32}
+  hash table                 uniform       40.1 ns/q  trajectory       15.9 ns/q  storage       271 floats  build      0.08 ms  mismatches 0/0  {"cells":9,"max_candidates":6,"mean_candidates":4.111111111111111,"mixed_cells":9,"rows_per_mixed":12.444444444444445}
+  hash table                 uniform       28.3 ns/q  trajectory       15.2 ns/q  storage       454 floats  build      0.11 ms  mismatches 0/0  {"cells":49,"max_candidates":4,"mean_candidates":2.85,"mixed_cells":40,"rows_per_mixed":6.35}
+  hash table                 uniform       26.1 ns/q  trajectory       14.4 ns/q  storage       745 floats  build      0.18 ms  mismatches 0/0  {"cells":169,"max_candidates":4,"mean_candidates":2.142857142857143,"mixed_cells":112,"rows_per_mixed":3.5}
+  hash table (limit 1x old16) uniform       26.7 ns/q  trajectory       15.1 ns/q  storage       538 floats  build      1.79 ms  mismatches 0/0  {"base_cells":81,"fits":true,"limit_bytes":4728,"mean_candidates":2.4516129032258065,"mixed_leaves":62,"rows_per_mixed":4.709677419354839,"storage_bytes":4304}
+  hash table (limit 4x old16) uniform       16.3 ns/q  trajectory       12.8 ns/q  storage      1658 floats  build      4.33 ms  mismatches 0/0  {"base_cells":729,"fits":true,"limit_bytes":18912,"mean_candidates":1.84375,"mixed_leaves":320,"rows_per_mixed":2.34375,"storage_bytes":13264}
+  hash table (limit 16x old16) uniform       11.0 ns/q  trajectory       11.5 ns/q  storage      3834 floats  build      2.96 ms  mismatches 0/0  {"base_cells":2809,"fits":true,"limit_bytes":75648,"mean_candidates":1.7732558139534884,"mixed_leaves":688,"rows_per_mixed":2.0261627906976742,"storage_bytes":30672}
+  hash table (limit 64x old16) uniform       10.8 ns/q  trajectory       11.3 ns/q  storage      3834 floats  build      3.06 ms  mismatches 0/0  {"base_cells":2809,"fits":true,"limit_bytes":302592,"mean_candidates":1.7732558139534884,"mixed_leaves":688,"rows_per_mixed":2.0261627906976742,"storage_bytes":30672}
+  hash table (limit 1 MB)    uniform       10.9 ns/q  trajectory       11.6 ns/q  storage      3834 floats  build      3.14 ms  mismatches 0/0  {"base_cells":2809,"fits":true,"limit_bytes":1048576,"mean_candidates":1.7732558139534884,"mixed_leaves":688,"rows_per_mixed":2.0261627906976742,"storage_bytes":30672}
+  hash table (limit 8 MB)    uniform       10.8 ns/q  trajectory       11.5 ns/q  storage      3834 floats  build      3.11 ms  mismatches 0/0  {"base_cells":2809,"fits":true,"limit_bytes":8388608,"mean_candidates":1.7732558139534884,"mixed_leaves":688,"rows_per_mixed":2.0261627906976742,"storage_bytes":30672}
+  hash table (limit 64 MB)   uniform       10.9 ns/q  trajectory       11.4 ns/q  storage      3834 floats  build      3.06 ms  mismatches 0/0  {"base_cells":2809,"fits":true,"limit_bytes":67108864,"mean_candidates":1.7732558139534884,"mixed_leaves":688,"rows_per_mixed":2.0261627906976742,"storage_bytes":30672}
+  YANN                       uniform      115.5 ns/q  trajectory      114.7 ns/q  storage       432 floats  build      0.01 ms  mismatches 0/0  {}
+== di_doc_N3: x=9 t=2 constraints=20 (eq 6) build 0.043 ms
+  combinatorial                     7 regions       0.231 ms  (min 0.220, runs 1294)  LPs 302 (PPOPT-equivalent LPs 629 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_parallel            7 regions       0.251 ms  (min 0.180, runs 1153)  LPs 298 (PPOPT-equivalent LPs 629 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_kp                  7 regions       0.230 ms  (min 0.219, runs 1297)  LPs 298 (PPOPT-equivalent LPs 629 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_kp_parallel         7 regions       0.136 ms  (min 0.105, runs 2000)  LPs 298 (PPOPT-equivalent LPs 629 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                             7 regions       0.141 ms  (min 0.136, runs 2000)  LPs 67 (PPOPT-equivalent LPs 164 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_exp                         7 regions       0.141 ms  (min 0.132, runs 2000)  LPs 70 (PPOPT-equivalent LPs 167 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_parallel                    7 regions       0.237 ms  (min 0.194, runs 1253)  LPs 70 (PPOPT-equivalent LPs 167 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph               7 regions       0.116 ms  (min 0.110, runs 2000)  LPs 124 (PPOPT-equivalent LPs 217 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph_parallel      7 regions       0.198 ms  (min 0.145, runs 1499)  LPs 124 (PPOPT-equivalent LPs 217 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric                         7 regions       0.052 ms  (min 0.050, runs 2000)  LPs 43 (PPOPT-equivalent LPs 149 QPs 15)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric_parallel                7 regions       0.126 ms  (min 0.095, runs 2000)  LPs 43 (PPOPT-equivalent LPs 149 QPs 15)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                            7 regions       0.107 ms  (min 0.101, runs 2000)  LPs 123 (PPOPT-equivalent LPs 250 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                             7 regions       0.032 ms  (min 0.030, runs 2000)  LPs 10 (PPOPT-equivalent LPs 121 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp_enum                        7 regions       0.329 ms  (min 0.310, runs 904)  LPs 206 (PPOPT-equivalent LPs 121 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplp_lex                          7 regions       0.053 ms  (min 0.050, runs 2000)  LPs 43 (PPOPT-equivalent LPs 149 QPs 15)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  parametric_daqp                   7 regions       0.074 ms  (min 0.071, runs 2000)  LPs 15 (PPOPT-equivalent LPs 122 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp_parallel                    7 regions       0.033 ms  (min 0.032, runs 2000)  LPs 10 (PPOPT-equivalent LPs 121 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+  geometry: 16 planes, 6 adjacencies, 10 domain planes, 0 facets with 2+ neighbours (0.2 ms)
+  trajectories (random_walk): 100000 points from 1000 x 100 steps
+  built sequential in 0.0 ms
+  built sequential (early exit) in 0.0 ms
+  linear machine check: centers 7/7 correct, max vertex violation 2.22e-15, min center margin 3.90e-1, certified true
+  built descriptor function in 0.0 ms
+  built hash table in 0.1 ms
+  built hash table in 0.1 ms
+  built hash table in 0.1 ms
+  built hash table (limit 1x old16) in 1.4 ms
+  built hash table (limit 4x old16) in 2.8 ms
+  built hash table (limit 16x old16) in 2.2 ms
+  built hash table (limit 64x old16) in 2.3 ms
+  built hash table (limit 1 MB) in 2.2 ms
+  built hash table (limit 8 MB) in 2.2 ms
+  built hash table (limit 64 MB) in 2.1 ms
+  built YANN in 0.0 ms
+  sequential                 uniform       70.3 ns/q  trajectory       61.6 ns/q  storage       102 floats  build      0.00 ms  mismatches 0/0  {}
+  sequential (early exit)    uniform       33.6 ns/q  trajectory       17.7 ns/q  storage       102 floats  build      0.00 ms  mismatches 0/0  {}
+  binary search tree         uniform       40.8 ns/q  trajectory       23.8 ns/q  storage       139 floats  build      0.01 ms  mismatches 0/0  {"depth":3,"nodes":13}
+  multiway tree              uniform       41.8 ns/q  trajectory       26.0 ns/q  storage       155 floats  build      0.00 ms  mismatches 0/0  {"height":2,"levels":2,"order":3}
+  multiway tree              uniform       35.8 ns/q  trajectory       24.5 ns/q  storage       142 floats  build      0.00 ms  mismatches 0/0  {"height":1,"levels":3,"order":7}
+  multiway tree              uniform       35.9 ns/q  trajectory       25.1 ns/q  storage       158 floats  build      0.00 ms  mismatches 0/0  {"height":1,"levels":4,"order":15}
+  linear machine             uniform       32.3 ns/q  trajectory       23.1 ns/q  storage       123 floats  build      0.10 ms  mismatches 0/0  {"centers_correct":7,"certified":true,"max_vertex_violation":2.220446049250313e-15,"min_center_margin":0.38981426353094184}
+  descriptor function        uniform       44.7 ns/q  trajectory       31.9 ns/q  storage       155 floats  build      0.00 ms  mismatches 0/0  {"compared_facets":12,"explicit_rows":22}
+  hash table                 uniform       35.9 ns/q  trajectory       13.9 ns/q  storage       199 floats  build      0.06 ms  mismatches 0/0  {"cells":9,"max_candidates":5,"mean_candidates":3.4444444444444446,"mixed_cells":9,"rows_per_mixed":10.222222222222221}
+  hash table                 uniform       29.3 ns/q  trajectory       13.6 ns/q  storage       270 floats  build      0.08 ms  mismatches 0/0  {"cells":25,"max_candidates":4,"mean_candidates":2.652173913043478,"mixed_cells":23,"rows_per_mixed":6.260869565217392}
+  hash table                 uniform       21.9 ns/q  trajectory       13.3 ns/q  storage       510 floats  build      0.13 ms  mismatches 0/0  {"cells":121,"max_candidates":4,"mean_candidates":1.9523809523809523,"mixed_cells":84,"rows_per_mixed":3.119047619047619}
+  hash table (limit 1x old16) uniform       25.6 ns/q  trajectory       13.0 ns/q  storage       337 floats  build      1.42 ms  mismatches 0/0  {"base_cells":49,"fits":true,"limit_bytes":3240,"mean_candidates":2.25,"mixed_leaves":40,"rows_per_mixed":4.5,"storage_bytes":2696}
+  hash table (limit 4x old16) uniform       13.3 ns/q  trajectory       11.4 ns/q  storage      1542 floats  build      2.78 ms  mismatches 0/0  {"base_cells":900,"fits":true,"limit_bytes":12960,"mean_candidates":1.6993464052287581,"mixed_leaves":306,"rows_per_mixed":2.0,"storage_bytes":12332}
+  hash table (limit 16x old16) uniform       11.0 ns/q  trajectory       10.4 ns/q  storage      2370 floats  build      2.23 ms  mismatches 0/0  {"base_cells":1764,"fits":true,"limit_bytes":51840,"mean_candidates":1.6742081447963801,"mixed_leaves":442,"rows_per_mixed":1.8733031674208145,"storage_bytes":18956}
+  hash table (limit 64x old16) uniform       11.1 ns/q  trajectory       10.5 ns/q  storage      2370 floats  build      2.32 ms  mismatches 0/0  {"base_cells":1764,"fits":true,"limit_bytes":207360,"mean_candidates":1.6742081447963801,"mixed_leaves":442,"rows_per_mixed":1.8733031674208145,"storage_bytes":18956}
+  hash table (limit 1 MB)    uniform       10.9 ns/q  trajectory       10.3 ns/q  storage      2370 floats  build      2.16 ms  mismatches 0/0  {"base_cells":1764,"fits":true,"limit_bytes":1048576,"mean_candidates":1.6742081447963801,"mixed_leaves":442,"rows_per_mixed":1.8733031674208145,"storage_bytes":18956}
+  hash table (limit 8 MB)    uniform       10.9 ns/q  trajectory       10.4 ns/q  storage      2370 floats  build      2.25 ms  mismatches 0/0  {"base_cells":1764,"fits":true,"limit_bytes":8388608,"mean_candidates":1.6742081447963801,"mixed_leaves":442,"rows_per_mixed":1.8733031674208145,"storage_bytes":18956}
+  hash table (limit 64 MB)   uniform       10.9 ns/q  trajectory       10.3 ns/q  storage      2370 floats  build      2.10 ms  mismatches 0/0  {"base_cells":1764,"fits":true,"limit_bytes":67108864,"mean_candidates":1.6742081447963801,"mixed_leaves":442,"rows_per_mixed":1.8733031674208145,"storage_bytes":18956}
+  YANN                       uniform       75.3 ns/q  trajectory       75.9 ns/q  storage       299 floats  build      0.01 ms  mismatches 0/0  {}
+== dinv_N4: x=4 t=2 constraints=16 (eq 0) build 0.038 ms
+  combinatorial                     9 regions       0.399 ms  (min 0.393, runs 751)  LPs 1056 (PPOPT-equivalent LPs 2005 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_parallel            9 regions       0.420 ms  (min 0.339, runs 705)  LPs 1049 (PPOPT-equivalent LPs 2005 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_kp                  9 regions       0.401 ms  (min 0.380, runs 748)  LPs 1049 (PPOPT-equivalent LPs 2005 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_kp_parallel         9 regions       0.238 ms  (min 0.193, runs 1216)  LPs 1049 (PPOPT-equivalent LPs 2005 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                             9 regions       0.129 ms  (min 0.123, runs 2000)  LPs 178 (PPOPT-equivalent LPs 273 QPs 97)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_exp                         9 regions       0.125 ms  (min 0.118, runs 2000)  LPs 178 (PPOPT-equivalent LPs 273 QPs 97)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_parallel                    9 regions       0.367 ms  (min 0.293, runs 811)  LPs 178 (PPOPT-equivalent LPs 273 QPs 97)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph               9 regions       0.109 ms  (min 0.104, runs 2000)  LPs 286 (PPOPT-equivalent LPs 347 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph_parallel      9 regions       0.349 ms  (min 0.279, runs 851)  LPs 286 (PPOPT-equivalent LPs 347 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric                         9 regions       0.055 ms  (min 0.052, runs 2000)  LPs 53 (PPOPT-equivalent LPs 185 QPs 21)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric_parallel                9 regions       0.150 ms  (min 0.119, runs 1960)  LPs 53 (PPOPT-equivalent LPs 185 QPs 21)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                            9 regions       0.099 ms  (min 0.095, runs 2000)  LPs 207 (PPOPT-equivalent LPs 368 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                             9 regions       0.033 ms  (min 0.032, runs 2000)  LPs 12 (PPOPT-equivalent LPs 151 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp_enum                        9 regions       0.600 ms  (min 0.581, runs 497)  LPs 362 (PPOPT-equivalent LPs 151 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplp_lex                          9 regions       0.055 ms  (min 0.052, runs 2000)  LPs 53 (PPOPT-equivalent LPs 185 QPs 21)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  parametric_daqp                   9 regions       0.069 ms  (min 0.066, runs 2000)  LPs 19 (PPOPT-equivalent LPs 152 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp_parallel                    9 regions       0.035 ms  (min 0.034, runs 2000)  LPs 12 (PPOPT-equivalent LPs 151 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+  geometry: 18 planes, 8 adjacencies, 10 domain planes, 0 facets with 2+ neighbours (0.3 ms)
+  trajectories (random_walk): 100000 points from 1000 x 100 steps
+  built sequential in 0.0 ms
+  built sequential (early exit) in 0.0 ms
+  linear machine check: centers 9/9 correct, max vertex violation 3.11e-15, min center margin 2.31e-1, certified true
+  built descriptor function in 0.0 ms
+  built hash table in 0.0 ms
+  built hash table in 0.1 ms
+  built hash table in 0.2 ms
+  built hash table (limit 1x old16) in 2.1 ms
+  built hash table (limit 4x old16) in 3.6 ms
+  built hash table (limit 16x old16) in 2.9 ms
+  built hash table (limit 64x old16) in 2.7 ms
+  built hash table (limit 1 MB) in 2.6 ms
+  built hash table (limit 8 MB) in 2.7 ms
+  built hash table (limit 64 MB) in 2.6 ms
+  built YANN in 0.0 ms
+  sequential                 uniform       77.3 ns/q  trajectory       73.4 ns/q  storage       126 floats  build      0.00 ms  mismatches 0/0  {}
+  sequential (early exit)    uniform       24.0 ns/q  trajectory       17.4 ns/q  storage       126 floats  build      0.00 ms  mismatches 0/0  {}
+  binary search tree         uniform       23.0 ns/q  trajectory       20.1 ns/q  storage       175 floats  build      0.01 ms  mismatches 0/0  {"depth":4,"nodes":17}
+  multiway tree              uniform       27.9 ns/q  trajectory       22.9 ns/q  storage       194 floats  build      0.00 ms  mismatches 0/0  {"height":2,"levels":2,"order":3}
+  multiway tree              uniform       25.7 ns/q  trajectory       22.6 ns/q  storage       189 floats  build      0.00 ms  mismatches 0/0  {"height":2,"levels":3,"order":7}
+  multiway tree              uniform       26.6 ns/q  trajectory       24.3 ns/q  storage       190 floats  build      0.00 ms  mismatches 0/0  {"height":1,"levels":4,"order":15}
+  linear machine             uniform       26.1 ns/q  trajectory       26.0 ns/q  storage       153 floats  build      0.12 ms  mismatches 0/0  {"centers_correct":9,"certified":true,"max_vertex_violation":3.1086244689504383e-15,"min_center_margin":0.23056690890221798}
+  descriptor function        uniform       39.6 ns/q  trajectory       34.1 ns/q  storage       189 floats  build      0.00 ms  mismatches 0/0  {"compared_facets":16,"explicit_rows":26}
+  hash table                 uniform       23.7 ns/q  trajectory       10.4 ns/q  storage       233 floats  build      0.05 ms  mismatches 0/0  {"cells":9,"max_candidates":5,"mean_candidates":3.888888888888889,"mixed_cells":9,"rows_per_mixed":11.333333333333334}
+  hash table                 uniform       21.4 ns/q  trajectory       10.0 ns/q  storage       361 floats  build      0.08 ms  mismatches 0/0  {"cells":36,"max_candidates":5,"mean_candidates":2.8125,"mixed_cells":32,"rows_per_mixed":6.1875}
+  hash table                 uniform       18.2 ns/q  trajectory        9.4 ns/q  storage       642 floats  build      0.18 ms  mismatches 0/0  {"cells":144,"max_candidates":4,"mean_candidates":2.163265306122449,"mixed_cells":98,"rows_per_mixed":3.489795918367347}
+  hash table (limit 1x old16) uniform       18.3 ns/q  trajectory        9.4 ns/q  storage       642 floats  build      2.13 ms  mismatches 0/0  {"base_cells":144,"fits":true,"limit_bytes":5136,"mean_candidates":2.163265306122449,"mixed_leaves":98,"rows_per_mixed":3.489795918367347,"storage_bytes":5132}
+  hash table (limit 4x old16) uniform       11.7 ns/q  trajectory        8.4 ns/q  storage      2093 floats  build      3.60 ms  mismatches 0/0  {"base_cells":1156,"fits":true,"limit_bytes":20544,"mean_candidates":1.770334928229665,"mixed_leaves":418,"rows_per_mixed":2.047846889952153,"storage_bytes":16740}
+  hash table (limit 16x old16) uniform        9.6 ns/q  trajectory        7.7 ns/q  storage      3234 floats  build      2.90 ms  mismatches 0/0  {"base_cells":2304,"fits":true,"limit_bytes":82176,"mean_candidates":1.7425742574257426,"mixed_leaves":606,"rows_per_mixed":1.9306930693069306,"storage_bytes":25868}
+  hash table (limit 64x old16) uniform        9.7 ns/q  trajectory        7.7 ns/q  storage      3234 floats  build      2.73 ms  mismatches 0/0  {"base_cells":2304,"fits":true,"limit_bytes":328704,"mean_candidates":1.7425742574257426,"mixed_leaves":606,"rows_per_mixed":1.9306930693069306,"storage_bytes":25868}
+  hash table (limit 1 MB)    uniform        9.5 ns/q  trajectory        7.7 ns/q  storage      3234 floats  build      2.58 ms  mismatches 0/0  {"base_cells":2304,"fits":true,"limit_bytes":1048576,"mean_candidates":1.7425742574257426,"mixed_leaves":606,"rows_per_mixed":1.9306930693069306,"storage_bytes":25868}
+  hash table (limit 8 MB)    uniform        9.6 ns/q  trajectory        7.6 ns/q  storage      3234 floats  build      2.67 ms  mismatches 0/0  {"base_cells":2304,"fits":true,"limit_bytes":8388608,"mean_candidates":1.7425742574257426,"mixed_leaves":606,"rows_per_mixed":1.9306930693069306,"storage_bytes":25868}
+  hash table (limit 64 MB)   uniform        9.7 ns/q  trajectory        7.7 ns/q  storage      3234 floats  build      2.62 ms  mismatches 0/0  {"base_cells":2304,"fits":true,"limit_bytes":67108864,"mean_candidates":1.7425742574257426,"mixed_leaves":606,"rows_per_mixed":1.9306930693069306,"storage_bytes":25868}
+  YANN                       uniform       97.0 ns/q  trajectory       96.8 ns/q  storage       244 floats  build      0.01 ms  mismatches 0/0  {}
+== dinv_N6: x=6 t=2 constraints=24 (eq 0) build 0.056 ms
+  combinatorial                    11 regions       8.945 ms  (min 8.771, runs 34)  LPs 18394 (PPOPT-equivalent LPs 40633 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_parallel           11 regions       3.166 ms  (min 2.747, runs 93)  LPs 18390 (PPOPT-equivalent LPs 40633 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_kp                 11 regions       9.083 ms  (min 8.672, runs 33)  LPs 18390 (PPOPT-equivalent LPs 40633 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_kp_parallel        11 regions       3.247 ms  (min 2.697, runs 93)  LPs 18390 (PPOPT-equivalent LPs 40633 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                            11 regions       0.251 ms  (min 0.239, runs 1189)  LPs 248 (PPOPT-equivalent LPs 501 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_exp                        11 regions       0.246 ms  (min 0.236, runs 1208)  LPs 248 (PPOPT-equivalent LPs 501 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_parallel                   11 regions       0.558 ms  (min 0.444, runs 535)  LPs 248 (PPOPT-equivalent LPs 501 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph              11 regions       0.260 ms  (min 0.251, runs 1147)  LPs 570 (PPOPT-equivalent LPs 785 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph_parallel     11 regions       0.558 ms  (min 0.442, runs 531)  LPs 570 (PPOPT-equivalent LPs 785 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric                        11 regions       0.094 ms  (min 0.090, runs 2000)  LPs 65 (PPOPT-equivalent LPs 331 QPs 25)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric_parallel               11 regions       0.192 ms  (min 0.163, runs 1541)  LPs 65 (PPOPT-equivalent LPs 331 QPs 25)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                           11 regions       0.199 ms  (min 0.194, runs 1496)  LPs 339 (PPOPT-equivalent LPs 646 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                            11 regions       0.055 ms  (min 0.052, runs 2000)  LPs 14 (PPOPT-equivalent LPs 289 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp_enum                       11 regions      12.275 ms  (min 11.720, runs 25)  LPs 2297 (PPOPT-equivalent LPs 289 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplp_lex                         11 regions       0.098 ms  (min 0.089, runs 2000)  LPs 65 (PPOPT-equivalent LPs 331 QPs 25)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  parametric_daqp                  11 regions       0.175 ms  (min 0.161, runs 1717)  LPs 23 (PPOPT-equivalent LPs 290 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp_parallel                   11 regions       0.059 ms  (min 0.054, runs 2000)  LPs 14 (PPOPT-equivalent LPs 289 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+  geometry: 22 planes, 10 adjacencies, 12 domain planes, 0 facets with 2+ neighbours (0.3 ms)
+  trajectories (random_walk): 100000 points from 1000 x 100 steps
+  built sequential in 0.0 ms
+  built sequential (early exit) in 0.0 ms
+  linear machine check: centers 11/11 correct, max vertex violation 2.22e-15, min center margin 1.25e-1, certified true
+  built descriptor function in 0.0 ms
+  built hash table in 0.1 ms
+  built hash table in 0.1 ms
+  built hash table in 0.2 ms
+  built hash table (limit 1x old16) in 2.3 ms
+  built hash table (limit 4x old16) in 3.8 ms
+  built hash table (limit 16x old16) in 3.4 ms
+  built hash table (limit 64x old16) in 2.9 ms
+  built hash table (limit 1 MB) in 2.9 ms
+  built hash table (limit 8 MB) in 2.9 ms
+  built hash table (limit 64 MB) in 3.2 ms
+  built YANN in 0.0 ms
+  sequential                 uniform       96.0 ns/q  trajectory       93.2 ns/q  storage       156 floats  build      0.00 ms  mismatches 0/0  {}
+  sequential (early exit)    uniform       41.6 ns/q  trajectory       21.0 ns/q  storage       156 floats  build      0.00 ms  mismatches 0/0  {}
+  binary search tree         uniform       50.7 ns/q  trajectory       26.1 ns/q  storage       217 floats  build      0.01 ms  mismatches 0/0  {"depth":4,"nodes":21}
+  multiway tree              uniform       52.8 ns/q  trajectory       29.4 ns/q  storage       232 floats  build      0.00 ms  mismatches 0/0  {"height":2,"levels":2,"order":3}
+  multiway tree              uniform       46.8 ns/q  trajectory       28.8 ns/q  storage       257 floats  build      0.00 ms  mismatches 0/0  {"height":2,"levels":3,"order":7}
+  multiway tree              uniform       46.6 ns/q  trajectory       33.4 ns/q  storage       228 floats  build      0.00 ms  mismatches 0/0  {"height":1,"levels":4,"order":15}
+  linear machine             uniform       42.2 ns/q  trajectory       30.8 ns/q  storage       189 floats  build      0.14 ms  mismatches 0/0  {"centers_correct":11,"certified":true,"max_vertex_violation":2.220446049250313e-15,"min_center_margin":0.12488361186704822}
+  descriptor function        uniform       56.2 ns/q  trajectory       43.1 ns/q  storage       233 floats  build      0.00 ms  mismatches 0/0  {"compared_facets":20,"explicit_rows":32}
+  hash table                 uniform       42.2 ns/q  trajectory       16.8 ns/q  storage       271 floats  build      0.05 ms  mismatches 0/0  {"cells":9,"max_candidates":6,"mean_candidates":4.111111111111111,"mixed_cells":9,"rows_per_mixed":12.444444444444445}
+  hash table                 uniform       29.6 ns/q  trajectory       15.7 ns/q  storage       454 floats  build      0.10 ms  mismatches 0/0  {"cells":49,"max_candidates":4,"mean_candidates":2.85,"mixed_cells":40,"rows_per_mixed":6.35}
+  hash table                 uniform       24.2 ns/q  trajectory       14.8 ns/q  storage       745 floats  build      0.19 ms  mismatches 0/0  {"cells":169,"max_candidates":4,"mean_candidates":2.142857142857143,"mixed_cells":112,"rows_per_mixed":3.5}
+  hash table (limit 1x old16) uniform       23.9 ns/q  trajectory       15.1 ns/q  storage       745 floats  build      2.30 ms  mismatches 0/0  {"base_cells":169,"fits":true,"limit_bytes":5960,"mean_candidates":2.142857142857143,"mixed_leaves":112,"rows_per_mixed":3.5,"storage_bytes":5960}
+  hash table (limit 4x old16) uniform       14.1 ns/q  trajectory       12.8 ns/q  storage      2488 floats  build      3.81 ms  mismatches 0/0  {"base_cells":1444,"fits":true,"limit_bytes":23840,"mean_candidates":1.7974683544303798,"mixed_leaves":474,"rows_per_mixed":2.1434599156118144,"storage_bytes":19900}
+  hash table (limit 16x old16) uniform       11.5 ns/q  trajectory       12.1 ns/q  storage      3834 floats  build      3.43 ms  mismatches 0/0  {"base_cells":2809,"fits":true,"limit_bytes":95360,"mean_candidates":1.7732558139534884,"mixed_leaves":688,"rows_per_mixed":2.0261627906976742,"storage_bytes":30672}
+  hash table (limit 64x old16) uniform       11.4 ns/q  trajectory       11.9 ns/q  storage      3834 floats  build      2.94 ms  mismatches 0/0  {"base_cells":2809,"fits":true,"limit_bytes":381440,"mean_candidates":1.7732558139534884,"mixed_leaves":688,"rows_per_mixed":2.0261627906976742,"storage_bytes":30672}
+  hash table (limit 1 MB)    uniform       11.8 ns/q  trajectory       12.0 ns/q  storage      3834 floats  build      2.94 ms  mismatches 0/0  {"base_cells":2809,"fits":true,"limit_bytes":1048576,"mean_candidates":1.7732558139534884,"mixed_leaves":688,"rows_per_mixed":2.0261627906976742,"storage_bytes":30672}
+  hash table (limit 8 MB)    uniform       11.4 ns/q  trajectory       11.8 ns/q  storage      3834 floats  build      2.93 ms  mismatches 0/0  {"base_cells":2809,"fits":true,"limit_bytes":8388608,"mean_candidates":1.7732558139534884,"mixed_leaves":688,"rows_per_mixed":2.0261627906976742,"storage_bytes":30672}
+  hash table (limit 64 MB)   uniform       11.4 ns/q  trajectory       11.6 ns/q  storage      3834 floats  build      3.15 ms  mismatches 0/0  {"base_cells":2809,"fits":true,"limit_bytes":67108864,"mean_candidates":1.7732558139534884,"mixed_leaves":688,"rows_per_mixed":2.0261627906976742,"storage_bytes":30672}
+  YANN                       uniform      122.5 ns/q  trajectory      122.8 ns/q  storage       366 floats  build      0.01 ms  mismatches 0/0  {}
+== dinv_N8: x=8 t=2 constraints=32 (eq 0) build 0.093 ms
+  combinatorial                    11 regions     228.460 ms  (min 226.228, runs 7)  LPs 330292 (PPOPT-equivalent LPs 823951 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_parallel           11 regions      85.907 ms  (min 53.228, runs 7)  LPs 330288 (PPOPT-equivalent LPs 823951 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_kp                 11 regions     225.804 ms  (min 223.463, runs 7)  LPs 330288 (PPOPT-equivalent LPs 823951 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_kp_parallel        11 regions      97.742 ms  (min 81.687, runs 7)  LPs 330288 (PPOPT-equivalent LPs 823951 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                            11 regions       0.269 ms  (min 0.257, runs 1108)  LPs 248 (PPOPT-equivalent LPs 589 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_exp                        11 regions       0.265 ms  (min 0.258, runs 1122)  LPs 248 (PPOPT-equivalent LPs 589 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_parallel                   11 regions       0.575 ms  (min 0.491, runs 517)  LPs 248 (PPOPT-equivalent LPs 589 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph              11 regions       0.298 ms  (min 0.287, runs 988)  LPs 670 (PPOPT-equivalent LPs 961 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph_parallel     11 regions       0.566 ms  (min 0.464, runs 525)  LPs 670 (PPOPT-equivalent LPs 961 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric                        11 regions       0.108 ms  (min 0.103, runs 2000)  LPs 65 (PPOPT-equivalent LPs 419 QPs 25)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric_parallel               11 regions       0.206 ms  (min 0.179, runs 1398)  LPs 65 (PPOPT-equivalent LPs 419 QPs 25)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                           11 regions       0.253 ms  (min 0.243, runs 1180)  LPs 447 (PPOPT-equivalent LPs 842 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                            11 regions       0.065 ms  (min 0.062, runs 2000)  LPs 14 (PPOPT-equivalent LPs 377 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp_enum                       11 regions     256.278 ms  (min 255.048, runs 7)  LPs 17412 (PPOPT-equivalent LPs 377 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplp_lex                         11 regions       0.108 ms  (min 0.103, runs 2000)  LPs 65 (PPOPT-equivalent LPs 419 QPs 25)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  parametric_daqp                  11 regions       0.200 ms  (min 0.191, runs 1491)  LPs 23 (PPOPT-equivalent LPs 378 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp_parallel                   11 regions       0.068 ms  (min 0.065, runs 2000)  LPs 14 (PPOPT-equivalent LPs 377 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+  geometry: 22 planes, 10 adjacencies, 12 domain planes, 0 facets with 2+ neighbours (0.3 ms)
+  trajectories (random_walk): 100000 points from 1000 x 100 steps
+  built sequential in 0.0 ms
+  built sequential (early exit) in 0.0 ms
+  linear machine check: centers 11/11 correct, max vertex violation 5.33e-15, min center margin 1.25e-1, certified true
+  built descriptor function in 0.0 ms
+  built hash table in 0.1 ms
+  built hash table in 0.1 ms
+  built hash table in 0.2 ms
+  built hash table (limit 1x old16) in 2.4 ms
+  built hash table (limit 4x old16) in 3.7 ms
+  built hash table (limit 16x old16) in 3.0 ms
+  built hash table (limit 64x old16) in 3.0 ms
+  built hash table (limit 1 MB) in 2.9 ms
+  built hash table (limit 8 MB) in 2.9 ms
+  built hash table (limit 64 MB) in 3.0 ms
+  built YANN in 0.0 ms
+  sequential                 uniform      100.0 ns/q  trajectory       89.4 ns/q  storage       156 floats  build      0.00 ms  mismatches 0/0  {}
+  sequential (early exit)    uniform       39.6 ns/q  trajectory       21.0 ns/q  storage       156 floats  build      0.00 ms  mismatches 0/0  {}
+  binary search tree         uniform       50.4 ns/q  trajectory       25.5 ns/q  storage       217 floats  build      0.02 ms  mismatches 0/0  {"depth":4,"nodes":21}
+  multiway tree              uniform       49.2 ns/q  trajectory       29.8 ns/q  storage       232 floats  build      0.00 ms  mismatches 0/0  {"height":2,"levels":2,"order":3}
+  multiway tree              uniform       49.5 ns/q  trajectory       31.0 ns/q  storage       257 floats  build      0.00 ms  mismatches 0/0  {"height":2,"levels":3,"order":7}
+  multiway tree              uniform       49.4 ns/q  trajectory       33.5 ns/q  storage       228 floats  build      0.00 ms  mismatches 0/0  {"height":1,"levels":4,"order":15}
+  linear machine             uniform       40.0 ns/q  trajectory       30.5 ns/q  storage       189 floats  build      0.14 ms  mismatches 0/0  {"centers_correct":11,"certified":true,"max_vertex_violation":5.329070518200751e-15,"min_center_margin":0.12488361186705355}
+  descriptor function        uniform       54.7 ns/q  trajectory       40.1 ns/q  storage       233 floats  build      0.00 ms  mismatches 0/0  {"compared_facets":20,"explicit_rows":32}
+  hash table                 uniform       39.3 ns/q  trajectory       15.7 ns/q  storage       271 floats  build      0.05 ms  mismatches 0/0  {"cells":9,"max_candidates":6,"mean_candidates":4.111111111111111,"mixed_cells":9,"rows_per_mixed":12.444444444444445}
+  hash table                 uniform       28.1 ns/q  trajectory       14.9 ns/q  storage       454 floats  build      0.09 ms  mismatches 0/0  {"cells":49,"max_candidates":4,"mean_candidates":2.85,"mixed_cells":40,"rows_per_mixed":6.35}
+  hash table                 uniform       22.8 ns/q  trajectory       14.5 ns/q  storage       745 floats  build      0.19 ms  mismatches 0/0  {"cells":169,"max_candidates":4,"mean_candidates":2.142857142857143,"mixed_cells":112,"rows_per_mixed":3.5}
+  hash table (limit 1x old16) uniform       23.2 ns/q  trajectory       14.0 ns/q  storage       745 floats  build      2.35 ms  mismatches 0/0  {"base_cells":169,"fits":true,"limit_bytes":5960,"mean_candidates":2.142857142857143,"mixed_leaves":112,"rows_per_mixed":3.5,"storage_bytes":5960}
+  hash table (limit 4x old16) uniform       13.1 ns/q  trajectory       11.7 ns/q  storage      2488 floats  build      3.65 ms  mismatches 0/0  {"base_cells":1444,"fits":true,"limit_bytes":23840,"mean_candidates":1.7974683544303798,"mixed_leaves":474,"rows_per_mixed":2.1434599156118144,"storage_bytes":19900}
+  hash table (limit 16x old16) uniform       10.5 ns/q  trajectory       11.0 ns/q  storage      3834 floats  build      3.05 ms  mismatches 0/0  {"base_cells":2809,"fits":true,"limit_bytes":95360,"mean_candidates":1.7732558139534884,"mixed_leaves":688,"rows_per_mixed":2.0261627906976742,"storage_bytes":30672}
+  hash table (limit 64x old16) uniform       11.4 ns/q  trajectory       11.3 ns/q  storage      3834 floats  build      2.96 ms  mismatches 0/0  {"base_cells":2809,"fits":true,"limit_bytes":381440,"mean_candidates":1.7732558139534884,"mixed_leaves":688,"rows_per_mixed":2.0261627906976742,"storage_bytes":30672}
+  hash table (limit 1 MB)    uniform       11.0 ns/q  trajectory       11.3 ns/q  storage      3834 floats  build      2.93 ms  mismatches 0/0  {"base_cells":2809,"fits":true,"limit_bytes":1048576,"mean_candidates":1.7732558139534884,"mixed_leaves":688,"rows_per_mixed":2.0261627906976742,"storage_bytes":30672}
+  hash table (limit 8 MB)    uniform       10.9 ns/q  trajectory       11.3 ns/q  storage      3834 floats  build      2.92 ms  mismatches 0/0  {"base_cells":2809,"fits":true,"limit_bytes":8388608,"mean_candidates":1.7732558139534884,"mixed_leaves":688,"rows_per_mixed":2.0261627906976742,"storage_bytes":30672}
+  hash table (limit 64 MB)   uniform       10.7 ns/q  trajectory       11.2 ns/q  storage      3834 floats  build      3.01 ms  mismatches 0/0  {"base_cells":2809,"fits":true,"limit_bytes":67108864,"mean_candidates":1.7732558139534884,"mixed_leaves":688,"rows_per_mixed":2.0261627906976742,"storage_bytes":30672}
+  YANN                       uniform      114.5 ns/q  trajectory      115.3 ns/q  storage       432 floats  build      0.01 ms  mismatches 0/0  {}
+== masses2_N4: x=4 t=4 constraints=40 (eq 0) build 0.056 ms
+  combinatorial                   307 regions      15.197 ms  (min 14.962, runs 20)  LPs 13357 (PPOPT-equivalent LPs 32887 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_parallel          307 regions       4.281 ms  (min 3.773, runs 60)  LPs 13349 (PPOPT-equivalent LPs 32887 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_kp                307 regions      15.303 ms  (min 14.795, runs 20)  LPs 13349 (PPOPT-equivalent LPs 32887 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_kp_parallel       307 regions       3.873 ms  (min 3.430, runs 76)  LPs 13349 (PPOPT-equivalent LPs 32887 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           307 regions       7.910 ms  (min 7.753, runs 38)  LPs 3606 (PPOPT-equivalent LPs 15825 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_exp                       307 regions       7.670 ms  (min 7.357, runs 39)  LPs 3892 (PPOPT-equivalent LPs 16009 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_parallel                  307 regions       2.996 ms  (min 2.755, runs 99)  LPs 3808 (PPOPT-equivalent LPs 15955 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             307 regions      13.791 ms  (min 12.697, runs 23)  LPs 12184 (PPOPT-equivalent LPs 22355 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph_parallel    307 regions       4.389 ms  (min 3.812, runs 69)  LPs 12184 (PPOPT-equivalent LPs 22355 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric                       307 regions      11.245 ms  (min 10.761, runs 27)  LPs 2797 (PPOPT-equivalent LPs 15937 QPs 889)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric_parallel              307 regions       3.475 ms  (min 3.123, runs 86)  LPs 3082 (PPOPT-equivalent LPs 16175 QPs 1190)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                          307 regions      17.718 ms  (min 17.403, runs 17)  LPs 11823 (PPOPT-equivalent LPs 26619 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                           307 regions       9.178 ms  (min 8.923, runs 33)  LPs 1486 (PPOPT-equivalent LPs 14025 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp_enum                      307 regions      64.255 ms  (min 64.014, runs 7)  LPs 7285 (PPOPT-equivalent LPs 14025 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplp_lex                        307 regions      10.719 ms  (min 10.409, runs 28)  LPs 2797 (PPOPT-equivalent LPs 15937 QPs 889)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  parametric_daqp                 307 regions      11.030 ms  (min 10.891, runs 28)  LPs 615 (PPOPT-equivalent LPs 14026 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp_parallel                  307 regions       3.213 ms  (min 2.949, runs 93)  LPs 1486 (PPOPT-equivalent LPs 14025 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+  geometry: 898 planes, 1024 adjacencies, 144 domain planes, 118 facets with 2+ neighbours (10.1 ms)
+  trajectories (random_walk): 100000 points from 1000 x 100 steps
+  built sequential in 0.1 ms
+  built sequential (early exit) in 0.0 ms
+  linear machine: LP infeasible (118 facets shared with 2+ neighbours: partition is not facet-to-facet, so not a regular subdivision)
+  built descriptor function in 0.1 ms
+  built hash table in 2.6 ms
+  built hash table in 6.4 ms
+  built hash table in 13.1 ms
+  built hash table (limit 1x old16) in 120.9 ms
+  built hash table (limit 4x old16) in 543.9 ms
+  built hash table (limit 16x old16) in 286.4 ms
+  built hash table (limit 64x old16) in 281.0 ms
+  built hash table (limit 1 MB) in 509.1 ms
+  built hash table (limit 8 MB) in 285.0 ms
+  built hash table (limit 64 MB) in 286.6 ms
+  built YANN in 0.4 ms
+  sequential                 uniform     7533.0 ns/q  trajectory     7040.0 ns/q  storage     14600 floats  build      0.05 ms  mismatches 0/0  {}
+  sequential (early exit)    uniform     1435.6 ns/q  trajectory      632.8 ns/q  storage     14600 floats  build      0.04 ms  mismatches 0/0  {}
+  binary search tree         uniform      221.8 ns/q  trajectory      217.1 ns/q  storage     93157 floats  build    148.74 ms  mismatches 0/0  {"depth":64,"nodes":20899}
+  multiway tree              uniform      183.8 ns/q  trajectory      186.6 ns/q  storage    108631 floats  build      0.00 ms  mismatches 0/0  {"height":32,"levels":2,"order":3}
+  multiway tree              uniform      166.4 ns/q  trajectory      168.2 ns/q  storage    125404 floats  build      0.00 ms  mismatches 0/0  {"height":22,"levels":3,"order":7}
+  multiway tree              uniform      183.6 ns/q  trajectory      189.5 ns/q  storage    152611 floats  build      0.00 ms  mismatches 0/0  {"height":16,"levels":4,"order":15}
+  descriptor function        uniform     1409.3 ns/q  trajectory      985.8 ns/q  storage     12325 floats  build      0.11 ms  mismatches 0/0  {"compared_facets":1930,"explicit_rows":990}
+  hash table                 uniform      113.4 ns/q  trajectory       39.1 ns/q  storage     31029 floats  build      2.58 ms  mismatches 0/0  {"cells":256,"max_candidates":96,"mean_candidates":12.96774193548387,"mixed_cells":248,"rows_per_mixed":103.1774193548387}
+  hash table                 uniform       72.4 ns/q  trajectory       32.3 ns/q  storage     49161 floats  build      6.39 ms  mismatches 0/0  {"cells":1296,"max_candidates":72,"mean_candidates":7.210131332082551,"mixed_cells":1066,"rows_per_mixed":47.893058161350844}
+  hash table                 uniform       56.4 ns/q  trajectory       28.5 ns/q  storage     79653 floats  build     13.10 ms  mismatches 0/0  {"cells":4096,"max_candidates":57,"mean_candidates":5.338709677419355,"mixed_cells":2976,"rows_per_mixed":30.552419354838708}
+  hash table (limit 1x old16) uniform       60.7 ns/q  trajectory       44.8 ns/q  storage     26247 floats  build    120.88 ms  mismatches 0/0  {"base_cells":4096,"fits":true,"limit_bytes":277176,"mean_candidates":5.338709677419355,"mixed_leaves":2976,"rows_per_mixed":86.50604838709677,"storage_bytes":209972}
+  hash table (limit 4x old16) uniform       48.4 ns/q  trajectory       25.0 ns/q  storage    119560 floats  build    543.88 ms  mismatches 0/0  {"base_cells":10000,"fits":true,"limit_bytes":1108704,"mean_candidates":4.245946772713368,"mixed_leaves":6538,"rows_per_mixed":21.035178953808504,"storage_bytes":956476}
+  hash table (limit 16x old16) uniform       37.0 ns/q  trajectory       22.1 ns/q  storage    415230 floats  build    286.44 ms  mismatches 0/0  {"base_cells":83521,"fits":true,"limit_bytes":4434816,"mean_candidates":2.883029360478816,"mixed_leaves":42438,"rows_per_mixed":10.138743578867995,"storage_bytes":3321840}
+  hash table (limit 64x old16) uniform       37.2 ns/q  trajectory       21.6 ns/q  storage    415230 floats  build    280.98 ms  mismatches 0/0  {"base_cells":83521,"fits":true,"limit_bytes":17739264,"mean_candidates":2.883029360478816,"mixed_leaves":42438,"rows_per_mixed":10.138743578867995,"storage_bytes":3321840}
+  hash table (limit 1 MB)    uniform       48.9 ns/q  trajectory       25.2 ns/q  storage    119560 floats  build    509.06 ms  mismatches 0/0  {"base_cells":10000,"fits":true,"limit_bytes":1048576,"mean_candidates":4.245946772713368,"mixed_leaves":6538,"rows_per_mixed":21.035178953808504,"storage_bytes":956476}
+  hash table (limit 8 MB)    uniform       37.0 ns/q  trajectory       21.9 ns/q  storage    415230 floats  build    284.96 ms  mismatches 0/0  {"base_cells":83521,"fits":true,"limit_bytes":8388608,"mean_candidates":2.883029360478816,"mixed_leaves":42438,"rows_per_mixed":10.138743578867995,"storage_bytes":3321840}
+  hash table (limit 64 MB)   uniform       36.5 ns/q  trajectory       22.0 ns/q  storage    415230 floats  build    286.61 ms  mismatches 0/0  {"base_cells":83521,"fits":true,"limit_bytes":67108864,"mean_candidates":2.883029360478816,"mixed_leaves":42438,"rows_per_mixed":10.138743578867995,"storage_bytes":3321840}
+  YANN                       uniform     6690.7 ns/q  trajectory     6695.0 ns/q  storage     21048 floats  build      0.36 ms  mismatches 0/0  {}
+== masses2_N6: x=6 t=4 constraints=60 (eq 0) build 0.101 ms
+  combinatorial                   901 regions     337.314 ms  (min 333.595, runs 6)  LPs 321135 (PPOPT-equivalent LPs 628295 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_parallel          901 regions      70.819 ms  (min 64.100, runs 7)  LPs 321127 (PPOPT-equivalent LPs 628295 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_kp                901 regions     336.277 ms  (min 332.491, runs 6)  LPs 321127 (PPOPT-equivalent LPs 628295 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_kp_parallel       901 regions      86.469 ms  (min 83.155, runs 7)  LPs 321127 (PPOPT-equivalent LPs 628295 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           901 regions      52.470 ms  (min 51.856, runs 7)  LPs 27274 (PPOPT-equivalent LPs 73145 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_exp                       901 regions      50.055 ms  (min 48.831, runs 7)  LPs 31332 (PPOPT-equivalent LPs 76041 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_parallel                  901 regions      19.135 ms  (min 18.366, runs 15)  LPs 29433 (PPOPT-equivalent LPs 74600 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             901 regions     136.371 ms  (min 134.502, runs 7)  LPs 135454 (PPOPT-equivalent LPs 160189 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph_parallel    901 regions      57.184 ms  (min 44.030, runs 7)  LPs 135454 (PPOPT-equivalent LPs 160189 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric                       901 regions      39.366 ms  (min 38.995, runs 8)  LPs 6236 (PPOPT-equivalent LPs 62124 QPs 2241)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric_parallel              901 regions      10.942 ms  (min 10.280, runs 27)  LPs 7384 (PPOPT-equivalent LPs 63272 QPs 3561)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                          901 regions      94.081 ms  (min 93.746, runs 7)  LPs 56387 (PPOPT-equivalent LPs 117901 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                           901 regions      32.655 ms  (min 32.240, runs 10)  LPs 4454 (PPOPT-equivalent LPs 57841 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp_enum                      901 regions    1312.198 ms  (min 1299.942, runs 2)  LPs 80619 (PPOPT-equivalent LPs 57841 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplp_lex                        901 regions      39.278 ms  (min 38.984, runs 8)  LPs 6236 (PPOPT-equivalent LPs 62124 QPs 2241)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  parametric_daqp                 901 regions     114.281 ms  (min 113.170, runs 7)  LPs 1825 (PPOPT-equivalent LPs 57842 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp_parallel                  901 regions       8.799 ms  (min 8.242, runs 34)  LPs 4454 (PPOPT-equivalent LPs 57841 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+  geometry: 2826 planes, 3156 adjacencies, 272 domain planes, 286 facets with 2+ neighbours (27.9 ms)
+  trajectories (random_walk): 100000 points from 1000 x 100 steps
+  built sequential in 0.1 ms
+  built sequential (early exit) in 0.2 ms
+  linear machine: LP infeasible (286 facets shared with 2+ neighbours: partition is not facet-to-facet, so not a regular subdivision)
+  built descriptor function in 0.3 ms
+  built hash table in 26.3 ms
+  built hash table in 31.3 ms
+  built hash table in 52.7 ms
+  built hash table (limit 1x old16) in 681.7 ms
+  built hash table (limit 4x old16) in 1622.4 ms
+  built hash table (limit 16x old16) in 954.1 ms
+  built hash table (limit 64x old16) in 909.2 ms
+  built hash table (limit 1 MB) in 659.5 ms
+  built hash table (limit 8 MB) in 1253.6 ms
+  built hash table (limit 64 MB) in 934.6 ms
+  built YANN in 1.0 ms
+  sequential                 uniform    20593.2 ns/q  trajectory    19878.8 ns/q  storage     40130 floats  build      0.12 ms  mismatches 0/0  {}
+  sequential (early exit)    uniform     6033.2 ns/q  trajectory     2473.9 ns/q  storage     40130 floats  build      0.19 ms  mismatches 0/0  {}
+  binary search tree         uniform      299.2 ns/q  trajectory      242.4 ns/q  storage    297226 floats  build   1314.64 ms  mismatches 0/0  {"depth":64,"nodes":65383}
+  multiway tree              uniform      251.5 ns/q  trajectory      206.3 ns/q  storage    345293 floats  build      0.00 ms  mismatches 0/0  {"height":32,"levels":2,"order":3}
+  multiway tree              uniform      214.8 ns/q  trajectory      176.8 ns/q  storage    396004 floats  build      0.00 ms  mismatches 0/0  {"height":22,"levels":3,"order":7}
+  multiway tree              uniform      242.8 ns/q  trajectory      212.4 ns/q  storage    468777 floats  build      0.00 ms  mismatches 0/0  {"height":16,"levels":4,"order":15}
+  descriptor function        uniform     5336.2 ns/q  trajectory     3222.3 ns/q  storage     30747 floats  build      0.31 ms  mismatches 0/0  {"compared_facets":5988,"explicit_rows":2038}
+  hash table                 uniform      168.7 ns/q  trajectory       66.4 ns/q  storage     93471 floats  build     26.32 ms  mismatches 0/0  {"cells":625,"max_candidates":215,"mean_candidates":19.14364640883978,"mixed_cells":543,"rows_per_mixed":154.32044198895028}
+  hash table                 uniform       86.3 ns/q  trajectory       42.8 ns/q  storage    161370 floats  build     31.31 ms  mismatches 0/0  {"cells":4096,"max_candidates":69,"mean_candidates":9.485376044568245,"mixed_cells":2872,"rows_per_mixed":62.70891364902507}
+  hash table                 uniform       62.3 ns/q  trajectory       33.3 ns/q  storage    271213 floats  build     52.72 ms  mismatches 0/0  {"cells":14641,"max_candidates":54,"mean_candidates":6.499607138848355,"mixed_cells":8909,"rows_per_mixed":36.129531933999324}
+  hash table (limit 1x old16) uniform       63.7 ns/q  trajectory       47.2 ns/q  storage    107032 floats  build    681.74 ms  mismatches 0/0  {"base_cells":28561,"fits":true,"limit_bytes":901656,"mean_candidates":5.376673390794059,"mixed_leaves":16359,"rows_per_mixed":81.99046396479002,"storage_bytes":856256}
+  hash table (limit 4x old16) uniform       54.6 ns/q  trajectory       30.7 ns/q  storage    372486 floats  build   1622.39 ms  mismatches 0/0  {"base_cells":28561,"fits":true,"limit_bytes":3606624,"mean_candidates":5.376673390794059,"mixed_leaves":16359,"rows_per_mixed":27.076838437557306,"storage_bytes":2979884}
+  hash table (limit 16x old16) uniform       38.5 ns/q  trajectory       27.8 ns/q  storage   1240127 floats  build    954.13 ms  mismatches 0/0  {"base_cells":234256,"fits":true,"limit_bytes":14426496,"mean_candidates":3.412761677717351,"mixed_leaves":107384,"rows_per_mixed":12.333997616032184,"storage_bytes":9921012}
+  hash table (limit 64x old16) uniform       42.2 ns/q  trajectory       28.3 ns/q  storage   1240127 floats  build    909.17 ms  mismatches 0/0  {"base_cells":234256,"fits":true,"limit_bytes":57705984,"mean_candidates":3.412761677717351,"mixed_leaves":107384,"rows_per_mixed":12.333997616032184,"storage_bytes":9921012}
+  hash table (limit 1 MB)    uniform       64.7 ns/q  trajectory       47.3 ns/q  storage    107032 floats  build    659.46 ms  mismatches 0/0  {"base_cells":28561,"fits":true,"limit_bytes":1048576,"mean_candidates":5.376673390794059,"mixed_leaves":16359,"rows_per_mixed":81.99046396479002,"storage_bytes":856256}
+  hash table (limit 8 MB)    uniform       44.3 ns/q  trajectory       27.7 ns/q  storage    758074 floats  build   1253.60 ms  mismatches 0/0  {"base_cells":104976,"fits":true,"limit_bytes":8388608,"mean_candidates":3.9680160868080585,"mixed_leaves":52714,"rows_per_mixed":16.29415335584475,"storage_bytes":6064588}
+  hash table (limit 64 MB)   uniform       40.2 ns/q  trajectory       26.6 ns/q  storage   1240127 floats  build    934.61 ms  mismatches 0/0  {"base_cells":234256,"fits":true,"limit_bytes":67108864,"mean_candidates":3.412761677717351,"mixed_leaves":107384,"rows_per_mixed":12.333997616032184,"storage_bytes":9921012}
+  YANN                       uniform    18853.7 ns/q  trajectory    18757.4 ns/q  storage     68062 floats  build      0.97 ms  mismatches 0/0  {}
+== sys3x2_N3: x=6 t=3 constraints=30 (eq 0) build 0.046 ms
+  combinatorial                   211 regions      21.837 ms  (min 21.301, runs 14)  LPs 33502 (PPOPT-equivalent LPs 70191 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_parallel          211 regions       5.907 ms  (min 5.375, runs 50)  LPs 33496 (PPOPT-equivalent LPs 70191 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_kp                211 regions      22.463 ms  (min 21.750, runs 14)  LPs 33496 (PPOPT-equivalent LPs 70191 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_kp_parallel       211 regions       8.122 ms  (min 6.186, runs 33)  LPs 33496 (PPOPT-equivalent LPs 70191 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           211 regions       3.387 ms  (min 3.310, runs 87)  LPs 2882 (PPOPT-equivalent LPs 9021 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_exp                       211 regions       3.529 ms  (min 3.362, runs 85)  LPs 3438 (PPOPT-equivalent LPs 9531 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_parallel                  211 regions       2.111 ms  (min 1.891, runs 141)  LPs 3248 (PPOPT-equivalent LPs 9345 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             211 regions       6.261 ms  (min 6.034, runs 48)  LPs 8892 (PPOPT-equivalent LPs 14735 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph_parallel    211 regions       2.791 ms  (min 2.324, runs 108)  LPs 8892 (PPOPT-equivalent LPs 14735 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric                       211 regions       2.758 ms  (min 2.691, runs 109)  LPs 971 (PPOPT-equivalent LPs 7537 QPs 307)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric_parallel              211 regions       1.886 ms  (min 1.543, runs 160)  LPs 1264 (PPOPT-equivalent LPs 7830 QPs 604)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                          211 regions       5.262 ms  (min 5.148, runs 57)  LPs 5381 (PPOPT-equivalent LPs 12945 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                           211 regions       1.688 ms  (min 1.613, runs 176)  LPs 368 (PPOPT-equivalent LPs 6989 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp_enum                      211 regions      32.371 ms  (min 30.176, runs 10)  LPs 6777 (PPOPT-equivalent LPs 6989 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplp_lex                        211 regions       2.908 ms  (min 2.716, runs 104)  LPs 971 (PPOPT-equivalent LPs 7537 QPs 307)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  parametric_daqp                 211 regions       4.570 ms  (min 4.335, runs 66)  LPs 423 (PPOPT-equivalent LPs 6990 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp_parallel                  211 regions       1.442 ms  (min 1.244, runs 205)  LPs 368 (PPOPT-equivalent LPs 6989 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+  geometry: 552 planes, 540 adjacencies, 26 domain planes, 6 facets with 2+ neighbours (1.6 ms)
+  trajectories (random_walk): 100000 points from 1000 x 100 steps
+  built sequential in 0.0 ms
+  built sequential (early exit) in 0.0 ms
+  linear machine: LP infeasible (6 facets shared with 2+ neighbours: partition is not facet-to-facet, so not a regular subdivision)
+  built descriptor function in 0.1 ms
+  built hash table in 1.2 ms
+  built hash table in 2.1 ms
+  built hash table in 5.7 ms
+  built hash table (limit 1x old16) in 44.2 ms
+  built hash table (limit 4x old16) in 168.0 ms
+  built hash table (limit 16x old16) in 102.5 ms
+  built hash table (limit 64x old16) in 102.0 ms
+  built hash table (limit 1 MB) in 144.5 ms
+  built hash table (limit 8 MB) in 104.3 ms
+  built hash table (limit 64 MB) in 103.5 ms
+  built YANN in 0.2 ms
+  sequential                 uniform     3302.3 ns/q  trajectory     3256.5 ns/q  storage      5456 floats  build      0.03 ms  mismatches 0/0  {}
+  sequential (early exit)    uniform      943.8 ns/q  trajectory      821.9 ns/q  storage      5456 floats  build      0.01 ms  mismatches 0/0  {}
+  binary search tree         uniform      151.3 ns/q  trajectory      143.2 ns/q  storage     18008 floats  build     22.72 ms  mismatches 0/0  {"depth":16,"nodes":3587}
+  multiway tree              uniform      129.4 ns/q  trajectory      120.2 ns/q  storage     20659 floats  build      0.00 ms  mismatches 0/0  {"height":8,"levels":2,"order":3}
+  multiway tree              uniform      120.8 ns/q  trajectory      113.1 ns/q  storage     23152 floats  build      0.00 ms  mismatches 0/0  {"height":6,"levels":3,"order":7}
+  multiway tree              uniform      137.2 ns/q  trajectory      130.3 ns/q  storage     25830 floats  build      0.00 ms  mismatches 0/0  {"height":4,"levels":4,"order":15}
+  descriptor function        uniform      955.7 ns/q  trajectory      882.0 ns/q  storage      4732 floats  build      0.06 ms  mismatches 0/0  {"compared_facets":1074,"explicit_rows":290}
+  hash table                 uniform       44.6 ns/q  trajectory       29.6 ns/q  storage     12671 floats  build      1.20 ms  mismatches 0/0  {"cells":216,"max_candidates":56,"mean_candidates":9.8,"mixed_cells":190,"rows_per_mixed":52.98947368421052}
+  hash table                 uniform       37.2 ns/q  trajectory       25.8 ns/q  storage     18433 floats  build      2.15 ms  mismatches 0/0  {"cells":729,"max_candidates":49,"mean_candidates":6.656419529837251,"mixed_cells":553,"rows_per_mixed":30.88245931283906}
+  hash table                 uniform       33.7 ns/q  trajectory       22.1 ns/q  storage     35469 floats  build      5.67 ms  mismatches 0/0  {"cells":3375,"max_candidates":31,"mean_candidates":4.643104300543747,"mixed_cells":2023,"rows_per_mixed":17.60257043994068}
+  hash table (limit 1x old16) uniform       37.6 ns/q  trajectory       25.8 ns/q  storage     18433 floats  build     44.18 ms  mismatches 0/0  {"base_cells":729,"fits":true,"limit_bytes":151504,"mean_candidates":6.656419529837251,"mixed_leaves":553,"rows_per_mixed":30.88245931283906,"storage_bytes":147460}
+  hash table (limit 4x old16) uniform       28.4 ns/q  trajectory       18.5 ns/q  storage     75313 floats  build    167.97 ms  mismatches 0/0  {"base_cells":13824,"fits":true,"limit_bytes":606016,"mean_candidates":3.561647985458952,"mixed_leaves":6602,"rows_per_mixed":10.910027264465313,"storage_bytes":602500}
+  hash table (limit 16x old16) uniform       23.4 ns/q  trajectory       16.6 ns/q  storage    178750 floats  build    102.53 ms  mismatches 0/0  {"base_cells":54872,"fits":true,"limit_bytes":2424064,"mean_candidates":2.8773477518497437,"mixed_leaves":21084,"rows_per_mixed":7.070195408840827,"storage_bytes":1429996}
+  hash table (limit 64x old16) uniform       23.3 ns/q  trajectory       16.2 ns/q  storage    178750 floats  build    102.03 ms  mismatches 0/0  {"base_cells":54872,"fits":true,"limit_bytes":9696256,"mean_candidates":2.8773477518497437,"mixed_leaves":21084,"rows_per_mixed":7.070195408840827,"storage_bytes":1429996}
+  hash table (limit 1 MB)    uniform       25.6 ns/q  trajectory       17.2 ns/q  storage    113123 floats  build    144.51 ms  mismatches 0/0  {"base_cells":27000,"fits":true,"limit_bytes":1048576,"mean_candidates":3.2084922010398613,"mixed_leaves":11540,"rows_per_mixed":8.883015597920277,"storage_bytes":904980}
+  hash table (limit 8 MB)    uniform       23.1 ns/q  trajectory       16.6 ns/q  storage    178750 floats  build    104.33 ms  mismatches 0/0  {"base_cells":54872,"fits":true,"limit_bytes":8388608,"mean_candidates":2.8773477518497437,"mixed_leaves":21084,"rows_per_mixed":7.070195408840827,"storage_bytes":1429996}
+  hash table (limit 64 MB)   uniform       23.3 ns/q  trajectory       16.6 ns/q  storage    178750 floats  build    103.47 ms  mismatches 0/0  {"base_cells":54872,"fits":true,"limit_bytes":67108864,"mean_candidates":2.8773477518497437,"mixed_leaves":21084,"rows_per_mixed":7.070195408840827,"storage_bytes":1429996}
+  YANN                       uniform     3010.7 ns/q  trajectory     3151.7 ns/q  storage     10732 floats  build      0.15 ms  mismatches 0/0  {}
+== sys3x2_N5: x=10 t=3 constraints=50 (eq 0) build 0.096 ms
+  combinatorial                   973 regions    8062.593 ms  (min 8062.593, runs 1)  LPs 7529013 (PPOPT-equivalent LPs 15795503 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_parallel          973 regions    1578.098 ms  (min 1507.560, runs 2)  LPs 7529007 (PPOPT-equivalent LPs 15795503 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_kp                973 regions    4022.636 ms  (min 4022.636, runs 1)  LPs 1741489 (PPOPT-equivalent LPs 3312437 QPs 289)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_kp_parallel       973 regions    1942.524 ms  (min 1889.576, runs 2)  LPs 7534739 (PPOPT-equivalent LPs 15795504 QPs 289)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           973 regions     103.662 ms  (min 102.827, runs 7)  LPs 74014 (PPOPT-equivalent LPs 107479 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_exp                       973 regions     112.953 ms  (min 111.990, runs 7)  LPs 97280 (PPOPT-equivalent LPs 128549 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph_parallel                  973 regions      79.292 ms  (min 78.102, runs 7)  LPs 87978 (PPOPT-equivalent LPs 119931 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             973 regions     336.678 ms  (min 335.602, runs 6)  LPs 344178 (PPOPT-equivalent LPs 370095 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph_parallel    973 regions     116.981 ms  (min 114.681, runs 7)  LPs 344178 (PPOPT-equivalent LPs 370095 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric                       973 regions      21.367 ms  (min 21.112, runs 15)  LPs 3836 (PPOPT-equivalent LPs 51148 QPs 1197)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  geometric_parallel              973 regions       8.651 ms  (min 7.693, runs 35)  LPs 5370 (PPOPT-equivalent LPs 52682 QPs 2758)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                          973 regions      57.530 ms  (min 57.088, runs 7)  LPs 44525 (PPOPT-equivalent LPs 99189 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                           973 regions      11.421 ms  (min 10.874, runs 27)  LPs 1466 (PPOPT-equivalent LPs 49259 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp_enum                      973 regions    4686.973 ms  (min 4686.973, runs 1)  LPs 313184 (PPOPT-equivalent LPs 49259 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplp_lex                        973 regions      21.374 ms  (min 21.193, runs 14)  LPs 3836 (PPOPT-equivalent LPs 51148 QPs 1197)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  parametric_daqp                 973 regions     202.358 ms  (min 196.631, runs 7)  LPs 1947 (PPOPT-equivalent LPs 49260 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp_parallel                  973 regions       4.806 ms  (min 4.520, runs 62)  LPs 1466 (PPOPT-equivalent LPs 49259 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+  geometry: 2614 planes, 2626 adjacencies, 34 domain planes, 22 facets with 2+ neighbours (22.7 ms)
+  trajectories (random_walk): 100000 points from 1000 x 100 steps
+  built sequential in 0.1 ms
+  built sequential (early exit) in 0.0 ms
+  linear machine: LP infeasible (22 facets shared with 2+ neighbours: partition is not facet-to-facet, so not a regular subdivision)
+  built descriptor function in 0.2 ms
+  built hash table in 5.1 ms
+  built hash table in 11.5 ms
+  built hash table in 25.1 ms
+  built hash table (limit 1x old16) in 123.3 ms
+  built hash table (limit 4x old16) in 807.2 ms
+  built hash table (limit 16x old16) in 497.9 ms
+  built hash table (limit 64x old16) in 559.1 ms
+  built hash table (limit 1 MB) in 328.7 ms
+  built hash table (limit 8 MB) in 533.4 ms
+  built hash table (limit 64 MB) in 517.8 ms
+  built YANN in 0.7 ms
+  sequential                 uniform    14711.8 ns/q  trajectory    14758.6 ns/q  storage     24072 floats  build      0.12 ms  mismatches 0/0  {}
+  sequential (early exit)    uniform     5394.1 ns/q  trajectory     4004.1 ns/q  storage     24072 floats  build      0.04 ms  mismatches 0/0  {}
+  binary search tree         uniform      193.4 ns/q  trajectory      181.4 ns/q  storage    115429 floats  build    447.84 ms  mismatches 0/0  {"depth":64,"nodes":26689}
+  multiway tree              uniform      170.8 ns/q  trajectory      157.9 ns/q  storage    135662 floats  build      0.00 ms  mismatches 0/0  {"height":32,"levels":2,"order":3}
+  multiway tree              uniform      148.4 ns/q  trajectory      141.0 ns/q  storage    155461 floats  build      0.00 ms  mismatches 0/0  {"height":22,"levels":3,"order":7}
+  multiway tree              uniform      179.5 ns/q  trajectory      182.5 ns/q  storage    197644 floats  build      0.00 ms  mismatches 0/0  {"height":16,"levels":4,"order":15}
+  descriptor function        uniform     4866.9 ns/q  trajectory     4219.6 ns/q  storage     19104 floats  build      0.23 ms  mismatches 0/0  {"compared_facets":5224,"explicit_rows":794}
+  hash table                 uniform       49.2 ns/q  trajectory       42.5 ns/q  storage     57631 floats  build      5.09 ms  mismatches 0/0  {"cells":1000,"max_candidates":114,"mean_candidates":12.478632478632479,"mixed_cells":702,"rows_per_mixed":66.8119658119658}
+  hash table                 uniform       41.1 ns/q  trajectory       34.7 ns/q  storage     89393 floats  build     11.51 ms  mismatches 0/0  {"cells":4096,"max_candidates":74,"mean_candidates":8.008547008547009,"mixed_cells":2340,"rows_per_mixed":36.63760683760684}
+  hash table                 uniform       34.0 ns/q  trajectory       26.8 ns/q  storage    158044 floats  build     25.13 ms  mismatches 0/0  {"cells":15625,"max_candidates":51,"mean_candidates":5.6993064055487554,"mixed_cells":7353,"rows_per_mixed":21.781313749490003}
+  hash table (limit 1x old16) uniform       47.2 ns/q  trajectory       40.6 ns/q  storage     67409 floats  build    123.30 ms  mismatches 0/0  {"base_cells":1728,"fits":true,"limit_bytes":677200,"mean_candidates":10.45357142857143,"mixed_leaves":1120,"rows_per_mixed":53.05,"storage_bytes":539268}
+  hash table (limit 4x old16) uniform       29.0 ns/q  trajectory       24.3 ns/q  storage    335677 floats  build    807.18 ms  mismatches 0/0  {"base_cells":64000,"fits":true,"limit_bytes":2708800,"mean_candidates":4.192125731697538,"mixed_leaves":24942,"rows_per_mixed":12.996311442546709,"storage_bytes":2685412}
+  hash table (limit 16x old16) uniform       23.0 ns/q  trajectory       21.3 ns/q  storage    786482 floats  build    497.95 ms  mismatches 0/0  {"base_cells":250047,"fits":true,"limit_bytes":10835200,"mean_candidates":3.2885120729832913,"mixed_leaves":80676,"rows_per_mixed":8.211810203778075,"storage_bytes":6291856}
+  hash table (limit 64x old16) uniform       23.0 ns/q  trajectory       20.0 ns/q  storage    786482 floats  build    559.09 ms  mismatches 0/0  {"base_cells":250047,"fits":true,"limit_bytes":43340800,"mean_candidates":3.2885120729832913,"mixed_leaves":80676,"rows_per_mixed":8.211810203778075,"storage_bytes":6291856}
+  hash table (limit 1 MB)    uniform       40.0 ns/q  trajectory       30.2 ns/q  storage    116754 floats  build    328.66 ms  mismatches 0/0  {"base_cells":8000,"fits":true,"limit_bytes":1048576,"mean_candidates":6.680769230769231,"mixed_leaves":4160,"rows_per_mixed":28.035096153846155,"storage_bytes":934028}
+  hash table (limit 8 MB)    uniform       24.9 ns/q  trajectory       20.0 ns/q  storage    786482 floats  build    533.41 ms  mismatches 0/0  {"base_cells":250047,"fits":true,"limit_bytes":8388608,"mean_candidates":3.2885120729832913,"mixed_leaves":80676,"rows_per_mixed":8.211810203778075,"storage_bytes":6291856}
+  hash table (limit 64 MB)   uniform       23.1 ns/q  trajectory       21.3 ns/q  storage    786482 floats  build    517.83 ms  mismatches 0/0  {"base_cells":250047,"fits":true,"limit_bytes":67108864,"mean_candidates":3.2885120729832913,"mixed_leaves":80676,"rows_per_mixed":8.211810203778075,"storage_bytes":6291856}
+  YANN                       uniform    13479.2 ns/q  trajectory    13454.7 ns/q  storage     63966 floats  build      0.69 ms  mismatches 0/0  {}
