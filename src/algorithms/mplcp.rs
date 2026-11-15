@@ -66,11 +66,20 @@ fn twin_rows(n: usize, nt: usize, m: &[f64], q: &[f64], r: &[f64]) -> Vec<bool> 
     };
     let rows: Vec<Vec<f64>> = (0..n).map(row).collect();
     let norm2: Vec<f64> = rows.iter().map(|v| v.iter().map(|x| x * x).sum::<f64>()).collect();
+    // positive multiples have the same normalized sum of entries: sort by it (quantized) and compare only rows whose
+    // keys are equal or adjacent, instead of all pairs
+    let key: Vec<i64> = (0..n).map(|i| if norm2[i] > 0.0 { (rows[i].iter().sum::<f64>() / norm2[i].sqrt() * 1e6).round() as i64 } else { i64::MIN }).collect();
+    let mut order: Vec<usize> = (0..n).collect();
+    order.sort_unstable_by_key(|&i| key[i]);
     let mut twin = vec![false; n];
-    for i in 0..n {
-        for j in i + 1..n {
-            if !(norm2[i] > 0.0 && norm2[j] > 0.0) {
-                continue;
+    for p in 0..n {
+        let i = order[p];
+        if key[i] == i64::MIN {
+            continue;
+        }
+        for &j in &order[p + 1..] {
+            if key[j] - key[i] > 1 {
+                break;
             }
             let c = rows[i].iter().zip(&rows[j]).map(|(a, b)| a * b).sum::<f64>() / norm2[j];
             if c > 0.0 && rows[i].iter().zip(&rows[j]).all(|(a, b)| (a - c * b).abs() <= 1e-9 * norm2[i].sqrt()) {
