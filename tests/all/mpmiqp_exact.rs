@@ -172,7 +172,7 @@ fn hybrid_mpc_with(free_switch: bool) -> MpmiProgram {
         }
     }
     // bounds
-    let mut push = |var: usize, sign: f64, rhs: f64, a: &mut Vec<Vec<f64>>, b: &mut Vec<f64>, f: &mut Vec<Vec<f64>>| {
+    let push = |var: usize, sign: f64, rhs: f64, a: &mut Vec<Vec<f64>>, b: &mut Vec<f64>, f: &mut Vec<Vec<f64>>| {
         let mut r = vec![0.0; nx];
         r[var] = sign;
         a.push(r);
