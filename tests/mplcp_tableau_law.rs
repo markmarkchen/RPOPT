@@ -47,5 +47,6 @@ fn tableau_law_matches_kkt_solve_law() {
             }
         }
     }
-    set_tableau_law(false);
+    // restore the default (tableau law on)
+    set_tableau_law(true);
 }

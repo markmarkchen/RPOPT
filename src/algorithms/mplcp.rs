@@ -742,13 +742,14 @@ fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>
     cands
 }
 
-/// Switch between the multiplier law read from the tableau (opt-in) and the Cholesky KKT solve
-/// `optimal_control_law_dual` (the default, and the fallback for a doubtful basis). The tableau law
-/// gives identical regions and about 2% less time, but its coefficients are not bit-identical to the
-/// KKT solve (up to about 6e-9 relative on ill-conditioned problems), so it is off by default.
-static TABLEAU_LAW: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// Switch between the multiplier law read from the tableau (the default) and the Cholesky KKT solve
+/// `optimal_control_law_dual` (opt-out, and always the fallback for a doubtful basis: a tiny pivot
+/// element or a non-finite row). The tableau law gives identical regions and saves the KKT solve of
+/// every new region; its coefficients agree with the KKT solve to about 6e-9 relative on
+/// ill-conditioned problems, so they are not bit-identical.
+static TABLEAU_LAW: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
-/// Selects the tableau law (`true`) or the KKT-solve law (`false`, default) for the regions built by
+/// Selects the tableau law (`true`, default) or the KKT-solve law (`false`) for the regions built by
 /// `Method::Pivot` and `Method::PivotParallel`.
 pub fn set_tableau_law(on: bool) {
     TABLEAU_LAW.store(on, std::sync::atomic::Ordering::Relaxed);

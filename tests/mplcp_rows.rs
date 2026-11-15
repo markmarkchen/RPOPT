@@ -24,6 +24,10 @@ fn parallel_finds_the_same_regions() {
 
 #[test]
 fn mplcp_rows_match_reference_construction() {
+    // The reference construction solves the KKT system for the law, so compare the builder under the
+    // same law source. The tableau law (the default) is checked against the KKT law, to 1e-8
+    // relative, in tests/mplcp_tableau_law.rs. Both tests in this file pass under either setting.
+    rpopt::algorithms::mplcp::set_tableau_law(false);
     let mut names: Vec<_> = std::fs::read_dir("bench/problems").unwrap().filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.extension().map_or(false, |x| x == "json")).collect();
     names.sort();
     assert!(!names.is_empty());

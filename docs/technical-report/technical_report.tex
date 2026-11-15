@@ -916,8 +916,8 @@ direct QP solves confirm them, its default \code{lowdim\_tol} discards them, and
 
 \begin{enumerate}
   \item \textbf{The mpQP 1.5x target was not met.} The measured median is 1.10x, and the LP census shows that no LP-only change can reach it for the graph and combinatorial algorithms (\S\ref{sec:census}).
-    The one lever that could, for \code{geometric}, is neighbour search by inspection (an upper bound of 1.53x to 1.80x), but it was not built. Reading the \code{mplcp} law from the pivot tableau gave only about 2\% and is not bit-identical, so it is an opt-in
-    switch (\code{mplcp::set\_tableau\_law}), off by default.
+    The one lever that could, for \code{geometric}, is neighbour search by inspection (an upper bound of 1.53x to 1.80x), but it was not built. Reading the \code{mplcp} law from the pivot tableau gave only about 2\%. It is now the default; its coefficients agree with
+    the KKT solve to about 6e-9 relative but are not bit-identical, and \code{mplcp::set\_tableau\_law(false)} restores the KKT solve.
   \item \textbf{Remaining region differences on large problems.} A diff of the algorithms' partitions on six large problems found three defects, now fixed: \code{mplcp} missed real regions when facet rows were large (an absolute zero-row tolerance), \code{combinatorial\_graph} kept noise slivers and two rank-deficient regions from its incremental update, and redundancy removal could drop both rows of a near-duplicate pair. What remains are thin regions (Chebyshev radius below 1e-6) and three small regions on \code{masses3\_N5} (radius 1.5e-6 to 2.4e-6) found by \code{graph} only. The benchmark's same-active-set check should compare partitions by sampled coverage instead.
   \item \textbf{Exact duplicate rows in mpMILP subproblems.} \code{graph} returns no region on one mpMILP root relaxation with exactly duplicated rows (ignored test \code{dump\_repro}).
   \item \textbf{Busy-machine data.} The large suite, horizon scaling, point location sweep, coverage sweep and thread scaling should be rerun on a quiet machine before their absolute values are quoted; the large suite also predates the point location fixes.
