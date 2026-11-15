@@ -239,6 +239,7 @@ fn lp_path(program: &MpProgram, active_set: &[usize], prep: crate::mpqp_utils::P
         }
         let el = e.select_rows(&live);
         let fl: Vec<f64> = live.iter().map(|&p| f[p]).collect();
+        let mut touched: Vec<bool> = vec![];
         let bbox = {
             crate::census_purpose!(Bbox);
             let start = match (parent_box, entry) {
@@ -246,7 +247,7 @@ fn lp_path(program: &MpProgram, active_set: &[usize], prep: crate::mpqp_utils::P
                 _ => None,
             };
             let mut st = crate::boxlp::Stats::default();
-            let r = crate::boxlp::box_chain(&el, &fl, &center, start.as_deref(), &mut st);
+            let r = crate::boxlp::box_chain(&el, &fl, &center, start.as_deref(), &mut st, &mut touched);
             note_chain(1, st.fallbacks, st.engine_lps, nt);
             if let Some((_, _, pts)) = &r {
                 boxflat = Some(pts.iter().flat_map(|p| p.iter().copied()).collect());
@@ -266,6 +267,10 @@ fn lp_path(program: &MpProgram, active_set: &[usize], prep: crate::mpqp_utils::P
                     return false;
                 }
                 if pts.iter().any(|v| (crate::linalg::dot(a, v) - fp).abs() <= tol) {
+                    return true;
+                }
+                // a row of the basis at some vertex the chain visited touches the region
+                if touched.get(lp_).copied().unwrap_or(false) {
                     return true;
                 }
             }

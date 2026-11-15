@@ -41,6 +41,9 @@ struct Scr {
     alpha: Vec<f64>,
     x: Vec<f64>,
     valid: bool,
+    /// rows that were in the basis at some visited vertex (so the hyperplane touches the polytope)
+    touched: Vec<bool>,
+    tlog: Vec<usize>,
     s_stale: bool,
     since_refresh: usize,
     lps: usize,
@@ -145,11 +148,33 @@ fn init_state(e: &Mat, f: &[f64], x: &[f64], sc: &mut Scr) -> bool {
     sc.since_refresh = 0;
     sc.s_stale = true;
     sc.valid = true;
+    for i in 0..sc.t.len() {
+        let r = sc.t[i];
+        if !sc.touched[r] {
+            sc.touched[r] = true;
+            sc.tlog.push(r);
+        }
+    }
     true
 }
 
 /// Primal simplex for max s.e_k from the current vertex of `sc`; false on failure (state invalid).
 fn optimise(e: &Mat, f: &[f64], sc: &mut Scr, k: usize, sg: f64, steps: &mut u64, exact_final: bool) -> bool {
+    let (m, n) = (e.rows, e.cols);
+    let mark = sc.tlog.len();
+    let ok = optimise_inner(e, f, sc, k, sg, steps, exact_final);
+    if !ok {
+        // the vertices visited by a failed run are not trusted
+        while sc.tlog.len() > mark {
+            let r = sc.tlog.pop().unwrap();
+            sc.touched[r] = false;
+        }
+    }
+    let _ = (m, n);
+    ok
+}
+
+fn optimise_inner(e: &Mat, f: &[f64], sc: &mut Scr, k: usize, sg: f64, steps: &mut u64, exact_final: bool) -> bool {
     let (m, n) = (e.rows, e.cols);
     if sc.since_refresh > 50 {
         // rebuild W and R from the basis rows
@@ -285,6 +310,10 @@ fn optimise(e: &Mat, f: &[f64], sc: &mut Scr, k: usize, sg: f64, steps: &mut u64
             sc.y[li] = c;
         }
         sc.t[li] = best;
+        if !sc.touched[best] {
+            sc.touched[best] = true;
+            sc.tlog.push(best);
+        }
         sc.since_refresh += 1;
         *steps += 1;
     }
@@ -313,7 +342,7 @@ pub fn shared_start(e: &Mat, f: &[f64], pts: &[f64], ea: &[f64], ef: f64) -> Opt
 
 /// The box and its 2n points; None only when the engine itself fails. `start` is an optional
 /// vertex of the polytope to begin the chain at (no engine LP when its basis can be formed).
-pub fn box_chain(e: &Mat, f: &[f64], center: &[f64], start: Option<&[f64]>, stats: &mut Stats) -> Option<BoxPts> {
+pub fn box_chain(e: &Mat, f: &[f64], center: &[f64], start: Option<&[f64]>, stats: &mut Stats, touched: &mut Vec<bool>) -> Option<BoxPts> {
     let n = e.cols;
     // order: all maxima, then all minima reversed (adjacent objectives are close)
     let mut order: Vec<usize> = (0..n).map(|k| 2 * k + 1).collect();
@@ -322,6 +351,9 @@ pub fn box_chain(e: &Mat, f: &[f64], center: &[f64], start: Option<&[f64]>, stat
     SCR.with(|cell| {
         let sc = &mut *cell.borrow_mut();
         sc.valid = false;
+        sc.touched.clear();
+        sc.touched.resize(e.rows, false);
+        sc.tlog.clear();
         if let Some(x0) = start {
             init_state(e, f, x0, sc);
         }
@@ -350,6 +382,8 @@ pub fn box_chain(e: &Mat, f: &[f64], center: &[f64], start: Option<&[f64]>, stat
             lo[k] = pts[2 * k][k];
             hi[k] = pts[2 * k + 1][k];
         }
+        touched.clear();
+        touched.extend_from_slice(&sc.touched);
         Some((lo, hi, std::mem::take(&mut pts)))
     })
 }

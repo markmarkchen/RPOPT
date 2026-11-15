@@ -320,7 +320,7 @@ fn box_study(e: &Mat, f: &[f64], center: &[f64], bx: &(Vec<f64>, Vec<f64>, Vec<V
     {
         let mut st = crate::boxlp::Stats::default();
         let t = Instant::now();
-        let r = crate::boxlp::box_chain(e, f, center, None, &mut st);
+        let r = crate::boxlp::box_chain(e, f, center, None, &mut st, &mut Vec::new());
         add(s::TC_NS, t.elapsed().as_nanos() as u64);
         match r {
             None => add(s::TC_NONE, 1),
@@ -398,13 +398,13 @@ fn box_study(e: &Mat, f: &[f64], center: &[f64], bx: &(Vec<f64>, Vec<f64>, Vec<V
             add(s::SH_ENG_PIV, crate::census::piv_get() - p0);
             let mut st = crate::boxlp::Stats::default();
             let t = Instant::now();
-            let _ = crate::boxlp::box_chain(e, f, center, None, &mut st);
+            let _ = crate::boxlp::box_chain(e, f, center, None, &mut st, &mut Vec::new());
             add(s::SH_CH_NS, t.elapsed().as_nanos() as u64);
             add(s::SH_CH_STEPS, st.steps);
             add(s::SH_CH_ENGLP, st.engine_lps);
             let mut st = crate::boxlp::Stats::default();
             let t = Instant::now();
-            let r = crate::boxlp::box_chain(e, f, center, Some(feas[0]), &mut st);
+            let r = crate::boxlp::box_chain(e, f, center, Some(feas[0]), &mut st, &mut Vec::new());
             add(s::SH_SV_NS, t.elapsed().as_nanos() as u64);
             add(s::SH_SV_STEPS, st.steps);
             add(s::SH_SV_ENGLP, st.engine_lps);
