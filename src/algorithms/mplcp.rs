@@ -3617,6 +3617,53 @@ fn lex_feasible_start(program: &MpProgram, init: &CriticalRegion) -> Option<Crit
     Some(cr)
 }
 
+/// Diagnostic for one region's basis: (lexico-feasible, rows whose theta part vanishes, smallest signed first significant entry of those rows' lexicographic vectors,
+/// smallest absolute first significant entry). A first entry of -1e-3 is a clear violation, one of +-1e-9 sits on the tolerance `ZTOL`.
+pub fn lex_diagnostic(program: &MpProgram, cr: &CriticalRegion) -> Option<(bool, usize, f64, f64)> {
+    let plcp = Plcp::new(program)?;
+    let tab = tableau_of(&plcp, cr)?;
+    let (n, w) = (tab.n, tab.w);
+    let mut wcol = vec![usize::MAX; n];
+    for (c, &v) in tab.col_var.iter().enumerate() {
+        if v < n {
+            wcol[v] = c;
+        }
+    }
+    let mut wrow = vec![usize::MAX; n];
+    for (r, &v) in tab.row_var.iter().enumerate() {
+        if v < n {
+            wrow[v] = r;
+        }
+    }
+    let mut v = vec![0.0; 1 + n];
+    let (mut rows, mut feas) = (0usize, true);
+    let (mut min_signed, mut min_abs) = (f64::INFINITY, f64::INFINITY);
+    for i in 0..n {
+        if (1..w).any(|k| tab.rv(i, k).abs() > ZTOL) {
+            continue;
+        }
+        rows += 1;
+        v[0] = tab.rv(i, 0);
+        for j in 0..n {
+            v[1 + j] = if wcol[j] != usize::MAX {
+                -tab.tv(i, wcol[j])
+            } else if wrow[j] == i {
+                1.0
+            } else {
+                0.0
+            };
+        }
+        if let Some(x) = v.iter().find(|x| x.abs() > ZTOL) {
+            if *x < 0.0 {
+                feas = false;
+            }
+            min_signed = min_signed.min(*x);
+            min_abs = min_abs.min(x.abs());
+        }
+    }
+    Some((feas, rows, min_signed, min_abs))
+}
+
 /// Diagnostic: number of `regions` whose basis is lexico-infeasible (0 for the output of `solve`).
 pub fn count_lex_infeasible(program: &MpProgram, regions: &[CriticalRegion]) -> usize {
     match Plcp::new(program) {
