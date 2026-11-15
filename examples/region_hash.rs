@@ -29,9 +29,9 @@ fn main() {
     if std::env::var("MPLCP_NO_RANK1").is_ok() {
         rpopt::algorithms::mplcp::set_rank1(false);
     }
-    // MPLCP_REFINE=1: gap-band multipliers are recomputed from the original data (off by default)
-    if std::env::var("MPLCP_REFINE").is_ok() {
-        rpopt::algorithms::mplcp::set_refine_multipliers(true);
+    // MPLCP_REFINE=0: no recomputation of gap-band multipliers (they go to the walk); on by default
+    if let Ok(v) = std::env::var("MPLCP_REFINE") {
+        rpopt::algorithms::mplcp::set_refine_multipliers(v != "0");
     }
     // MPLCP_NO_DEDUPE=1: solve with the duplicated constraints (no removal)
     if std::env::var("MPLCP_NO_DEDUPE").is_ok() {

@@ -36,6 +36,21 @@ theorem box_lp_optimal {m k : Type*} [Fintype m] [Fintype k] {A : Matrix m k ℝ
     · rw [hcs j hj]
   linarith
 
+/-- **How far an accepted bound can fall short** (df4176c). With `y ≥ 0` and `c = Aᵀ y + r`, the
+value at any feasible `x'` exceeds the value at `x` by at most `y · (b - A x) + r · (x' - x)`. For
+`r = 0` and `y` on the basis rows this is the bound of the module comment,
+`Σ_i y_i (b_{T_i} - a_{T_i} · x)`; the residual tolerance adds the term `r · (x' - x)`. -/
+theorem box_lp_gap {m k : Type*} [Fintype m] [Fintype k] {A : Matrix m k ℝ} {b : m → ℝ}
+    {c x r : k → ℝ} {y : m → ℝ} (hy : ∀ j, 0 ≤ y j) (hc : y ᵥ* A + r = c) {x' : k → ℝ}
+    (hx' : ∀ j, (A *ᵥ x') j ≤ b j) :
+    c ⬝ᵥ x' - c ⬝ᵥ x ≤ y ⬝ᵥ (b - A *ᵥ x) + r ⬝ᵥ (x' - x) := by
+  rw [← hc, add_dotProduct, add_dotProduct, ← dotProduct_mulVec, ← dotProduct_mulVec,
+    dotProduct_sub, dotProduct_sub]
+  have h1 : y ⬝ᵥ (A *ᵥ x') ≤ y ⬝ᵥ b := by
+    simp only [dotProduct]
+    exact Finset.sum_le_sum fun j _ => mul_le_mul_of_nonneg_left (hx' j) (hy j)
+  linarith
+
 namespace Case1
 
 variable {Θ : Type*} {n : ℕ} {M : Matrix (Fin n) (Fin n) ℝ} {r : Θ → Fin n → ℝ}

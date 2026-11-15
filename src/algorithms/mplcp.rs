@@ -1316,7 +1316,8 @@ fn facet_polytope(nb: &[Vec<f64>], g: &[f64], b: f64, e_all: &Mat, f_all: &[f64]
 /// lambda_k / mu_k, k in P-} of the facet is nonempty (a witness, or the Chebyshev LP); P- empty means no
 /// neighbour (boundary of the feasible set). A known set is dropped. A multiplier is zero, nonzero or undecided in the scale of the
 /// dependency (`MU_ZERO`, `MU_NONZERO`, as the pivot measure); the undecided ones go to the walk (on the benchmark problems the band holds a few hundred to a few thousand multipliers per solve;
-/// a gap-band multiplier is recomputed from the original data first, see `refined_multipliers`). Returns None when the case does not apply
+/// with the refined rule on (the default; `set_refine_multipliers(false)`, `MPLCP_REFINE=0` in the examples) a gap-band multiplier is recomputed from the original data first, see
+/// `refined_multipliers`, and only the entries that stay between go to the walk). Returns None when the case does not apply
 /// (several vanishing rows, a multiplier row, a nonzero pivot or slack column, ties between two ratios as
 /// affine functions on F, nt = 1), and the walk runs instead.
 #[allow(clippy::too_many_arguments)]
@@ -1780,8 +1781,8 @@ const ZERO_GUARD_MIN: f64 = 1e-12;
 const REFINE_STEPS: usize = 2;
 /// A refined multiplier of this size or below (in the scale of the dependency) is zero: an exact dependency comes out at rounding level 1e-15.
 const REFINED_ZERO: f64 = 1e-12;
-/// Switch for the refined classification of gap-band multipliers (off by default: it adds an overlapping sliver region on masses3_N6 and masses3_N7,
-/// see `bench/results/mplcp_mu_refine.md`).
+/// Switch for the refined classification of gap-band multipliers (on by default; `MPLCP_REFINE=0` in the examples turns it off). On the 158 problems it changes
+/// one region set: masses3_N7 gains the boundary sliver [5,7,8,9,10,64,97] (see `bench/results/mplcp_mu_refine.md`).
 /// Census audit (`MPLCP_MU_AUDIT=1`): gap-band calls are answered by the refined enumeration and by the walk, and the neighbour sets compared.
 #[cfg(feature = "lp_census")]
 static MU_AUDIT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -1789,7 +1790,7 @@ static MU_AUDIT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::
 pub fn set_mu_audit(on: bool) {
     MU_AUDIT.store(on, std::sync::atomic::Ordering::Relaxed);
 }
-static REFINE_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static REFINE_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 pub fn set_refine_multipliers(on: bool) {
     REFINE_ON.store(on, std::sync::atomic::Ordering::Relaxed);
 }

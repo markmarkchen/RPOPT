@@ -90,3 +90,47 @@ decide instead of 0.8 to 3 ms of walk. It is exact on the region sets of 149 of 
 rule set for this change (zero mismatches or each one explained) it is not ready to be the default: the sliver is explained as a kind (a candidate with a dependent
 active set that the region builder accepts), not one by one, and the audit still has calls where the walk returns sets the enumeration does not. The gain on top of
 the multiplier rule is 1.39x on masses4_N3, 1.24x on rand_t12, 1.06x on pop_005 and nothing elsewhere in the timing set. The refined rule is off by default (`set_refine_multipliers(true)`, `MPLCP_REFINE=1` in the examples turns it on); the empty-P- safeguard and the comment fixes are on.
+
+
+# Update: the refined rule on top of the cold retry (branch `refine-on`, on coldretry-final 6136b44 and main c5964f2)
+
+With the cold retry in the builder the picture changes: the regions the refined rule seemed to add on masses3_N6 (and the other problems of the first gate) are now found by the cold retry itself.
+Region sets of the same binary with the rule off (`MPLCP_REFINE=0`) and on, 158 problems (`RPOPT_CANON=1`): **identical on 157; masses3_N7 gains one set, [5,7,8,9,10,64,97]**.
+
+Verdict on that set (`pair_check`): lexico-feasible (3 zero-theta rows, first entries 1.0), LICQ margin 2.5e-9 (nearly dependent), Chebyshev radius 7.1e-8, tight residual 1.06e-3, the QP has no
+solution at the centre, and none at 16 points inside the region at half the radius (0 of 16 feasible); the centre lies in no other region. Main already outputs a region of the same kind,
+[3,4,5,7,8,43,97] (radius 1.7e-7, LICQ margin 1.9e-8, 0 of 16 interior points feasible). So it is an **edge sliver on the boundary of the feasible set**, neither an overlap nor a genuine region.
+For comparison, masses3_N6 [2,3,4,20,31] (radius 1.7e-7): 16 of 16 interior points feasible with exactly this active set: genuine, and found with the rule off as well.
+
+Gate of the rule being on by default: region sets as above; suite (ci tag c2cost_P, 149 tests): 144 passed, 0 failed, 3 ignored with 147 of 149 results in at the time of writing (the two slow `pl_wnn` tests pending);
+paired timing, `base` = the same tree with the rule off, new = on, 3 alternations, A/A pair:
+
+| problem | regions | base ms | tasks | base/new | A/A |
+|---|---:|---:|---:|---:|---:|
+| masses2_N4 | 307 | 11.8 | 3 | 0.994 | 1.000 |
+| masses2_N5 | 493 | 20.2 | 3 | 0.998 | 1.004 |
+| masses2_N6 | 901 | 40.3 | 3 | 0.999 | 0.998 |
+| masses2_N7 | 1641 | 79.1 | 3 | 1.035 | 0.996 |
+| masses2_N8 | 2837 | 145.2 | 3 | 1.010 | 1.009 |
+| masses3_N3 | 955 | 155.0 | 3 | 1.006 | 0.996 |
+| masses3_N4 | 3643 | 895.9 | 3 | 1.025 | 1.002 |
+| masses4_N3 | 2953 | 2042.0 | 3 | 1.334 | 1.001 |
+| masses5_N2 | 373 | 191.2 | 3 | 1.000 | 0.998 |
+| masses6_N2 | 383 | 299.5 | 3 | 0.994 | 0.999 |
+| masses7_N2 | 393 | 563.2 | 3 | 0.998 | 0.999 |
+| masses8_N2 | 399 | 761.1 | 3 | 1.003 | 1.000 |
+| pop_005 | 10289 | 2115.0 | 3 | 1.058 | 1.000 |
+| pop_017 | 4142 | 441.5 | 3 | 1.002 | 0.999 |
+| rand_t10_x5_m20_s0 | 6124 | 1392.3 | 3 | 0.998 | 1.000 |
+| rand_t12_x5_m20_s0 | 6143 | 2560.7 | 3 | 1.285 | 1.001 |
+| rand_t8_x5_m20_s0 | 4111 | 578.8 | 3 | 0.997 | 0.999 |
+all 17 base/new 1.039 (17)  A/A 1.000
+masses (12) base/new 1.030 (12)  A/A 1.000
+rand/pop (5) base/new 1.063 (5)  A/A 1.000
+
+Remaining walk work is unchanged where the rule does not apply (nu in the true gap 1e-7 to 1e-6, ties, nonzero pivots). The switch: `set_refine_multipliers(false)`, `MPLCP_REFINE=0` in the examples.
+
+## Lean's reading of the cold retry (Finding 21)
+
+A drop in `build_region` now needs two LP runs (warm, then cold) to agree that the radius is at most 1e-8, but it is not certified; a checked dual y with sum y_k b_k <= 1e-8 (`chebyshev_radius_le`) would certify it
+(possible follow-up). "Claimed implies built or proven empty" overstates it: the right statement is "built, or decided empty by the cold LP", and the 1e-8 threshold drops slivers by design.
