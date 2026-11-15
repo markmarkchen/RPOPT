@@ -400,3 +400,8 @@ facet row is no longer there twice (pop_001 35,961 facet rows against 36,232 in 
   dedupe the binary is 8% slower than main on `pop_002`, presumably because the snap's second factorization runs on the rebuilds past the
   budget; with the twins gone it does not run). The solves below 0.05 ms show ratios up to 1.3 that are the timer resolution
   (1 us) and the fixed cost of assembling the reduced program (a few us). No problem above 1 ms is slower than 1.02.
+
+**`pop_033` (860,655 regions, solve 285 s), 3 alternations on nodes a033 and a053 (load 60 to 80, so noisier than the table above).**
+Dedupe against main 0.983, no dedupe against main 1.068, dedupe against no dedupe 0.921 (0.884, 0.921, 0.930), A/A 0.989.
+It is not in the table above. The dedupe gain is of the size of the other long twin problems (0.93 to 0.95), and the A/A of 0.989 sets the
+noise at this load at about 1%.
