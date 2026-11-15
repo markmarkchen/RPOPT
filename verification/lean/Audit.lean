@@ -170,3 +170,13 @@ import RpoptProofs
 -- Round 20: claimed candidates and the cold retry (62f7442)
 #print axioms Rpopt.reach_of_claims
 #print axioms Rpopt.chebyshev_radius_le
+-- Round 21: index-first lookup, Seen table, weakly active labels (1cced96)
+#print axioms Rpopt.affine_vanish_prop
+#print axioms Rpopt.pivot_ne_zero_of_toggle
+#print axioms Rpopt.toggle_pivot_pos
+#print axioms Rpopt.Case1.of_single_row
+#print axioms Rpopt.index_first_unique_neighbour
+#print axioms Rpopt.zobrist_toggle
+#print axioms Rpopt.verified_lookup_iff
+#print axioms Rpopt.weakly_active_same_rows
+#print axioms Rpopt.weakly_active_same_region
