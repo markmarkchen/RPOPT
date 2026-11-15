@@ -39,7 +39,7 @@ Successful clips: 3 of about 200,000 needed 2^18 units or more (nt 4: one in buc
 ## Gate
 
 * `lexcheck`, budget off against default, on 60 problems at 2 to 5 parameters (heavy POP problems left out): region counts, lexico-infeasible counts (0), sampled gaps and overlaps, the sorted-active-set hash **and the rounded-row hash** are identical on all 60.
-* Suite on the merged tree (CI tag regbuild5): SUITE_PLACEHOLDER
+* Suite on the merged tree (CI tag regbuild5): 145 passed, 0 failed, 3 ignored (148 tests, Negishi, tag regbuild5).
 
 ## Paired timing (regbuild_ab: modes main (budget off), new (default budget), main again as the A/A pair, shuffled, 3 alternations per problem; ratio inside the task, median over tasks; above 1 = faster)
 
