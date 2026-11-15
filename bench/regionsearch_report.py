@@ -54,12 +54,14 @@ def main():
         cheaper = 0
         c1 = [0.0, 0.0]; r1 = [0.0, 0.0]; wk = [0.0, 0.0]; rest = 0.0
         for i in range(n):
-            nb, fast, none, case2, rank1, fc, nc, c2c, r1e, fr1, fr2, unseen = v[i * N:(i + 1) * N]
+            nb, fast, none, case2, walk_ns, fc, nc, c2c, r1e, fr1, fr2, unseen = v[i * N:(i + 1) * N]
             dq = unseen * price
             s_nbr += nb; s_daqp += dq; s_ideal += min(nb, dq)
             if nb < dq:
                 cheaper += 1
-            walk = max(case2 - rank1, 0.0)
+            # the 5th record field is the sum of R1Nanos0..5, bumped after `pivot_facet`: the time of the walks; rank-1 calls are the rest of Case 2
+            walk = walk_ns
+            rank1 = max(case2 - walk_ns, 0.0)
             c1c, r1c, wkc = fr1, min(r1e, fr2), max(fr2 - min(r1e, fr2), 0.0)
             a, b = fast + none, c1c * price
             c, d = rank1, r1c * price

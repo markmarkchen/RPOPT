@@ -15,6 +15,11 @@ SOLVERS = ['mplcp', 'graph', 'combinatorial_graph', 'parametric_daqp', 'geometri
 PHASES = [('cand', 'neighbour search / candidate tests'), ('rowgen', 'row generation'), ('box', 'bounding-box LPs'), ('perrow', 'per-row redundancy tests'), ('cheb', 'Chebyshev LP'), ('build_other', 'other construction'), ('tab', 'tableau update'), ('rest', 'rest')]
 
 
+def walk_of(prof):
+    # the census counters R1Nanos0..5 time the walks (they are bumped after `pivot_facet`); older cached JSONs call the sum 'rank1'
+    return prof.get('walk', prof.get('rank1', 0.0))
+
+
 def from_md(path, solver):
     t = open(path).read()
     mo = re.search(r'\| \S+ \| ' + solver + r' \| (\d+) \| ([\d.]+) \|', t)
@@ -44,7 +49,7 @@ def from_md(path, solver):
     build_total = cons * total
     build_lp = lpshare * total
     box, perrow, cheb = bbox * total, red * total, cheb * total
-    return regions, {'total': total, 'cand': cand, 'case2': 0.0, 'rank1': 0.0, 'tab': 0.0, 'build_total': build_total, 'rowgen': max(0.0, build_total - build_lp), 'box': box, 'perrow': perrow, 'cheb': cheb,
+    return regions, {'total': total, 'cand': cand, 'case2': 0.0, 'walk': 0.0, 'tab': 0.0, 'build_total': build_total, 'rowgen': max(0.0, build_total - build_lp), 'box': box, 'perrow': perrow, 'cheb': cheb,
             'build_other': max(0.0, build_lp - box - perrow - cheb), 'rest': total - cand - build_total}
 
 
@@ -75,7 +80,7 @@ def load(cache, old, solver, problem):
 def main():
     cache, old, out = sys.argv[1:4]
     md = ['# Time profile of the exact mpQP solvers\n']
-    csv = ['problem,solver,source,regions,total_ms,' + ','.join(k + '_ms' for k, _ in PHASES) + ',case2_ms,rank1_ms']
+    csv = ['problem,solver,source,regions,total_ms,' + ','.join(k + '_ms' for k, _ in PHASES) + ',case2_ms,walk_ms']
     summary = []
     for p in PROBLEMS:
         md.append('## %s\n' % p)
@@ -94,9 +99,9 @@ def main():
                 vals.append(v)
                 cells.append('-' if v <= 0 and k in ('tab',) else '%.1f (%.0f%%)' % (v / 1e6, 100 * v / tot))
             if s == 'mplcp' and prof.get('case2', 0) > 0:
-                cells[0] += ', Case 2 %.1f (rank-1 %.1f)' % (prof['case2'] / 1e6, prof['rank1'] / 1e6)
+                cells[0] += ', Case 2 %.1f (walks %.1f)' % (prof['case2'] / 1e6, walk_of(prof) / 1e6)
             md.append('| %s | %s | %.1f | ' % (s, '{:,}'.format(regions) if regions else '-', tot / 1e6) + ' | '.join(cells) + ' | %s |' % src)
-            csv.append(','.join([p, s, src.split(' (')[0].replace(',', ';'), str(regions or ''), '%.3f' % (tot / 1e6)] + ['%.3f' % (v / 1e6) for v in vals] + ['%.3f' % (prof.get('case2', 0) / 1e6), '%.3f' % (prof.get('rank1', 0) / 1e6)]))
+            csv.append(','.join([p, s, src.split(' (')[0].replace(',', ';'), str(regions or ''), '%.3f' % (tot / 1e6)] + ['%.3f' % (v / 1e6) for v in vals] + ['%.3f' % (prof.get('case2', 0) / 1e6), '%.3f' % (walk_of(prof) / 1e6)]))
             top = max(range(len(PHASES)), key=lambda i: vals[i])
             summary.append((p, s, tot / 1e6, PHASES[top][1], 100 * vals[top] / tot, 100 * (prof['box'] + prof['perrow'] + prof['cheb']) / tot))
         md.append('')
