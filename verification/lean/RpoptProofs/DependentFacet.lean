@@ -426,6 +426,32 @@ theorem on_facet (H : DepFacet M r A ρ T c μ) {j : ι} (hj : j ∈ A) (hμj : 
         linarith [hR i]
     · rw [hxN i hi]; exact hR i
 
+/-- **The pieces cover the facet.** If `P⁻` is nonempty, every point of `F` lies in the piece of
+some `j ∈ P⁻` (the argmin of `λ_j / μ_j`, which exists). -/
+theorem pieces_cover (H : DepFacet M r A ρ T c μ) {θ : Θ} (hD : D ρ c θ = 0)
+    (hR : ∀ i, 0 ≤ ρ θ i) (hne : ∃ j ∈ A, 0 < μ j) :
+    ∃ j ∈ A, 0 < μ j ∧ θ ∈ CRj ρ T c μ j := by
+  classical
+  set P := A.filter fun k => 0 < μ k
+  have hPne : P.Nonempty := by
+    obtain ⟨j, hj, hμ⟩ := hne
+    exact ⟨j, Finset.mem_filter.mpr ⟨hj, hμ⟩⟩
+  obtain ⟨j, hjP, hmin⟩ := P.exists_min_image (fun k => ρ θ k / μ k) hPne
+  obtain ⟨hj, hμj⟩ := Finset.mem_filter.mp hjP
+  refine ⟨j, hj, hμj, (H.on_facet hj hμj hD hR).mpr fun i hi hμi => ?_⟩
+  exact hmin i (Finset.mem_filter.mpr ⟨hi, hμi⟩)
+
+/-- **The argmin is the only member valid on the facet** at a point where it is strict: every other
+`k ∈ P⁻` fails its piece's inequality there. -/
+theorem argmin_only_on_facet (H : DepFacet M r A ρ T c μ) {θ : Θ} (hD : D ρ c θ = 0)
+    (hR : ∀ i, 0 ≤ ρ θ i) {j k : ι} (hj : j ∈ A) (hμj : 0 < μ j) (hk : k ∈ A) (hμk : 0 < μ k)
+    (hkj : k ≠ j) (hmin : ∀ i ∈ A, i ≠ j → 0 < μ i → ρ θ j / μ j < ρ θ i / μ i) :
+    θ ∉ CRj ρ T c μ k := by
+  intro hθ
+  have h1 := (H.on_facet hk hμk hD hR).mp hθ j hj hμj
+  have h2 := hmin k hk hkj hμk
+  linarith
+
 /-! ### (a), (b) Just across a relative-interior point -/
 
 variable [TopologicalSpace Θ]
@@ -474,6 +500,53 @@ theorem across (H : DepFacet M r A ρ T c μ) (hcont : ∀ i, Continuous fun θ 
         with θ hθ _ _ using hθ
     · exact Eventually.of_forall fun θ h1 h2 => absurd ⟨h1, h2⟩ h
   filter_upwards [e1, e2] with θ h1 h2 using ⟨h1, h2⟩
+
+/-- **`hinj` from independent active rows.** If the columns of `A` are independent in `M` and
+column `c` is the `μ`-combination of them, the columns of `T \ {j}` are independent as soon as
+`μ_j ≠ 0`. This is the hypothesis `hinj` of `unique_across`; the code guards it by rejecting
+multipliers between `PTOL` and `1e-7` of the largest one. -/
+theorem hinj_of_dependency {M : Matrix ι ι ℝ} {A : Finset ι} {c j : ι} {μ : ι → ℝ} (hc : c ∉ A)
+    (hj : j ∈ A) (hμj : μ j ≠ 0) (hcolM : ∀ k, M k c = ∑ i ∈ A, μ i * M k i)
+    (hinjA : ∀ u : ι → ℝ, (∀ i, i ∉ A → u i = 0) → M *ᵥ u = 0 → u = 0) :
+    ∀ u : ι → ℝ, (∀ i, i ∉ Bj A c j → u i = 0) → M *ᵥ u = 0 → u = 0 := by
+  intro u hu hMu
+  set μA : ι → ℝ := fun i => if i ∈ A then μ i else 0
+  set uA : ι → ℝ := fun i => if i ∈ A ∧ i ≠ j then u i else 0
+  have hdecomp : u = u c • Pi.single c (1 : ℝ) + uA := by
+    funext i
+    by_cases hic : i = c
+    · subst hic; simp [uA, hc]
+    · by_cases hiA : i ∈ A ∧ i ≠ j
+      · simp [uA, hiA, hic]
+      · have hnot : i ∉ Bj A c j := by
+          simp only [Bj, Finset.mem_insert, Finset.mem_erase, not_or]
+          exact ⟨hic, fun h => hiA ⟨h.2, h.1⟩⟩
+        simp [uA, hiA, hic, hu i hnot]
+  have hcol : M *ᵥ Pi.single c (1 : ℝ) = M *ᵥ μA := by
+    funext k
+    have l : (M *ᵥ Pi.single c (1 : ℝ)) k = M k c := by
+      simp [mulVec, dotProduct, Pi.single_apply]
+    rw [l, hcolM k]
+    simp only [mulVec, dotProduct, μA]
+    rw [show (∑ i, M k i * (if i ∈ A then μ i else 0)) = ∑ i, (if i ∈ A then μ i * M k i else 0)
+      from Finset.sum_congr rfl fun i _ => by split_ifs <;> ring]
+    rw [Finset.sum_ite_mem, Finset.univ_inter]
+  set v : ι → ℝ := u c • μA + uA
+  have hMv : M *ᵥ v = M *ᵥ u := by
+    conv_rhs => rw [hdecomp]
+    simp only [v, mulVec_add, mulVec_smul, hcol]
+  have hv0 : v = 0 := hinjA v (fun i hi => by simp [v, μA, uA, hi]) (by rw [hMv, hMu])
+  have hcz : u c = 0 := by
+    have := congrFun hv0 j
+    simp only [v, μA, uA, Pi.add_apply, Pi.smul_apply, smul_eq_mul, if_pos hj, ne_eq,
+      not_true_eq_false, and_false, if_false, add_zero, Pi.zero_apply] at this
+    rcases mul_eq_zero.mp this with h | h
+    · exact h
+    · exact absurd h hμj
+  have huA : uA = 0 := by
+    have : v = uA := by simp [v, hcz]
+    rw [← this, hv0]
+  rw [hdecomp, hcz, huA, zero_smul, add_zero]
 
 /-- **(a), (b) Uniqueness just across.** With `M` symmetric positive semidefinite and the
 columns of `T \ {j}` independent (`hinj`), every complementary basis that is valid at a point

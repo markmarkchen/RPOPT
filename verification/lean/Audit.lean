@@ -121,3 +121,7 @@ import RpoptProofs
 #print axioms Rpopt.DepFacet.across
 #print axioms Rpopt.DepFacet.unique_across
 #print axioms Rpopt.DepFacet.returned_mem_S
+-- Round 8: rank-1 Case-2 enumeration (f234e64)
+#print axioms Rpopt.DepFacet.pieces_cover
+#print axioms Rpopt.DepFacet.argmin_only_on_facet
+#print axioms Rpopt.DepFacet.hinj_of_dependency
