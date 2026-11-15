@@ -449,20 +449,9 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
         if pz.is_empty() {
             if let Some(ra) = alpha_row {
                 if tab.tv(ra, e) > PTOL {
-                    // the Chebyshev centre is the hint of the returned neighbour: a sub-facet accepted by a
-                    // witness has none yet, so the LP it skipped runs now (same polytope, same centre)
-                    let lazy = if centre.is_none() && witness.is_some() && d1 > 0 {
-                        crate::census_bump!(LazyCentre, 1);
-                        crate::census_bump!(PfCheb, 1);
-                        let ball = {
-                            crate::census_purpose!(Neighbour);
-                            chebyshev_ball(fpoly.ef, fpoly.ff, &[])
-                        };
-                        ball.filter(|s| s.x[d1] > 1e-9).map(|s| s.x[..d1].to_vec())
-                    } else {
-                        None
-                    };
-                    push_leaf(&fpoly, z_after(tab, n, ra, e), centre.or(lazy.as_deref()), out);
+                    // the hint of the returned neighbour is the Chebyshev centre of the sub-facet, or the witness
+                    // that certified it nonempty (a sub-facet accepted without its LP has no centre)
+                    push_leaf(&fpoly, z_after(tab, n, ra, e), centre.or(witness), out);
                     return WalkEnd::Done;
                 }
             }
