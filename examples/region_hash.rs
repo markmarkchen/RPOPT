@@ -10,6 +10,10 @@ use std::sync::Arc;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    // RPOPT_BOXCHAIN=0: no chained bounding-box LPs in the mplcp LP-path builder (the shared builder instead)
+    if let Ok(v) = std::env::var("RPOPT_BOXCHAIN") {
+        rpopt::algorithms::mplcp::set_box_chain(v != "0");
+    }
     if let Ok(m) = std::env::var("RPOPT_CERT") {
         rpopt::algorithms::mplcp::set_certificate(m.parse().unwrap());
     }

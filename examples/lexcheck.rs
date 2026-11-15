@@ -6,6 +6,7 @@ use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use rpopt::algorithms::{solve_mpqp, MpqpAlgorithm};
 use rpopt::program::MpProgram;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 /// Same hash as `region_hash` (active sets and facet rows rounded to 1e-9), so one solve gives hash and coverage.
@@ -34,6 +35,10 @@ fn region_hash(regs: &[rpopt::critical_region::CriticalRegion]) -> u64 {
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let ns: usize = a[1].parse().unwrap();
+    // RPOPT_BOXCHAIN=0: no chained bounding-box LPs in the mplcp LP-path builder (the shared builder instead)
+    if let Ok(v) = std::env::var("RPOPT_BOXCHAIN") {
+        rpopt::algorithms::mplcp::set_box_chain(v != "0");
+    }
     // MPLCP_TAB_BUDGET=<bytes>: limit on live parent tableaux (default 256 MiB, 0 = none)
     if let Some(b) = std::env::var("MPLCP_TAB_BUDGET").ok().and_then(|v| v.parse().ok()) {
         rpopt::algorithms::mplcp::set_tab_budget(b);
@@ -76,6 +81,12 @@ fn main() {
             }
         }
         let name = std::path::Path::new(f).file_stem().unwrap().to_string_lossy().to_string();
-        println!("{name} regions {} lex_infeasible {lexbad} feasible_samples {feas} overlaps {ov} gaps {gaps} hash {hash:016x} solve_s {dt:.3}", sol.critical_regions.len());
+        // hash of the sorted active sets alone, and the number of facet rows: unchanged when only the last digits of the rows move
+        let mut sets: Vec<Vec<usize>> = sol.critical_regions.iter().map(|r| { let mut a = r.active_set.clone(); a.sort_unstable(); a }).collect();
+        sets.sort();
+        let mut hs = std::collections::hash_map::DefaultHasher::new();
+        sets.hash(&mut hs);
+        let rows: usize = sol.critical_regions.iter().map(|r| r.e.rows).sum();
+        println!("{name} regions {} lex_infeasible {lexbad} feasible_samples {feas} overlaps {ov} gaps {gaps} hash {hash:016x} sets {:016x} facet_rows {rows} solve_s {dt:.3}", sol.critical_regions.len(), hs.finish());
     }
 }

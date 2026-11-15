@@ -13,9 +13,9 @@ use std::cmp::Ordering;
 
 /// The region, its Chebyshev center, and (only when the fast clip succeeded) the vertices of the
 /// region polytope, flattened (nt coordinates each).
-pub(super) type Built = (CriticalRegion, Vec<f64>, Option<Vec<f64>>);
+pub(super) type Built = (CriticalRegion, Vec<f64>, Option<Vec<f64>>, Option<Vec<f64>>);
 
-pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Option<&[f64]>, law: Option<crate::program::ControlLaw>, want_verts: bool) -> Option<Built> {
+pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Option<&[f64]>, law: Option<crate::program::ControlLaw>, want_verts: bool, parent_box: Option<&[f64]>, entry: Option<&(Vec<f64>, f64)>) -> Option<Built> {
     use crate::mpqp_utils::kkt_region_from_law;
     crate::census_purpose!(Chebyshev);
     #[cfg(feature = "lp_census")]
@@ -97,7 +97,8 @@ pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Opti
             // them would fail the same way (measured: it never succeeded after a failed first pass)
             #[cfg(feature = "lp_census")]
             let _tred = crate::census_diag::t0();
-            let r = crate::mpqp_utils::gen_cr_from_prepared(program, active_set, false, crate::mpqp_utils::Prepared { law, n_lambda, inactive, pos, e, f, kept_rows_len: kept_rows.len(), center, cheb_radius }).map(|(cr, c)| (cr, c, None));
+            let prep = crate::mpqp_utils::Prepared { law, n_lambda, inactive, pos, e, f, kept_rows_len: kept_rows.len(), center, cheb_radius };
+            let r = if nt >= 6 && chain_on() { lp_path(program, active_set, prep, parent_box, entry) } else { crate::mpqp_utils::gen_cr_from_prepared(program, active_set, false, prep).map(|(cr, c)| (cr, c, None, None)) };
             #[cfg(feature = "lp_census")]
             {
                 crate::census_diag::lap(crate::census_diag::s::RED_NS, _tred);
@@ -158,6 +159,174 @@ pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Opti
         },
         center,
         verts,
+        None,
+    ))
+}
+
+// ------------------------------------------------------------------ LP path with chained box LPs
+
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering as AO};
+
+static G_REG: AtomicU64 = AtomicU64::new(0);
+static G_FB: AtomicU64 = AtomicU64::new(0);
+static G_OFF: AtomicBool = AtomicBool::new(false);
+/// Switch for tests and comparisons: `false` sends every region to the shared builder.
+static CHAIN: AtomicBool = AtomicBool::new(true);
+
+pub(super) fn set_chain(on: bool) {
+    CHAIN.store(on, AO::Relaxed);
+}
+
+/// Starts a solve: the fallback guard counts afresh.
+pub(super) fn reset_guard() {
+    G_REG.store(0, AO::Relaxed);
+    G_FB.store(0, AO::Relaxed);
+    G_OFF.store(false, AO::Relaxed);
+}
+
+fn chain_on() -> bool {
+    CHAIN.load(AO::Relaxed) && !G_OFF.load(AO::Relaxed)
+}
+
+/// Fallback guard: after 100 regions, a chain whose objectives fall back to the engine in more than
+/// 20% of the cases is switched off for the rest of the solve (the shared builder takes over).
+fn note_chain(regions: u64, fallbacks: u64, n: usize) {
+    let r = G_REG.fetch_add(regions, AO::Relaxed) + regions;
+    let f = G_FB.fetch_add(fallbacks, AO::Relaxed) + fallbacks;
+    if r >= 100 && (f as f64) > 0.2 * (r as f64) * (2 * n) as f64 {
+        G_OFF.store(true, AO::Relaxed);
+    }
+}
+
+/// The redundancy step of `mpqp_utils::gen_cr_from_prepared` for 6 or more parameters, with the 2n
+/// bounding-box LPs of the screening done by `boxlp::box_chain` (started at a vertex of the
+/// parent's box on the shared facet when there is one). Same rows, same flags up to ties at the
+/// box's optimal vertices; the box only screens rows and every later stage is exact. Returns the
+/// region, its centre and the box's 2n points (flattened) for the region's own children.
+fn lp_path(program: &MpProgram, active_set: &[usize], prep: crate::mpqp_utils::Prepared, parent_box: Option<&[f64]>, entry: Option<&(Vec<f64>, f64)>) -> Option<Built> {
+    use crate::utils::remove_duplicate_rows;
+    let crate::mpqp_utils::Prepared { law, n_lambda, inactive, pos, e, f, kept_rows_len, center, cheb_radius } = prep;
+    let nt = program.num_t();
+    let neq = program.num_equality_constraints();
+    let n_inactive = inactive.len();
+    let n_omega = program.a_t.rows;
+    crate::census_build!(cbuild);
+    crate::stats::lp(kept_rows_len as u64);
+    let (mut blo, mut bhi) = match program.theta_bbox() {
+        Some((l, h)) => (l.clone(), h.clone()),
+        None => (vec![f64::NEG_INFINITY; nt], vec![f64::INFINITY; nt]),
+    };
+    crate::mpqp_utils::propagate_box_pub(&e, &f, &mut blo, &mut bhi, 6);
+    crate::census_bump!(RedRowsIn, e.rows);
+    let mut boxflat: Option<Vec<f64>> = None;
+    let flags: Vec<bool> = {
+        crate::census_purpose!(Redundancy);
+        let reject_by = |a: &[f64], fp: f64, lo: &[f64], hi: &[f64]| -> bool { crate::mpqp_utils::box_max_pub(a, lo, hi) < fp - 1e-7 * (1.0 + fp.abs()) };
+        let mut live_pos = vec![usize::MAX; e.rows];
+        let mut live: Vec<usize> = vec![];
+        for p in 0..e.rows {
+            if !reject_by(e.row(p), f[p], &blo, &bhi) {
+                live_pos[p] = live.len();
+                live.push(p);
+            }
+        }
+        let el = e.select_rows(&live);
+        let fl: Vec<f64> = live.iter().map(|&p| f[p]).collect();
+        let bbox = {
+            crate::census_purpose!(Bbox);
+            let start = match (parent_box, entry) {
+                (Some(pb), Some((ea, ef))) => crate::boxlp::shared_start(&el, &fl, pb, ea, *ef),
+                _ => None,
+            };
+            let mut st = crate::boxlp::Stats::default();
+            let r = crate::boxlp::box_chain(&el, &fl, &center, start.as_deref(), &mut st);
+            note_chain(1, st.fallbacks, nt);
+            if let Some((_, _, pts)) = &r {
+                boxflat = Some(pts.iter().flat_map(|p| p.iter().copied()).collect());
+            }
+            r
+        };
+        let test = |p: usize| -> bool {
+            let lp_ = live_pos[p];
+            if lp_ == usize::MAX {
+                return false;
+            }
+            let a = el.row(lp_);
+            let fp = fl[lp_];
+            let tol = 1e-9 * (1.0 + fp.abs());
+            if let Some((lo, hi, pts)) = &bbox {
+                if reject_by(a, fp, lo, hi) {
+                    return false;
+                }
+                if pts.iter().any(|v| (crate::linalg::dot(a, v) - fp).abs() <= tol) {
+                    return true;
+                }
+            }
+            let sft = fp - crate::linalg::dot(a, &center);
+            let q: Vec<f64> = center.iter().zip(a).map(|(ci, ai)| ci + sft * ai).collect();
+            let inside = (0..el.rows).all(|i| i == lp_ || crate::linalg::dot(el.row(i), &q) <= fl[i] + 1e-9 * (1.0 + fl[i].abs()));
+            if inside && (crate::linalg::dot(a, &q) - fp).abs() <= tol {
+                return true;
+            }
+            crate::solver::lp::lp_feasible_from(&el, &fl, &[lp_], &center)
+        };
+        (0..e.rows).map(test).collect()
+    };
+    let mut kept_lambda = vec![];
+    let mut kept_ineq = vec![];
+    let mut kept_omega = vec![];
+    let mut non_redundant = vec![];
+    for idx in 0..n_lambda {
+        let p = pos[idx];
+        if p != usize::MAX && flags[p] {
+            kept_lambda.push(idx);
+            non_redundant.push(p);
+        }
+    }
+    for idx in 0..n_inactive {
+        let p = pos[n_lambda + idx];
+        if p != usize::MAX && flags[p] {
+            kept_ineq.push(idx);
+            non_redundant.push(p);
+        }
+    }
+    for idx in 0..n_omega {
+        let p = pos[n_lambda + n_inactive + idx];
+        if p != usize::MAX && flags[p] {
+            kept_omega.push(idx);
+            non_redundant.push(p);
+        }
+    }
+    let active: Vec<usize> = active_set[neq..].to_vec();
+    let relevant_lambda: Vec<usize> = kept_lambda.iter().map(|&i| active[i]).collect();
+    let real_regular: Vec<usize> = kept_ineq.iter().map(|&i| inactive[i]).collect();
+    let e_red = e.select_rows(&non_redundant);
+    let f_red: Vec<f64> = non_redundant.iter().map(|&p| f[p]).collect();
+    let (e_red, f_red) = remove_duplicate_rows(&e_red, &f_red);
+    crate::stats::region_built(active_set);
+    crate::census_bump!(RedRowsKept, non_redundant.len());
+    crate::census_bump!(FacetRows, e_red.rows);
+    crate::census_keep!(cbuild);
+    Some((
+        CriticalRegion {
+            a: law.a_x,
+            b: law.b_x,
+            c: law.a_l,
+            d: law.b_l,
+            e: e_red,
+            f: f_red,
+            active_set: active_set.to_vec(),
+            omega_set: kept_omega,
+            lambda_set: relevant_lambda,
+            regular_set: (kept_ineq, real_regular),
+            y_fixation: None,
+            y_indices: None,
+            x_indices: None,
+            cheb_radius,
+        },
+        center,
+        None,
+        boxflat,
     ))
 }
 
