@@ -305,13 +305,25 @@ masses5_N3 and masses4_N3, 5,069 and 2,529 rebuilds).
 
 ### Duplicated constraints in the benchmark (for the principled fix, `examples/dedupe_check.rs`)
 
-52 of the 150 benchmark problems (all `pop_*`) have constraint rows of [A | F | b] that are positive multiples of
-another row (1 to 16 pairs per problem; `pop_002` 16, `pop_033` 5). Solving the problem without the duplicates (kept row =
-lowest index) and mapping every twin to its kept row gives the same sorted active sets on 49 of the 51 problems measured:
-same region count, and no region of the full solve contains both a twin and its kept row. Differences: `pop_028` 82,116
-against 82,117 regions (one more sliver) and `pop_076` 15,006 against 15,006 with one set exchanged. Times: `pop_002`
-97.6 s to 86.7 s, `pop_019` 2.38 s to 1.25 s, `pop_076` 4.12 s to 2.74 s, but `pop_040` 0.16 s to 1.15 s (the reduced
-problem takes a slower path); `pop_033` was not measured (the check solves both in one 3.9 GB task and was killed).
+52 of the 150 benchmark problems (all `pop_*`) have constraint rows of [A | F | b] that are positive multiples of another
+row (1 to 16 pairs per problem; `pop_002` 16, `pop_033` 5; the program as loaded, after the library's own row scaling).
+`dedupe_check` solves each with mplcp as loaded and again without the duplicates (kept row = lowest index; the reduced
+program is assembled with `MpProgram::from_raw_parts`, because `MpProgram::new(.., post_process = false)` rescales the rows
+again, which made `pop_040` 4x slower and `pop_028` gain a region in my first measurement; both were artefacts of the
+construction), maps every twin of the full solve to its kept row, and compares the sorted active sets.
+
+* 51 of the 52 problems give identical sets (same region count, no region contains both a twin and its kept row),
+  including `pop_002` (321,026 regions, canonical-set hash `cb70fefe84cd4bd8` both) and `pop_033` (860,655 regions,
+  `1adc7e3c8d0b4eb3` both, measured as two separate tasks). The exception is `pop_076`: the reduced solve has one more
+  region (15,007 against 15,006), a sliver of Chebyshev radius 1.5e-6 (`[6, 15, 21, 23, 25]`). Slivers of this size are
+  kept by one build and dropped by another elsewhere in this note as well, so it is not an effect of the dedupe as such.
+* `lexcheck` on both solves of the 48 problems with at most 30,000 regions (5,000 samples each, 1,995 feasible on pop_019):
+  0 lexico-infeasible regions, 0 overlaps, 0 gaps in all of them. (`pop_028` and `pop_061` have more regions and were not sampled.)
+* Time (one run each, serial): total over the 50 small problems 69.4 s against 65.5 s (-5.6%); `pop_076` 4.13 s to 2.73 s,
+  `pop_019` 2.36 s to 2.15 s, `pop_008` 1.96 s to 1.86 s, most others 2% to 5%; `pop_002` 96.9 s to 88.8 s (-8%), `pop_033`
+  313.3 s to 292.0 s (-7%). The earlier "1.9x on `pop_019`" was the artefact above. Where it helps, the twins removed the
+  rank-1 enumeration: `pop_019` has 5,072 rank-1 fallbacks to the walk (14,436 walk calls) with the duplicates and 0
+  (0 walk calls) without; `pop_040` has 305 fallbacks and 1,020 walk calls against 7 and 21.
 
 ### No region is skipped silently; comment fix
 
