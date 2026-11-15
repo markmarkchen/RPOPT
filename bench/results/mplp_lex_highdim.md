@@ -206,7 +206,7 @@ facets cannot be crossed cheaply or reliably, and `combinatorial` does not need 
 
 ### The slivers are genuine regions
 
-Check in exact rational arithmetic (`/tmp`-style script, not committed: rows of the processed program as exact fractions; for each
+Check in exact rational arithmetic (`bench/exact_regions.py` on the output of `examples/dump_bases` with `DUMP_PROGRAM=1`: rows of the processed program as exact fractions; for each
 region basis B, x(theta) = A_B^-1 (b_B + F_B theta), the slack rows and the parameter-set rows are formed exactly, and the Chebyshev
 radius is maximised by an exact simplex over Fractions; the multipliers lambda = -A_B^-T c are computed exactly).
 
