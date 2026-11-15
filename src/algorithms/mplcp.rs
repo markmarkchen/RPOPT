@@ -1217,7 +1217,8 @@ fn facet_polytope(nb: &[Vec<f64>], g: &[f64], b: f64, e_all: &Mat, f_all: &[f64]
 /// is lexicographically feasible drops j* = argmin lambda_j / mu_j over P- = {j : mu_j > 0}, unique at a generic
 /// facet point. So the neighbours are A + {c} - {j}, one per j in P- whose piece F ∩ {lambda_j / mu_j <=
 /// lambda_k / mu_k, k in P-} of the facet is nonempty (a witness, or the Chebyshev LP); P- empty means no
-/// neighbour (boundary of the feasible set). A known set is dropped. Returns None when the case does not apply
+/// neighbour (boundary of the feasible set). A known set is dropped. A multiplier is zero, nonzero or undecided in the scale of the
+/// dependency (`MU_ZERO`, `MU_NONZERO`, as the pivot measure); the undecided ones (none seen) go to the walk. Returns None when the case does not apply
 /// (several vanishing rows, a multiplier row, a nonzero pivot or slack column, ties between two ratios as
 /// affine functions on F, nt = 1), and the walk runs instead.
 #[allow(clippy::too_many_arguments)]
@@ -1249,21 +1250,51 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
         }
     }
     let zrows_all: Vec<usize> = (0..n).filter(|&i| tab.row_var[i] >= n && tab.row_var[i] < 2 * n).collect();
+    #[cfg(feature = "lp_census")]
     let mu_max = zrows_all.iter().fold(0.0f64, |m, &i| m.max(tab.t[i * n + kk].abs()));
+    let mcc = p.m[var * n + var].max(1e-300);
+    let mut pm: Vec<usize> = vec![];
     for &i in &zrows_all {
         let mi = -tab.t[i * n + kk];
         let colw = tab.col_of(tab.row_var[i] - n);
-        if (tab.t[c * n + colw] - mi).abs() > 1e-8 * (1.0 + mi.abs()) {
+        let j = tab.row_var[i] - n;
+        // scale of a multiplier: a_c = sum mu_j a_j, so mu_j is in units of ||a_c|| / ||a_j|| = sqrt(M_cc / M_jj)
+        let ujj = (mcc / p.m[j * n + j].max(1e-300)).sqrt();
+        let m = mi.abs();
+        let nu = m / ujj;
+        // the rule before the scale-free tests, for the census
+        #[cfg(feature = "lp_census")]
+        {
+            let old_mismatch = (tab.t[c * n + colw] - mi).abs() > 1e-8 * (1.0 + mi.abs());
+            let old_small = m > PTOL && m <= 1e-7 * mu_max.max(1.0);
+            let new_mismatch = (tab.t[c * n + colw] - mi).abs() > 1e-8 * (ujj + mi.abs());
+            if old_mismatch && !new_mismatch {
+                crate::census_bump!(MuMismatchFreed, 1);
+            }
+            if old_small && !new_mismatch && nu > MU_NONZERO && mi > 0.0 {
+                crate::census_bump!(MuAccepted, 1);
+            }
+            if old_small && !new_mismatch && nu <= MU_ZERO {
+                crate::census_bump!(MuNoiseZero, 1);
+            }
+            if !(old_small || old_mismatch) && mi > 0.0 && mi <= PTOL && nu > MU_NONZERO {
+                crate::census_bump!(MuNewPositive, 1);
+            }
+            if !new_mismatch && nu > MU_ZERO && nu <= MU_NONZERO {
+                crate::census_bump!(MuGap, 1);
+            }
+        }
+        if (tab.t[c * n + colw] - mi).abs() > 1e-8 * (ujj + mi.abs()) {
             return None;
         }
-        // a multiplier between the zero tolerance and 1e-7 of the largest one is neither zero nor safely
-        // positive: the columns of A + {c} - {j} could be nearly dependent, the walk decides
-        let m = mi.abs();
-        if m > PTOL && m <= 1e-7 * mu_max.max(1.0) {
+        if nu > MU_ZERO && nu <= MU_NONZERO {
+            // neither zero nor safely nonzero, in the scale of the dependency: the walk decides
             return None;
+        }
+        if mi > 0.0 && nu > MU_NONZERO {
+            pm.push(i);
         }
     }
-    let pm: Vec<usize> = (0..n).filter(|&i| tab.row_var[i] >= n && tab.row_var[i] < 2 * n && -tab.t[i * n + kk] > PTOL).collect();
     let mu: Vec<f64> = pm.iter().map(|&i| -tab.t[i * n + kk]).collect();
     if pm.is_empty() {
         crate::census_bump!(R1Handled, 1);
@@ -1445,6 +1476,10 @@ fn pivot_part(p: &Plcp, tab: &Tab, c: usize, kk: usize) -> f64 {
 
 /// Measure at or below which the pivot is zero (rank-1 case), and above which it is nonzero (Case 1). Between them
 /// the walk decides; `PivotGap` counts those calls.
+/// The same thresholds for a multiplier mu_j of the dependency a_c = sum mu_j a_j, in the scale sqrt(M_cc / M_jj): zero below
+/// `MU_ZERO`, nonzero above `MU_NONZERO`, left to the walk between them.
+const MU_ZERO: f64 = 1e-9;
+const MU_NONZERO: f64 = 1e-6;
 const MEASURE_ZERO: f64 = 1e-9;
 const MEASURE_NONZERO: f64 = 1e-6;
 
@@ -2553,6 +2588,11 @@ fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>
             })
         };
         let (nbrs, certified) = adjacent(plcp, tab, cur.e.row(k), cur.f[k], &cur.e, &cur.f, ws, if cert.is_some() { Some(&cfun as &dyn Fn() -> Option<usize>) } else { None }, cert.map_or(false, |c| c.audit), seen, center.map(|c| c.as_slice()));
+        // audit mode: every certified facet is counted, whether or not its search returned a candidate (a rank-1 search of a
+        // facet whose neighbours are all known returns none)
+        if certified.is_some() && cert.map_or(false, |c| c.audit) {
+            AUDIT_CERTIFIED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
         if nbrs.is_empty() {
             continue;
         }
@@ -2871,9 +2911,6 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
             }
         };
         for c in cands {
-            if c.cert.is_some() {
-                AUDIT_CERTIFIED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            }
             let fresh = seen_claim(&mut seen, &c.aset);
             #[cfg(feature = "lp_census")]
             crate::census::seen(fresh);
