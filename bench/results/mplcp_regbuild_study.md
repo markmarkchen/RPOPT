@@ -121,3 +121,51 @@ On the children that have such a vertex (86% to 92% on rand_t8, rand_t10, rand_t
 | pop_017 | 2945 | 3.28 | 3.28 | 85.2% | 36.8 | 37.3 | 0.99x | 34.1 | 1.08x | 1.47 / 0.36 | 4.19 | 0.233 | 1.8% | 0.18 | 0.9 | 18.9% | 181 |
 | rand_t12_x5_m20_s0 | 4823 | 5.36 | 5.20 | 88.4% | 295.1 | 239.6 | 1.23x | 229.7 | 1.28x | 1.70 / 0.70 | 6.64 | 0.451 | 0.2% | 1.25 | 2.0 | 18.5% | 523 |
 | masses4_N3 | 984 | 2.67 | 2.63 | 71.1% | 196.5 | 161.4 | 1.22x | 149.3 | 1.32x | 3.63 / 2.88 | 5.79 | 2.104 | 11.1% | 1.37 | 2.7 | 11.6% | 192 |
+
+### Build study 12: small Farkas certificates for the redundant rows (commit b5f1772, job 45918725, shared builder, main 59b2afb)
+
+A redundant row k is caught when a_k = sum lambda_i a_i, lambda >= 0, sum lambda_i b_i <= b_k over a candidate support of kept rows. Variants: the d kept rows closest in angle to a_k (square solve), the 2d closest (LP min b'lambda), the child's rows that the parent kept (LP), all kept rows (LP; must catch everything, it is the check). 'Share caught' is per class of how today's builder decided the row. The microseconds are the census build's (engine `solve_lp` with `Want::Full`, a (q+d) x q LP), against 3 to 12 us for one of today's per-row or box LPs.
+
+| problem | variant | rows decided by the propagated box (per region) | caught | rows decided by the exact box (per region) | caught | rows decided by a per-row LP (per region) | caught | us per test |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| rand_t8_x5_m20_s0 | d nearest kept rows (square solve) | 2.0 | 6.9% | 10.9 | 0.3% | 3.3 | 0.3% | 0.77 |
+| rand_t8_x5_m20_s0 | 2d nearest kept rows (LP) | 2.0 | 78.3% | 10.9 | 59.7% | 3.3 | 62.8% | 12.52 |
+| rand_t8_x5_m20_s0 | parent's kept rows (LP) | 2.0 | 81.4% | 10.9 | 63.7% | 3.3 | 49.8% | 13.66 |
+| rand_t8_x5_m20_s0 | all kept rows (LP) | 2.0 | 100.0% | 10.9 | 100.0% | 3.3 | 100.0% | 17.37 |
+| rand_t10_x5_m20_s0 | d nearest kept rows (square solve) | 3.0 | 4.8% | 9.2 | 0.1% | 0.9 | 0.1% | 1.10 |
+| rand_t10_x5_m20_s0 | 2d nearest kept rows (LP) | 3.0 | 77.8% | 9.2 | 38.4% | 0.9 | 50.9% | 23.70 |
+| rand_t10_x5_m20_s0 | parent's kept rows (LP) | 3.0 | 87.9% | 9.2 | 59.9% | 0.9 | 40.6% | 28.41 |
+| rand_t10_x5_m20_s0 | all kept rows (LP) | 3.0 | 100.0% | 9.2 | 100.0% | 0.9 | 100.0% | 37.40 |
+| pop_017 | d nearest kept rows (square solve) | 3.5 | 4.2% | 8.1 | 4.1% | 10.1 | 2.9% | 0.55 |
+| pop_017 | 2d nearest kept rows (LP) | 3.5 | 84.1% | 8.1 | 85.0% | 10.1 | 77.5% | 5.83 |
+| pop_017 | parent's kept rows (LP) | 3.5 | 71.4% | 8.1 | 53.2% | 10.1 | 51.8% | 4.84 |
+| pop_017 | all kept rows (LP) | 3.5 | 100.0% | 8.1 | 100.0% | 10.1 | 100.0% | 6.94 |
+| rand_t12_x5_m20_s0 | d nearest kept rows (square solve) | 4.0 | 5.6% | 4.7 | 0.0% | 0.2 | 0.0% | 1.64 |
+| rand_t12_x5_m20_s0 | 2d nearest kept rows (LP) | 4.0 | 82.2% | 4.7 | 16.8% | 0.2 | 42.3% | 33.31 |
+| rand_t12_x5_m20_s0 | parent's kept rows (LP) | 4.0 | 98.4% | 4.7 | 69.5% | 0.2 | 36.5% | 71.22 |
+| rand_t12_x5_m20_s0 | all kept rows (LP) | 4.0 | 100.0% | 4.7 | 100.0% | 0.2 | 99.9% | 83.33 |
+| masses4_N3 | d nearest kept rows (square solve) | 3.3 | 0.2% | 16.8 | 0.9% | 21.9 | 0.2% | 0.74 |
+| masses4_N3 | 2d nearest kept rows (LP) | 3.3 | 46.6% | 16.8 | 54.9% | 21.9 | 39.4% | 11.27 |
+| masses4_N3 | parent's kept rows (LP) | 3.3 | 59.0% | 16.8 | 38.5% | 21.9 | 44.2% | 17.57 |
+| masses4_N3 | all kept rows (LP) | 3.3 | 100.0% | 16.8 | 100.0% | 21.9 | 100.0% | 24.66 |
+| masses5_N3 | d nearest kept rows (square solve) | 2.4 | 0.2% | 17.3 | 0.4% | 25.1 | 0.1% | 1.10 |
+| masses5_N3 | 2d nearest kept rows (LP) | 2.4 | 19.5% | 17.3 | 31.0% | 25.1 | 19.0% | 18.79 |
+| masses5_N3 | parent's kept rows (LP) | 2.4 | 68.4% | 17.3 | 44.8% | 25.1 | 47.0% | 50.16 |
+| masses5_N3 | all kept rows (LP) | 2.4 | 100.0% | 17.3 | 100.0% | 25.1 | 100.0% | 70.40 |
+
+### Build study 13: ridge rule on the shared-facet vertices (parent box vertices lying on the entry facet; at most 2n per child, not all vertices of the facet)
+
+A row other than the entry row with at least d - 1 affinely independent shared vertices tight on it, and no other row tight at the same points, counts as an identified facet. 'Unique and NOT a facet' is the audit against today's verdicts (every disagreement is counted, none was found).
+
+| problem | children with shared vertices | shared vertices per child | children with fewer than d - 1 | facets (not the entry) per child | rows with >= d - 1 affinely independent shared vertices tight | of which unique | unique and a facet | unique and NOT a facet | not unique | not unique and not a facet |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| rand_t8_x5_m20_s0 | 2825 | 6.10 | 59.5% | 21.6 | 0.58 | 0.58 | 0.58 | 0 | 0.00 | 0 |
+| rand_t10_x5_m20_s0 | 820 | 9.98 | 44.6% | 31.1 | 1.73 | 1.73 | 1.73 | 0 | 0.00 | 0 |
+| pop_017 | 2510 | 3.84 | 65.8% | 13.6 | 0.30 | 0.30 | 0.30 | 0 | 0.00 | 0 |
+| rand_t12_x5_m20_s0 | 4272 | 5.89 | 84.5% | 38.5 | 0.28 | 0.28 | 0.28 | 0 | 0.00 | 0 |
+| masses4_N3 | 702 | 3.69 | 84.9% | 26.8 | 0.15 | 0.14 | 0.14 | 0 | 0.00 | 0 |
+| masses5_N3 | 834 | 7.08 | 66.9% | 42.9 | 0.59 | 0.55 | 0.55 | 0 | 0.03 | 0 |
+
+Reading. Farkas: the square solve over d supports catches under 7% of the redundant rows. An LP over the 2d nearest kept rows catches 78% to 84% of the rows the propagated parameter box already settles for free, 17% to 85% of the rows the exact box settles (the 2n box LPs' job) and 19% to 78% of the rows left to per-row LPs, but each test costs 6 to 33 us, more than the box LP or per-row LP it would replace; the parent's kept rows catch 36% to 70% of the exact-box rows at 5 to 71 us. Only the LP over all kept rows catches everything (100%, validating the test), at 7 to 83 us. So no support small enough to be cheap catches most of the box-decided rows.
+Ridge rule: it identifies 0.15 to 1.73 facets per child (0.6% to 5.6% of the 13.6 to 42.9 non-entry facets), because the shared vertices known are the parent's 2n box points, 3.7 to 10 per child, usually fewer than d - 1 affinely independent on one row. Zero disagreements with the LP verdicts in all six problems; ambiguous (twin) candidates 0.00 to 0.03 per child, none wrong. Those facets are already settled for free by the box vertices, so the rule saves no LP.
+
