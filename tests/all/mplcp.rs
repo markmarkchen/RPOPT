@@ -221,3 +221,17 @@ fn degenerate_mplp_enumeration_covers_theta() {
         assert!(s.verify_theta(&th));
     }
 }
+
+/// A region whose tableau cannot be factored when it is popped takes the probe-across fallback and is counted; the
+/// counter is expected to stay 0 (a refusal needs a basis that is singular in both pivot orders tried), and a
+/// release build must not skip such a region without a trace. The twin-row problem pop_001 is included.
+#[test]
+fn no_region_is_skipped_without_trace() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("bench");
+    for name in ["problems/di_N6.json", "problems/masses2_N4.json", "problems/sys3x2_N3.json", "problems_large/pop_001.json"] {
+        let p = Arc::new(MpProgram::from_json_file(&dir.join(name)).unwrap());
+        let m = solve_mpqp(&p, MpqpAlgorithm::Mplcp);
+        assert!(!m.critical_regions.is_empty(), "{name}");
+        assert_eq!(rpopt::algorithms::mplcp::resolve_fallbacks(), 0, "{name}");
+    }
+}
