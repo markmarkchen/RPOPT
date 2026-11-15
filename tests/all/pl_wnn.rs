@@ -154,20 +154,26 @@ fn bench_problems_mpqp() {
     }
 }
 
+// Slow tier (about 6 minutes on one cluster core, almost all of it building the point locators): skipped by
+// the merge gate, run before pushes with the `slow_tests` feature.
 #[test]
+#[cfg_attr(not(feature = "slow_tests"), ignore = "slow tier: run with --features slow_tests")]
 fn random_mpqp_theta6() {
     check("qp:3:6:14:1", Arc::new(rpopt::problem_generator::generate_mpqp(3, 6, 14, 1)), MpqpAlgorithm::GeometricParallel, N);
     check("qp:4:6:14:1", Arc::new(rpopt::problem_generator::generate_mpqp(4, 6, 14, 1)), MpqpAlgorithm::GeometricParallel, N);
 }
 
 // The two 8-parameter problems are separate tests, so a test run with one task per test (the
-// cluster gate) checks them concurrently; together they took 22 minutes, the longest of all tests.
+// cluster gate) checks them concurrently. theta8_a takes about 1.5 minutes on one cluster core; theta8_b about
+// 20, so theta8_b is in the slow tier.
 #[test]
 fn random_mpqp_theta8_a() {
     check("qp:3:8:10:1", Arc::new(rpopt::problem_generator::generate_mpqp(3, 8, 10, 1)), MpqpAlgorithm::GeometricParallel, N);
 }
 
+// Slow tier (about 20 minutes on one cluster core, almost all of it building the point locators).
 #[test]
+#[cfg_attr(not(feature = "slow_tests"), ignore = "slow tier: run with --features slow_tests")]
 fn random_mpqp_theta8_b() {
     check("qp:4:8:14:1", Arc::new(rpopt::problem_generator::generate_mpqp(4, 8, 14, 1)), MpqpAlgorithm::GeometricParallel, N);
 }

@@ -18,6 +18,9 @@ serde_json = "1.0.154"
 default = ["mimalloc"]
 mimalloc = ["dep:mimalloc"]
 lp_census = []
+# Slow test tier: tests marked `cfg_attr(not(feature = "slow_tests"), ignore)` (minutes each on one core) are skipped
+# by the merge gate and run before every push (`ci_build.sh <tag> full` on Negishi, or `--features slow_tests`).
+slow_tests = []
 
 [[example]]
 name = "lp_census"
