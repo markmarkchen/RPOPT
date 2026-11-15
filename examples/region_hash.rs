@@ -21,6 +21,14 @@ fn main() {
         rpopt::algorithms::mplp_lex::set_mode(v.parse().unwrap());
     }
     let alg = MpqpAlgorithm::from_name(&args[1]).expect("algorithm");
+    // MPLCP_NO_RANK1=1: the Case-2 walk only (the oracle of the region-set gates)
+    if std::env::var("MPLCP_NO_RANK1").is_ok() {
+        rpopt::algorithms::mplcp::set_rank1(false);
+    }
+    // MPLCP_REFINE=1: gap-band multipliers are recomputed from the original data (off by default)
+    if std::env::var("MPLCP_REFINE").is_ok() {
+        rpopt::algorithms::mplcp::set_refine_multipliers(true);
+    }
     // MPLCP_NO_DAQP=1: answer every sub-facet nonemptiness test with the LP
     if std::env::var("MPLCP_NO_DAQP").is_ok() {
         rpopt::algorithms::mplcp::set_daqp_tests(false);

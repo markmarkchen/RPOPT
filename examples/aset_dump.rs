@@ -10,6 +10,9 @@ fn main() {
     if let Ok(m) = std::env::var("RPOPT_CERT") {
         rpopt::algorithms::mplcp::set_certificate(m.parse().unwrap());
     }
+    if std::env::var("MPLCP_NO_RANK1").is_ok() {
+        rpopt::algorithms::mplcp::set_rank1(false);
+    }
     let alg = MpqpAlgorithm::from_name(&a[1]).expect("algorithm");
     let p = Arc::new(MpProgram::from_json_file(std::path::Path::new(&a[2])).unwrap());
     let sol = solve_mpqp(&p, alg);
