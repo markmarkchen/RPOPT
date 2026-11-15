@@ -189,8 +189,8 @@ function. Every exact method returns the same set of critical regions as PPOPT o
   67 problems and takes 1.3x to 1.9x the best solver's time (geometric mean per parameter count); the gap is largest
   on the `masses` problems (2x to 10x). `combinatorial` is worth trying when the constraints are few.
 - **mpLP:** `mplp_lex`. It is the fastest on all 30 mpLPs at 2 to 4 parameters (the `graph` runs that looked faster on dione_N6, N8 and
-  N10 return 0 regions) and on all 15 mpLPs at 5 to 12 parameters where another solver finished (randlp_t10_x6_m50_s0: 0.97x of
-  `combinatorial_graph`, paired), where it beats `graph` by 3x to 30x; it gives a
+  N10 return 0 regions) and on all 21 mpLPs at 5 to 16 parameters where another valid solver finished (randlp_t10_x6_m50_s0: 0.97x of
+  `combinatorial_graph`, paired; `bench/results/mplp_lex_14_16_params.md`), where it beats `graph` by 3x to 30x; it gives a
   unique gap-free partition even when the problem is primal and dual degenerate. Small H = 0 problems are solved
   by enumeration instead of a walk (see the table row).
 - **General fallback:** `geometric`, which handles every program class and is robust on degenerate problems.

@@ -567,13 +567,18 @@ pub fn solve(program: &MpProgram, seed: u64) -> Result<Vec<CriticalRegion>, Stri
             // last attempts of the regions where it is tried.
             let mut attempted = false;
             let mut expensive_fail = false;
+            let mut boundary = false;
             let mut direct = match (&dctx, direct_row(&dctx_rows, nk, fk)) {
                 (true, Some(j)) => {
                     attempted = true;
-                    direct_cross(&lex, &parent, &mut wk, &mut sc, program, &zset, &basis, j, nk)
+                    direct_cross(&lex, &parent, &mut wk, &mut sc, program, &zset, &basis, j, nk, &mut boundary)
                 }
                 _ => None,
             };
+            if boundary {
+                // nothing beyond this facet: counts as a success of the attempt (it saved the LP)
+                continue;
+            }
             // the neighbour must have the reversed facet as one of its facets; otherwise (a numerically
             // marginal region) the LP path decides
             let mut prebuilt: Option<CriticalRegion> = None;
@@ -1062,7 +1067,7 @@ fn direct_row(rows: &[(usize, Vec<f64>, f64)], nk: &[f64], fk: f64) -> Option<us
 /// synthetic slack values (1 for ordinary nonbasic rows, 0 for basic rows, j and the zero rows) and
 /// accepts only if it does not pivot. A tie in the ratio test returns None (LP path).
 #[allow(clippy::too_many_arguments)]
-fn direct_cross(lex: &Lex, parent: &Work, wk: &mut Work, sc: &mut Scratch, program: &MpProgram, zset: &[bool], basis: &[usize], j: usize, nk: &[f64]) -> Option<Vec<usize>> {
+fn direct_cross(lex: &Lex, parent: &Work, wk: &mut Work, sc: &mut Scratch, program: &MpProgram, zset: &[bool], basis: &[usize], j: usize, nk: &[f64], infeasible_beyond: &mut bool) -> Option<Vec<usize>> {
     let nx = lex.nx;
     let d0 = &program.c;
     let d1 = vec![0.0; nx];
@@ -1083,7 +1088,14 @@ fn direct_cross(lex: &Lex, parent: &Work, wk: &mut Work, sc: &mut Scratch, progr
             }
         }
     }
-    let (p, _) = best?;
+    let Some((p, _)) = best else {
+        // No inequality row can leave: A_j = sum_p T_jp A_Bp with every T_jp <= 0 on the inequality rows, so
+        // A_j x >= A_j x_B > b_j + F_j theta beyond the facet for every x allowed by the basic rows: the program is
+        // infeasible there and the facet lies on the boundary of the feasible parameter set (the LP path finds the
+        // same through `Fail::Infeasible` and skips the facet).
+        *infeasible_beyond = true;
+        return None;
+    };
     wk.clone_from(parent);
     lex.pivot(wk, p, j);
     let mut pivoted = wk.b.clone();

@@ -1,7 +1,8 @@
 """
 Writes the 5 to 12 parameter mpLP set to <output_dir> (default problems_lp_highdim): oscillating-mass MPC with
 3 to 6 masses (6, 8, 10, 12 states = parameters), inf-norm and 1-norm cost, short horizons.
-Random mpLPs (5 to 10 parameters) come from `gen_random --lp`.
+Random mpLPs (5 to 16 parameters) come from `gen_random --lp`. masses8 with the 1-norm (16 parameters) is left out:
+mplp_lex needs over 100 s on it (masses7 with the 1-norm has 130,978 regions and takes 77 s).
 
 Usage:
     python gen_highdim_lp.py <output_dir> [n_masses:N:norm ...]
@@ -14,7 +15,8 @@ from pathlib import Path
 from mplp_problems import oscillating_masses
 
 DEFAULT = [(3, 2, 'inf'), (3, 3, 'inf'), (3, 2, 'one'), (4, 2, 'inf'), (4, 1, 'one'),
-           (5, 1, 'inf'), (5, 2, 'inf'), (5, 1, 'one'), (6, 1, 'inf'), (6, 1, 'one')]
+           (5, 1, 'inf'), (5, 2, 'inf'), (5, 1, 'one'), (6, 1, 'inf'), (6, 1, 'one'),
+           (7, 1, 'inf'), (7, 1, 'one'), (8, 1, 'inf')]
 
 if __name__ == '__main__':
     out = Path(sys.argv[1] if len(sys.argv) > 1 else 'problems_lp_highdim')
