@@ -488,6 +488,8 @@ mod imp {
         AuditNoPositive,
         AuditSkip,
         AuditAltNone,
+        /// rank-1 calls answered with exactly one member (|P-| = 1: an ordinary basis exchange)
+        R1Single,
         /// end marker: the Case-2 component block starts here
         CounterEnd,
     }
@@ -572,7 +574,8 @@ mod imp {
     /// [4] still between, [5] calls with every band entry decided, [6] ns, [7] large entries compared, [8] of those disagreeing (sign or 1e-6
     /// relative), [9..25] decade histogram of the refined nu of the band entries, [25] tableau zeros the refined value does not call zero
     pub const MU2_BASE: usize = MD_BASE + 224;
-    pub const NC: usize = MU2_BASE + 32;
+    /// slots of the time-profile counters of `census_diag` (PF_*) follow the refined-multiplier block
+    pub const NC: usize = MD_BASE + 340;
     pub fn bump_slot(i: usize, n: u64) {
         MINE.with(|m| m.lock().unwrap().counters[i] += n);
     }
@@ -799,6 +802,11 @@ mod imp {
     }
     pub fn depth_take() -> usize {
         CALL_MAXD.with(|c| c.get())
+    }
+
+    /// Current value of a counter of this thread (census-only reads of per-region deltas).
+    pub fn cur(c: Counter) -> u64 {
+        MINE.with(|m| m.lock().unwrap().counters[c as usize])
     }
 
     #[inline]

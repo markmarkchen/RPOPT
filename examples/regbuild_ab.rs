@@ -37,7 +37,9 @@ fn main() {
         let mut regions = 0;
         for _ in 0..reps {
             for &mi in &order {
-                rpopt::algorithms::mplcp::set_box_chain(modes[mi] == "on");
+                // `off`: shared builder; `on`: chain; `main`: chain, clip budget off; `new`: chain, default clip budget
+                rpopt::algorithms::mplcp::set_box_chain(modes[mi] != "off");
+                rpopt::algorithms::mplcp::set_clip_budget(if modes[mi] == "main" { u64::MAX } else { rpopt::algorithms::mplcp::DEFAULT_CLIP_BUDGET });
                 let alg = if modes[mi] == "daqp" { MpqpAlgorithm::from_name("parametric_daqp").expect("parametric_daqp") } else { MpqpAlgorithm::Mplcp };
                 let t = Instant::now();
                 let sol = solve_mpqp(&prog, alg);
