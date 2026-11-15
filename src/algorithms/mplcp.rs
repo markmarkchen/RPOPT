@@ -1743,7 +1743,17 @@ pub(crate) fn classify_gap(p: &Plcp, tab: &Tab, c: usize) -> PivotClass {
         return PivotClass::Undecided;
     }
     let zj: Vec<usize> = (0..n).filter(|&i| tab.row_var[i] >= n && tab.row_var[i] < 2 * n).map(|i| tab.row_var[i] - n).collect();
-    match refined_dependency(p, &zj, var) {
+    classify_gap_rows(p, &zj, var)
+}
+
+/// The decision inside the band from the data alone, for callers that have no region tableau (the walk's work tableau): `zj` are the pLCP indices
+/// (indices into `p.m`, i.e. the constraint numbers `j` of the active rows w_j in the basis) of the active z rows of the facet's region and `var`
+/// the pLCP index of the vanishing slack row's constraint.
+pub(crate) fn classify_gap_rows(p: &Plcp, zj: &[usize], var: usize) -> PivotClass {
+    if p.arows.rows == 0 {
+        return PivotClass::Undecided;
+    }
+    match refined_dependency(p, zj, var) {
         Some((_, rho)) if rho <= RHO_ZERO => PivotClass::Zero,
         Some((_, rho)) if rho >= RHO_NONZERO => PivotClass::Nonzero,
         _ => PivotClass::Undecided,
