@@ -115,6 +115,10 @@ fn run_one(alg_name: &str, spec: &str) {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if let Ok(v) = std::env::var("MPLP_LEX_MODE") {
+        rpopt::algorithms::mplp_lex::set_mode(v.parse().unwrap());
+    }
+
     if args[1] == "--one" {
         return run_one(&args[2], &args[3]);
     }
