@@ -429,6 +429,17 @@ fn highdim_tables(rows: &[Row], skipped: &[(String, String)]) {
             c(r, Counter::HintInside), c(r, Counter::HintOutside), c(r, Counter::WalkCycle), c(r, Counter::WalkBudget), c(r, Counter::FallbackAcross), c(r, Counter::FallbackFail)
         );
     }
+    println!("\n### High-dimension 3f: mplcp sub-facet witnesses (non-leaf Case-2 branches accepted without a Chebyshev LP)\n");
+    println!("| problem | regions | Chebyshev LPs/region in pivot_facet | branches accepted by a witness | of which piece = parent | candidates tried, none cleared | LPs found empty | centres computed later for a leaf |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::AdjCalls) > 0.0) {
+        let n = r.regions.max(1) as f64;
+        let (acc, fail) = (c(r, Counter::WitnessAccept), c(r, Counter::WitnessFail));
+        println!(
+            "| {} | {} | {:.1} | {} ({}) | {} | {} | {} | {} |",
+            r.problem, r.regions, c(r, Counter::PfCheb) / n, acc, pct(acc, acc + c(r, Counter::PfCheb) - c(r, Counter::LazyCentre)), c(r, Counter::WitnessNoCuts), fail, c(r, Counter::PfChebEmpty), c(r, Counter::LazyCentre)
+        );
+    }
     println!("\n### High-dimension 4: vertex clipping (`clip_flags`) outcomes per call\n");
     println!("| problem | algorithm | clip calls/region | ok | nt outside 2..=6 | more than 128 hyperplanes | infinite box | more than 600 vertices | too few vertices | vertex violates a row | redundancy LPs/region |");
     println!("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
