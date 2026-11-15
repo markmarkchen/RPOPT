@@ -88,3 +88,25 @@ of the hits fall in the last 8 regions and at most 26% in the last 512, and the 
 children together are 7% to 24% of the hits. A per-item cache of parent and sibling keys would answer at most that
 share, ahead of a lookup that costs 40 to 100 ns; it was not built. Region storage is already in creation order
 (the arena of the table and the `Vec` of regions).
+
+## Rebased onto the box-chain tree (merge-dedupe, df4176c)
+
+The change was merged with `merge-dedupe` (main e3e3bd2 plus the twin-constraint dedupe and the box-chain verification;
+head df4176c); the only conflicts were the two `Seen` initialisations in `pivot_solve` and `pivot_solve_par`. The timing
+above was measured on 59b2afb, before the box chain, the 512 MiB budget changes, the DAQP certificate and the twin-row
+snap landed. On the merged tree:
+
+- **Region sets:** sorted active sets with the facet rows rounded to 1e-6 (`RPOPT_HASH_SCALE=1e6`, `region_hash`) are
+  identical to df4176c on 54 of 54 problems (the 51 above plus `pop_001`, `pop_052` and `pop_076`).
+- **Tests:** TESTS_AB5_PLACEHOLDER
+- **Paired timing** (new, df4176c, df4176c again; 3 alternations, shuffled order, 3 solves per binary, median per task,
+  median ratio over the 3 tasks):
+
+| problem | df4176c ms | new / old (3 alternations) | A/A |
+|---|---:|---|---:|
+| rand_t8_x5_m20_s0 | 626 | 0.933 (0.933, 0.888, 0.957) | 1.004 |
+| rand_t10_x5_m20_s0 | 1502 | 0.913 (0.913, 0.920, 0.899) | 1.002 |
+| pop_017 | 494 | 0.918 (0.915, 0.918, 0.926) | 0.999 |
+| rand_t12_x5_m20_s0 | 2715 | 0.929 (0.931, 0.923, 0.929) | 0.999 |
+
+The 7% to 9% gain on these four problems holds on top of the box chain.
