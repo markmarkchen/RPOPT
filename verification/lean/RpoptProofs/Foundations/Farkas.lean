@@ -1,14 +1,17 @@
 /-
 Checked infeasibility certificates for `{x : A x ≤ b}` on a box (mplcp.rs `daqp_certainly_empty`,
-`DAQP_COORD_BOUND`; pdaqp.rs `Daqp::certificate`).
+`Plcp::coord_bound`; pdaqp.rs `Daqp::certificate`).
 
 * `farkas_box`: `p ≥ 0`, `r = Aᵀ p`, `g = bᵀ p` and `g + ‖r‖₁ R < 0` imply that no `x` with
-  `‖x‖∞ ≤ R` satisfies `A x ≤ b`.
+  `‖x‖∞ ≤ R` satisfies `A x ≤ b`. Since 0215a64 the code clamps `p` to `max(p, 0)` and recomputes
+  `r` and `g`, so this is its exact test.
 * `farkas_box_signed`: the same for a multiplier vector with a small negative part `p⁻`, when every
-  row has `‖a_i‖₁ ≤ α`: the condition is `g + ‖r‖₁ R + Σ p⁻_i (|b_i| + α R) < 0`. The code charges only
-  `‖p⁻‖₁ R`, which is this bound only when `α ≤ 1` and `Σ p⁻_i |b_i|` is absorbed by its margin.
+  row has `‖a_i‖₁ ≤ α`: the condition is `g + ‖r‖₁ R + Σ p⁻_i (|b_i| + α R) < 0`. Before 0215a64 the
+  code charged only `‖p⁻‖₁ R`.
 * `facet_coord_le`: with an orthonormal facet basis, `‖θ_f‖₂ ≤ ‖θ‖₂`, so `‖θ_f‖∞ ≤ R` holds on every
   sub-facet polytope as soon as the parameters satisfy `‖θ‖₂ ≤ R`.
+* `box_sq_le`, `daqp_box_certificate`: with `R = √(Σ_k max(lo_k², hi_k²))`, the Euclidean radius of
+  the parameter box (`coord_bound`), the certificate excludes every parameter of the box.
 -/
 import Mathlib
 
@@ -98,5 +101,37 @@ theorem facet_coord_le {π δ : Type*} [Fintype π] [Fintype δ] [DecidableEq δ
   simp only [dotProduct_add, add_dotProduct, dotProduct_smul, smul_dotProduct, smul_eq_mul, h1]
   rw [dotProduct_comm g (N *ᵥ θf), h2]
   nlinarith [mul_nonneg (mul_self_nonneg c) hg]
+
+/-- A point of the box `lo ≤ θ ≤ hi` has `θ · θ ≤ Σ_k max(lo_k², hi_k²)`, the square of
+`Plcp::coord_bound`. -/
+theorem box_sq_le {π : Type*} [Fintype π] (lo hi θ : π → ℝ) (h : ∀ k, lo k ≤ θ k ∧ θ k ≤ hi k) :
+    θ ⬝ᵥ θ ≤ ∑ k, max (lo k ^ 2) (hi k ^ 2) := by
+  simp only [dotProduct]
+  refine Finset.sum_le_sum fun k _ => ?_
+  obtain ⟨h1, h2⟩ := h k
+  rcases le_total 0 (θ k) with h0 | h0
+  · exact le_max_of_le_right (by nlinarith)
+  · exact le_max_of_le_left (by nlinarith)
+
+/-- **The DAQP filter with the radius of the parameter box** (`daqp_certainly_empty` with
+`bound = coord_bound`). Let `θ = N θ_f + c g` be the facet coordinates (`null_basis`). If `p ≥ 0` and
+`p · b + ‖Aᵀ p‖₁ R < 0` with `R = √(Σ_k max(lo_k², hi_k²))`, no parameter in the box `lo ≤ θ ≤ hi`
+has facet coordinates with `A θ_f ≤ b`. -/
+theorem daqp_box_certificate {π δ : Type*} [Fintype π] [Fintype δ] [DecidableEq δ]
+    (N : Matrix π δ ℝ) (g : π → ℝ) (hN : Nᵀ * N = 1) (hNg : Nᵀ *ᵥ g = 0) (c : ℝ)
+    (lo hi : π → ℝ) (A : Matrix ι δ ℝ) (b : ι → ℝ) {p : ι → ℝ} (hp : ∀ i, 0 ≤ p i)
+    (hcert : p ⬝ᵥ b + (∑ k, |(p ᵥ* A) k|) * Real.sqrt (∑ k, max (lo k ^ 2) (hi k ^ 2)) < 0) :
+    ¬ ∃ θf : δ → ℝ, (∀ k, lo k ≤ (N *ᵥ θf + c • g) k ∧ (N *ᵥ θf + c • g) k ≤ hi k) ∧
+      ∀ i, (A *ᵥ θf) i ≤ b i := by
+  rintro ⟨θf, hbox, hA⟩
+  refine farkas_box A b hp hcert ⟨θf, fun k => ?_, hA⟩
+  have hs : θf ⬝ᵥ θf ≤ ∑ k, max (lo k ^ 2) (hi k ^ 2) :=
+    (facet_coord_le N g hN hNg θf c).trans (box_sq_le lo hi _ hbox)
+  have hk : θf k ^ 2 ≤ θf ⬝ᵥ θf := by
+    simp only [dotProduct]
+    have := Finset.single_le_sum (f := fun j => θf j * θf j)
+      (fun j _ => mul_self_nonneg (θf j)) (Finset.mem_univ k)
+    simpa [sq] using this
+  exact Real.abs_le_sqrt (hk.trans hs)
 
 end Rpopt
