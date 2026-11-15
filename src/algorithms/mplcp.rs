@@ -790,6 +790,11 @@ enum Nbr {
     Across(Vec<f64>),
 }
 
+#[cfg(feature = "lp_census")]
+type CenT = std::time::Instant;
+#[cfg(not(feature = "lp_census"))]
+type CenT = ();
+
 /// Neighbouring z-row sets across the facet {e_k θ = f_k} of the region with tableau `tab`.
 ///
 /// `cert` is asked only when the fast path has failed, that is, when the slow path (Case 2) would
@@ -803,7 +808,6 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
     let nrm = erow.iter().map(|v| v * v).sum::<f64>().sqrt();
     let g: Vec<f64> = erow.iter().map(|v| v / nrm).collect();
     let b = -frhs / nrm; // γ'θ + b = 0
-    let d1 = nt - 1;
     // rows identically zero on the facet (none: boundary of Θ), and the α column γ_i = ρθ_i · g
     let mut gam = vec![0.0; n];
     let mut zrows: Vec<usize> = vec![];
@@ -850,7 +854,22 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         crate::census_bump!(AdjCertSkipNanos, _cen_t.elapsed().as_nanos());
         return (vec![], certified);
     }
-    let nb = null_basis(&g);
+    #[cfg(feature = "lp_census")]
+    let _cen_t_arg: CenT = _cen_t;
+    #[cfg(not(feature = "lp_census"))]
+    let _cen_t_arg: CenT = ();
+    adjacent_case2(p, tab, erow, frhs, e_all, f_all, ws, seen, region_centre, certified, &g, b, &gam, &rowsc, _cen_t_arg)
+}
+
+/// The slow path of `adjacent` (Case 2): the work tableau of the facet, the facet polytope and the walk.
+/// Kept out of line and cold so that the fast paths of `adjacent` stay small.
+#[cold]
+#[inline(never)]
+#[allow(clippy::too_many_arguments)]
+fn adjacent_case2(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[f64], ws: &mut Option<Tab>, seen: Option<&Seen>, region_centre: Option<&[f64]>, certified: Option<usize>, g: &[f64], b: f64, gam: &[f64], rowsc: &[f64], _cen_t: CenT) -> (Vec<Nbr>, Option<usize>) {
+    let (n, nt) = (p.n, p.nt);
+    let d1 = nt - 1;
+    let nb = null_basis(g);
     let w = 1 + d1;
     // work tableau: n x (n+1) with the α column last
     let nc = n + 1;
@@ -880,7 +899,7 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
             if nr < 1e-12 {
                 continue;
             }
-            let eg: f64 = r.iter().zip(&g).map(|(a, b)| a * b).sum();
+            let eg: f64 = r.iter().zip(g).map(|(a, b)| a * b).sum();
             ef.push_row(&row.iter().map(|v| v / nr).collect::<Vec<_>>());
             ff.push((f_all[i] + b * eg) / nr);
         }
@@ -901,7 +920,7 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
     // while the time grows 10-fold at 300 and 300-fold at 3,000). 2n pivots (at least 64) keeps the cost
     // of the old caps, and a spent budget is not silent: the facet also gets the QP just across it.
     let budget = (WALK_BUDGET_PER_ROW * n).max(WALK_BUDGET_MIN);
-    let complete = pivot_facet(p, &mut work, n, Facet { ef: &ef, ff: &ff, sc: &rowsc, seen, hint_f: hint_f.as_deref() }, budget, &mut out);
+    let complete = pivot_facet(p, &mut work, n, Facet { ef: &ef, ff: &ff, sc: rowsc, seen, hint_f: hint_f.as_deref() }, budget, &mut out);
     *ws = Some(work);
     crate::census_bump!(AdjCase2, 1);
     crate::census_bump!(AdjCase2Nanos, _cen_t.elapsed().as_nanos());
@@ -921,7 +940,7 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         let cf: Vec<f64> = sol.map_or(vec![0.0; d1], |s| s.x[..d1].to_vec());
         let on: Vec<f64> = (0..nt).map(|k| nb.iter().zip(&cf).map(|(v, x)| v[k] * x).sum::<f64>() - g[k] * b).collect();
         let delta = 1e-6 * (1.0 + on.iter().fold(0.0f64, |m, v| m.max(v.abs())));
-        nbrs.push(Nbr::Across(on.iter().zip(&g).map(|(x, gk)| x + delta * gk).collect()));
+        nbrs.push(Nbr::Across(on.iter().zip(g).map(|(x, gk)| x + delta * gk).collect()));
     }
     (nbrs, certified)
 }
