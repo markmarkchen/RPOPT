@@ -3013,18 +3013,20 @@ struct Cand {
 // ---------------------------------------------------------------------------- facet certificate
 
 /// Modes 5 and 6 are cost diagnostics: 5 collects vertices and the hyperplane index as mode 1 but looks nothing up; 6 collects the vertices only.
-/// Certificate mode: 0 off, 1 on (default), 2 audit (certify, but still search, and count the new
+/// Certificate mode: 0 off (default), 1 on, 2 audit (certify, but still search, and count the new
 /// regions that the search reaches across certified facets; for the census and the tests). Modes
 /// 1 and 2 apply to 3 to 5 parameters, where the check measured faster or neutral; modes 3 (on) and
 /// 4 (audit) apply to every count the vertex clip covers (2 to 6). At 2 parameters the problems are
 /// too small to repay the bookkeeping, and at 6 the check (many vertices per facet) can cost more
-/// than the search it saves (rand_t6_x5_m20_s0: 0.74x).
-static CERT: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(1);
+/// than the search it saves (rand_t6_x5_m20_s0: 0.74x). Off by default: after the neighbour pre-check the
+/// check costs more than it saves (median 1.4% over 15 problems, pop_019 21%, `mplcp_retry_census.md`),
+/// and at 6 parameters it lost a real region on masses3_N4. The certificate only skips facet searches.
+static CERT: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 
 /// Sets the facet-certificate mode of `Method::Pivot` and `Method::PivotParallel`: 0 off (the
-/// default: at 6 parameters it lost a real region on masses3_N4, and the stray overlapping regions of
-/// pop_005, pop_007 and pop_011 could pass as the known neighbour; it stays off until that is
-/// understood), 1 on at 3 to 5 parameters, 2 audit, 3 and 4 the same at 2 to 6.
+/// default: it costs more than it saves, and at 6 parameters it lost a real region on masses3_N4;
+/// the stray overlapping regions of pop_005, pop_007 and pop_011 could pass as the known neighbour),
+/// 1 on at 3 to 5 parameters, 2 audit, 3 and 4 the same at 2 to 6.
 pub fn set_certificate(mode: u8) {
     CERT.store(mode, std::sync::atomic::Ordering::Relaxed);
 }
