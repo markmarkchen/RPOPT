@@ -166,3 +166,84 @@ Tableau updates are not a cost (0%). The neighbour search is still 41% to 74% of
 Case-2 path (22 `adjacent` calls per region on masses4_N3, 55% of them Case 2, 34 us per Case-2 call). The existing
 timers do not split a Case-2 call into pivots, tableau copies, row tests and `Seen` lookups; that needs timers inside
 `pivot_facet`/`walk_one`, which I did not add.
+
+## 5. Per-region memory: where the bytes are, and the 512 MiB budget over parents and owned tableaux
+
+**Measurement caveat for section 1.** `region_hash` sorts and hashes a copy of every facet row after the solve. On the
+largest problems that copy raises the peak, so the "peak RSS" of section 1 (pop_033: 5.7 GB) overstated the solve. The
+numbers below come from `examples/region_bytes.rs`, which reads `VmHWM` right after `solve_mpqp` (no copy), and from the
+unbudgeted `region_hash` runs, where the queue and the parents dominate and the hash copy does not matter.
+
+### What a stored region holds (capacity bytes per region, end of solve)
+
+| field | pop_033 (nt 8, nx 8, n 80) | pop_005 (nt 7, nx 6) |
+|---|---:|---:|
+| primal law A, b | 512, 64 | 336, 48 |
+| dual law C, d | 431, 54 | 269, 38 |
+| facet rows E, rhs f | 1231, 154 | 889, 127 |
+| active_set, omega, lambda, regular sets | 54, 20, 36, 257 | 38, 41, 27, 169 |
+| `CriticalRegion` struct in the `Vec` (400 B each, `Vec` doubling slack included) | 487 | 637 |
+| total by capacity | 3,301 | 2,620 |
+
+pop_002 totals 2,649 B per region by capacity.
+
+* `graph` stores the same `CriticalRegion` (identical field bytes on pop_005, pop_017 and masses3_N4 for both algorithms),
+  so the data of a region is not what separates the two solvers. All fields are part of the output (`solution_io`,
+  `lowrank` and `mplp_lex` read `omega_set`, `lambda_set`, `regular_set`), so nothing can be dropped without changing the
+  output type. Slack in the vectors is small (`omega_set` 41 against 29 bytes, `regular_set` 169 against 142), the
+  doubling slack of the region `Vec` is 100 to 250 B per region, and `malloc_trim` after the solve returns 8% to 20% of
+  the resident size (pop_002 1,067 to 848 MB, pop_033 3,097 to 2,897 MB): free memory held between the long-lived regions.
+* The difference is in the **search structures**, and it is large without the budget:
+
+| structure | pop_033 unbudgeted | pop_033, 512 MiB | pop_002 unbudgeted | pop_002, 512 MiB |
+|---|---:|---:|---:|---:|
+| live parent tableaux | 100,611 = 3,684 MB | 11,804 = 432 MB | 36,392 = 1,860 MB | 10,017 = 512 MB |
+| queued items (centre, owned tableaux), peak | 3,213 MB (281,167 items) | 354 MB | not recorded | 403 MB |
+| `Seen` map | 80 MB (861,346 entries) | 80 MB | 34 MB | 34 MB |
+| peak resident size | 9,135 MB | 3,521 MB | 3,143 MB | 1,377 MB |
+| solve time | 299.7 s | 314.0 s (+4.8%) | 87.4 s | 87.4 s |
+
+* The queued items were the missing half of the budget: a Case-2 child arrives with its own tableau (`TabSrc::Ready`),
+  which the 256 MiB budget of section 1 did not count. On pop_033 they held 3.2 GB of the 9.1 GB. They now count against
+  the same budget (`ready_bytes`); a child whose owned tableau does not fit is queued without it and rebuilds it when
+  popped. The default budget is now 512 MiB for parents and owned tableaux together.
+* 256 MiB for both costs more time for no memory: pop_033 355 s (+18%) at the same peak as 314 s for 512 MiB; the peak
+  is the stored regions, not the search.
+* **pop_033: 9.1 GB to 3.5 GB (-61%) at +4.8% time, against `graph`'s 3.2 GB.** pop_002: 3.14 GB to 1.38 GB (-56%) at
+  +0.0% time, against `graph`'s 0.93 GB. The sorted active sets are identical to the unbudgeted run on both (pop_002
+  `cb70fefe84cd4bd8`, pop_033 `1adc7e3c8d0b4eb3`).
+* What remains above `graph` is the 512 MiB of tableaux and a queue of a few hundred MB; lowering the budget trades time
+  for it. Cutting the stored bytes needs a change of `CriticalRegion` (one allocation per region instead of eleven would
+  save about 240 B of 3.3 KB, 7%), which is not a local change.
+
+### The very large problems
+
+| problem | solver | outcome |
+|---|---|---|
+| pop_036 | `mplcp` before the budget | killed at 32.7 GB after 31 min |
+| pop_036 | `graph` | killed at 26.6 GB after 35 min |
+| pop_036 | `mplcp` now, 48 GB request | **solved: 6,655,636 regions, 3,299 s, 123.7 M facet rows**; `region_hash` peak 35.9 GB (includes the hash copy of all rows, about 9 GB); 6,666,880 `Seen` entries (669 MB), peak queue 2.65 M items (1.0 GB) |
+| pop_095 | `mplcp` before the budget | killed at 32.7 GB after 41 min |
+| pop_095 | `graph` | not finished: 10,500 s timeout at 25.1 GB |
+| pop_095 | `mplcp` now, 48 GB request | **solved: 5,012,492 regions, 40 min wall (job), peak resident 18.3 GB (`region_bytes`, no hash copy), 3,447 B of stored fields per region, 3.6 KB resident growth per region** |
+
+### Correctness caveat of the rebuild path
+
+Dropping a tableau and rebuilding it from the active set is exact only in exact arithmetic. With `MPLCP_TAB_BUDGET=1000000`
+(every child rebuilt) the sorted active sets differ from the unbudgeted run on `masses4_N4` and `masses5_N3` (1 to 3
+sliver regions) and on **`pop_001`: 3,529 regions become 4,710, with 9,009 of 13,497 sampled points inside two regions**
+(2,354 regions share their law with another). Still present after merging the `tableau_for` fix (ddf0aa8). Bisection on
+pop_001 with `MPLCP_TAB_BUDGET=1000000`: dropping only the owned (Case-2) tableaux gives 3,529 regions; dropping only the
+lazily pivoted children gives 4,710. Rebuilding those children with `tableau_of` when they are popped (`TabSrc::None`)
+gives 4,710, but rebuilding the same tableau when they are queued (`TabSrc::Ready(tableau_of(...))`) gives 3,529, as does
+replacing the pivoted tableau by the rebuilt one inside `resolve` (rows and columns of the two tableaux are in the same order
+in all 2,389 pairs compared), and `REFACTOR = 1` (3,529). It is not the entry-facet skip and not the depth counter, and I did not find the cause. The budget only triggers beyond 512 MiB of tableaux, which no problem
+below pop_001 size reaches, and on pop_002 and pop_033 (past the budget) the sets equal the unbudgeted run, but a large
+twin-row problem could be affected.
+
+### Gates for this change
+
+* Region hashes and sorted-set hashes, branch (u1 = 3ca21bf) against main 9a9664a: identical on 58 of 58 problems.
+  Default budget against no budget (`MPLCP_TAB_BUDGET=0`) on the merged tree, 58 problems: identical.
+* Paired serial timing, u1 against main, 14 problems at 2 to 16 parameters, 5 alternations, A/A geometric mean 1.0005:
+  geometric mean 0.9985 (per problem 0.986 to 1.013): the accounting costs nothing below the budget.
