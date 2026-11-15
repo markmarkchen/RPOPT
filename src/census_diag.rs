@@ -143,6 +143,9 @@ pub mod s {
     pub const PF_SETUP_NS: usize = 227; // Plcp::new
     pub const PF_INIT_NS: usize = 228; // initial_region
     pub const PF_LOOP_NS: usize = 229; // the exploration loop of pivot_solve
+    pub const PF_CLIP_NS: usize = 230; // clip_flags, all calls (nt <= 5)
+    pub const PF_CLIP_FAIL_NS: usize = 231; // clip_flags calls that returned None
+    pub const PF_CLIP_FAILS: usize = 232;
     // Clarkson simulation, variant A (seed: parameter-set rows) at SIM_A, variant B (A + entry + parent's kept rows) at SIM_B
     pub const SIM_A: usize = 50;
     pub const SIM_B: usize = 62;

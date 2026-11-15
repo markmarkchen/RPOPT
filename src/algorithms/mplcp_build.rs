@@ -85,7 +85,18 @@ pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Opti
     // ties broken by the row index: the order of the stable sort
     order.sort_unstable_by(|&x, &y| slack[x].partial_cmp(&slack[y]).unwrap_or(Ordering::Equal).then(x.cmp(&y)));
     let verts: Option<Vec<f64>>;
-    let flags: Vec<bool> = match clip_flags(&e, &f, &order, &blo, &bhi, want_verts) {
+    #[cfg(feature = "lp_census")]
+    let _tclip = crate::census_diag::t0();
+    let clip_res = clip_flags(&e, &f, &order, &blo, &bhi, want_verts);
+    #[cfg(feature = "lp_census")]
+    {
+        crate::census_diag::lap(crate::census_diag::s::PF_CLIP_NS, _tclip);
+        if clip_res.is_none() && nt <= 5 {
+            crate::census_diag::lap(crate::census_diag::s::PF_CLIP_FAIL_NS, _tclip);
+            crate::census_diag::add(crate::census_diag::s::PF_CLIP_FAILS, 1);
+        }
+    }
+    let flags: Vec<bool> = match clip_res {
         Some((fl, vt)) => {
             verts = if want_verts { Some(vt) } else { None };
             fl.iter().enumerate().map(|(p, &v)| if v >= 0 { v == 1 } else { crate::solver::lp::lp_feasible_from(&e, &f, &[p], &center) }).collect()
