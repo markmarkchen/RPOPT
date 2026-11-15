@@ -569,6 +569,7 @@ mod imp {
     /// Zeroes every thread's statistics.
     pub fn reset() {
         flush_groups();
+        tested_reset();
         for s in REGISTRY.lock().unwrap().iter() {
             *s.lock().unwrap() = Stats::default();
         }
