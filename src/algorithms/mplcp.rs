@@ -509,41 +509,62 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
         let mut children: Vec<Frame> = vec![];
         let mut cycled = false;
         crate::census_skip!(cm);
-        for &l in &pset {
+        // the rows of P scaled by 1/a, once for all pairs: R[pi][k] = rfull(j, k) / a[j] (the same division the
+        // pairwise differences below used), and the largest |R| over the first 1 + d1 entries
+        let ww = w + n;
+        let mut rs: Vec<f64> = Vec::with_capacity(pset.len() * ww);
+        let mut rmax: Vec<f64> = Vec::with_capacity(pset.len());
+        for &j in &pset {
+            let start = rs.len();
+            rs.extend((0..ww).map(|k| rfull(j, k) / a[j]));
+            rmax.push(rs[start..start + 1 + d1].iter().fold(0.0f64, |m, v| m.max(v.abs())));
+        }
+        // cut rows of the pairs, staged until the branch survives its lexicographic tests
+        let mut cut_rows: Vec<f64> = vec![];
+        let mut cut_rhs: Vec<f64> = vec![];
+        let mut lexv: Vec<f64> = Vec::with_capacity(1 + n);
+        crate::census_lap!(cm, Gamma);
+        for (pl, &l) in pset.iter().enumerate() {
             crate::census_bump!(PfBranches, 1);
             let leaving = tab.row_var[l];
             // lexico-inequalities (16): Γ_j = a_l row_j - a_j row_l  ⪰ 0 for all j in P. Γ_j scales
             // with a_l a_j (1e-20 for rows with a near PTOL), so the tolerances are applied to the
             // scale-free Γ_j / (a_l a_j) = row_j / a_j - row_l / a_l instead.
             let mut ok = true;
-            let mut ef = fpoly.ef.clone();
-            let mut ff = fpoly.ff.to_vec();
-            for &j in &pset {
+            cut_rows.clear();
+            cut_rhs.clear();
+            let rl = &rs[pl * ww..(pl + 1) * ww];
+            for (pj, &j) in pset.iter().enumerate() {
                 if j == l {
                     continue;
                 }
-                let g: Vec<f64> = (0..w + n).map(|k| rfull(j, k) / a[j] - rfull(l, k) / a[l]).collect();
-                let gsc = 1.0 + (0..1 + d1).fold(0.0f64, |m, k| m.max((rfull(j, k) / a[j]).abs()).max((rfull(l, k) / a[l]).abs()));
-                let gq_zero = g[1..1 + d1].iter().all(|v| v.abs() <= ZTOL * gsc);
+                let rj = &rs[pj * ww..(pj + 1) * ww];
+                let gsc = 1.0 + rmax[pj].max(rmax[pl]);
+                let gq_zero = (1..1 + d1).all(|k| (rj[k] - rl[k]).abs() <= ZTOL * gsc);
                 if gq_zero {
-                    let mut v = vec![g[0]];
-                    v.extend_from_slice(&g[1 + d1..]);
-                    if !lex_nonneg_rel(&v) {
+                    lexv.clear();
+                    lexv.push(rj[0] - rl[0]);
+                    lexv.extend((1 + d1..ww).map(|k| rj[k] - rl[k]));
+                    if !lex_nonneg_rel(&lexv) {
                         ok = false;
                         break;
                     }
                 } else {
                     // g0 + g_q θ_f >= 0  ->  -g_q θ_f <= g0
-                    let nrm = g[1..1 + d1].iter().map(|v| v * v).sum::<f64>().sqrt();
-                    let row: Vec<f64> = g[1..1 + d1].iter().map(|v| -v / nrm).collect();
-                    ef.push_row(&row);
-                    ff.push(g[0] / nrm);
+                    let nrm = (1..1 + d1).map(|k| (rj[k] - rl[k]) * (rj[k] - rl[k])).sum::<f64>().sqrt();
+                    cut_rows.extend((1..1 + d1).map(|k| -(rj[k] - rl[k]) / nrm));
+                    cut_rhs.push((rj[0] - rl[0]) / nrm);
                 }
             }
             crate::census_lap!(cm, Gamma);
             if !ok {
                 crate::census_bump!(PfLexCut, 1);
                 continue;
+            }
+            let (mut ef, mut ff) = (fpoly.ef.clone(), fpoly.ff.to_vec());
+            for (r, &f) in cut_rows.chunks(d1.max(1)).zip(&cut_rhs) {
+                ef.push_row(r);
+                ff.push(f);
             }
             // a leaf branch (alpha leaves: the next basis is complementary and the walk returns it)
             // whose active set is known is dropped by the caller anyway: skip its Chebyshev LP
