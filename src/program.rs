@@ -1076,7 +1076,7 @@ impl MpProgram {
         crate::census_purpose!(Init);
         crate::stats::lp(1);
         let (pa, pb) = self.xtheta_polytope();
-        chebyshev_ball(&pa, &pb, &self.equality_indices)
+        chebyshev_ball(&pa, &pb, &self.equality_indices).or_else(|| chebyshev_ball_interior_point(&pa, &pb, &self.equality_indices))
     }
 
     pub fn feasible_theta_point(&self) -> Option<Vec<f64>> {
@@ -1102,7 +1102,13 @@ impl MpProgram {
                 }
             }
         }
-        None
+        // With many parameters the cube [c - r, c + r]^p lies almost entirely outside the feasible
+        // set (the inscribed ball fills about 4e-6 of it at p = 16), so the samples above all miss.
+        // Fall back to the centre and to points inside the ball, which are feasible by construction.
+        ball_points(center, radius, rng).find_map(|test| {
+            let sol = self.solve_theta(&test)?;
+            (sol.active_set.len() <= nx && crate::linalg::is_full_rank_rows(&self.a, &sol.active_set)).then_some(sol.active_set)
+        })
     }
 
     /// Random walk in θ (PPOPT `sample_theta_space`); returns the distinct active sets found.
@@ -1211,6 +1217,52 @@ pub fn standard_normal<R: Rng>(rng: &mut R) -> f64 {
     let u1: f64 = rng.r#gen::<f64>().max(1e-300);
     let u2: f64 = rng.r#gen::<f64>();
     (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos()
+}
+
+/// The centre, then 500 points drawn uniformly from the ball of radius `radius` around it (a
+/// Gaussian direction scaled by radius·u^(1/p)). Every point lies in the Chebyshev ball of the
+/// feasible set, so every parameter it yields is feasible.
+pub(crate) fn ball_points<'a, R: Rng>(center: &'a [f64], radius: f64, rng: &'a mut R) -> impl Iterator<Item = Vec<f64>> + 'a {
+    let p = center.len();
+    std::iter::once(center.to_vec()).chain((0..500).map(move |_| {
+        let dir: Vec<f64> = (0..p).map(|_| standard_normal(rng)).collect();
+        let dn = crate::linalg::norm(&dir).max(1e-300);
+        let s = radius * rng.r#gen::<f64>().powf(1.0 / p.max(1) as f64);
+        center.iter().zip(&dir).map(|(c, d)| c + s * d / dn).collect()
+    }))
+}
+
+/// Chebyshev ball of {x : A x <= b, A[eq] x = b[eq]} by the Clarabel interior-point solver, the
+/// fallback when the dense simplex returns no verified point. On masses8_N2 (16 parameters) the
+/// simplex stops at a basis whose point violates one row by 1.1e-8, which its 1e-9 check rejects,
+/// so no solver found a start region. The point returned here is checked against every row with
+/// a tolerance of 1e-9 (1 + |b|), and the radius is reduced by 1e-7 to leave a margin.
+fn chebyshev_ball_interior_point(a: &Mat, b: &[f64], eq: &[usize]) -> Option<crate::solver::lp::LpSolution> {
+    let (n, m) = (a.cols, a.rows);
+    let mut lp = crate::solver::sparse_lp::SparseLp::new(n + 1);
+    lp.c[n] = -1.0;
+    for i in 0..m {
+        let row = a.row(i);
+        let mut terms: Vec<(usize, f64)> = row.iter().copied().enumerate().collect();
+        if eq.contains(&i) {
+            lp.add_eq(&terms, b[i]);
+        } else {
+            terms.push((n, crate::linalg::norm(row)));
+            lp.add_le(&terms, b[i]);
+        }
+    }
+    lp.add_le(&[(n, -1.0)], 0.0);
+    let mut x = lp.solve()?;
+    x[n] = (x[n] - 1e-7).max(0.0);
+    for i in 0..m {
+        let ax: f64 = a.row(i).iter().zip(&x[..n]).map(|(u, v)| u * v).sum();
+        let tol = 1e-9 * (1.0 + b[i].abs());
+        if (eq.contains(&i) && (ax - b[i]).abs() > tol) || ax > b[i] + tol {
+            return None;
+        }
+    }
+    let obj = -x[n];
+    Some(crate::solver::lp::LpSolution { x, obj, dual: vec![], slack: vec![], active_set: vec![] })
 }
 
 /// Pseudo-inverse A' (A A')^-1 of a well-conditioned full-row-rank matrix (k < n) through a

@@ -285,6 +285,14 @@ LARGE = {
     'masses5_N4': lambda m: oscillating_masses(4, n_masses=5, model_out=m),
 }
 
+# Above 10 parameters (`--highdim`, written to problems_highdim): the large suite stops at 10. Short horizons keep
+# the region counts small enough for every solver to finish.
+HIGHDIM = {
+    'masses6_N2': lambda m: oscillating_masses(2, n_masses=6, model_out=m),
+    'masses7_N2': lambda m: oscillating_masses(2, n_masses=7, model_out=m),
+    'masses8_N2': lambda m: oscillating_masses(2, n_masses=8, model_out=m),
+}
+
 
 def model_to_json(model):
     out = {}
@@ -296,10 +304,11 @@ def model_to_json(model):
 if __name__ == '__main__':
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
     large = '--large' in sys.argv
-    out_dir = Path(args[0] if args else ('problems_large' if large else 'problems'))
+    highdim = '--highdim' in sys.argv
+    out_dir = Path(args[0] if args else ('problems_highdim' if highdim else 'problems_large' if large else 'problems'))
     out_dir.mkdir(parents=True, exist_ok=True)
-    if large:
-        for name, builder in LARGE.items():
+    if large or highdim:
+        for name, builder in (HIGHDIM if highdim else LARGE).items():
             model = {}
             prob = builder(model)
             with open(out_dir / f'{name}.json', 'w') as fh:
