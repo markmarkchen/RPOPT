@@ -504,6 +504,16 @@ Bugs found and fixed while porting:
   is lexico-infeasible and the fallback start (and, in `pop_001`, a facet pivot) can land on one. `mplcp` now
   replaces a lexico-infeasible start by the lexicographic Lemke basis at the start region's Chebyshev center
   (`lex_feasible_start`) and drops lexico-infeasible regions at the end (`drop_lex_infeasible`).
+- **No start region above 15 parameters.** On `masses8_N2` (16 parameters, `bench/problems_highdim`) every solver
+  that walks from a start region (`mplcp`, `graph`, `geometric`, `combinatorial_graph`, `parametric_daqp`) returned no
+  regions; only the enumeration solvers found the 394. There were two causes:
+  - the feasible-space Chebyshev LP stopped at a point violating one row by 1.1e-8, which the simplex's 1e-9 check
+    rejected;
+  - the start samplers drew from the cube around the centre, which at 16 parameters lies almost entirely outside
+    the feasible set.
+
+  That one LP now falls back to Clarabel, and the samplers fall back to the centre and to points in the Chebyshev
+  ball. Both run only where the old code found nothing, so problems that already worked are unchanged.
 - **Dense LP on larger problems.** It reported false infeasibility (from 48 variables up) because the anti-cycling
   rule switched on too early. This is fixed: decisions now match Clarabel up to 192 variables.
 - **Parameter bounding box.** When constraint processing drops parameter bounds as redundant, the box now falls
@@ -548,7 +558,8 @@ src/
 examples/               profiling, LP replay, coverage, I/O, DP, MPR, approximation and sequence benchmarks
 tests/                  integration tests: all/ (one module per method or feature, one binary) and two
                         separate binaries that flip a process-wide switch
-bench/                  problem generators (problems: mpQP MPC, problems_lp: mpLP MPC, problems_large),
+bench/                  problem generators (problems: mpQP MPC, problems_lp: mpLP MPC, problems_large,
+                        problems_highdim: mpQP at 12 to 16 parameters),
                         PPOPT runner, comparison scripts, results (see bench/README.md)
 python/                 rpopt-py, the PPOPT-compatible Python bindings
 docs/                   technical-report (algorithms, speed techniques, benchmarks, results) and
