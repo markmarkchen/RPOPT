@@ -29,6 +29,13 @@ fn main() {
     let a: Vec<String> = std::env::args().collect();
     let alg = MpqpAlgorithm::from_name(&a[1]).expect("algorithm");
     let ns: usize = a[2].parse().unwrap();
+    // MPLCP_TAB_BUDGET=<bytes> and MPLCP_NO_DAQP=1 as in region_hash
+    if let Some(b) = std::env::var("MPLCP_TAB_BUDGET").ok().and_then(|v| v.parse().ok()) {
+        rpopt::algorithms::mplcp::set_tab_budget(b);
+    }
+    if std::env::var("MPLCP_NO_DAQP").is_ok() {
+        rpopt::algorithms::mplcp::set_daqp_tests(false);
+    }
     for f in &a[3..] {
         let prog = Arc::new(MpProgram::from_json_file(std::path::Path::new(f)).unwrap());
         let sol = solve_mpqp(&prog, alg);
