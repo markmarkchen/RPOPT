@@ -1,5 +1,12 @@
 # mplcp: scale-free "nonzero pivot" test in the Case-1 fast path
 
+> **Correction (tableau rebuild fix, 55e352a).** The timings below (sections "Serial time" and the gate of 04d4ca9) were taken with a
+> defect that skipped part of the exploration: `tableau_for` refused a pivot below an absolute 1e-11, so the children that
+> the relative-pivot toggle hands over as a basis only (`Nbr::Z`) could not rebuild their tableau when popped, and their neighbour search was
+> skipped silently. On the masses family that was 12 to 26 percent of the regions (see "Skipped neighbour searches"), so part of
+> the speed-up reported for masses from 6 parameters came from skipped work. The restated gain is in the last section; the figures
+> in the body are kept as measured and are superseded by it.
+
 Candidate: branch `worktree-agent-a2cd0480ac0fec818` (solver change 17f22f4, tree 196e78f for the measured binaries) against main
 c345cdc. Release profile, Negishi (AMD EPYC 7763), serial, 1 CPU per task, 111 problems of 2 to 16 parameters (the set of
 `mplcp_goal_status.md`), minus `masses5_N4`, `masses4_N5` and six large POP problems, which are reported apart.
@@ -338,3 +345,145 @@ masses5_N4 it has one sampled overlap (two of its regions contain the same feasi
 `bench/results/` has no per-task logs; the arrays were Negishi jobs 45895899 (hash and coverage), 45895900 (paired timing),
 45895901 (masses), 45897253 and 45897343 (census of the candidate and of main) and 45897389 (variants). Run
 `examples/lexcheck` (`LEX_ALG=graph` for the other solver), `examples/alg_time`, `examples/lp_census --features lp_census`.
+
+## Skipped neighbour searches and the true gain (tableau rebuild fix, 55e352a)
+
+**The defect.** When a region is popped without a tableau (`TabSrc::None`: the initial region, children beyond the 256 MiB tableau
+budget, and the `Nbr::Z` children of the relative toggle), `resolve` rebuilds it from the active set with `tableau_for`, which refused any
+pivot below an absolute 1e-11. The diagonal of M = A Q^-1 A' runs from 5e-13 to 5e2 on the masses family, so rows of small scale were
+refused although their pivot is a healthy fraction of M_ii (Lean finding 16, point 3). `resolve` then returned `None` and
+`pivot_solve` continued silently: the region is kept, its neighbours are not searched, and they are found only if another facet reaches them.
+
+**Counts before the fix** (census solve of main with the counters, 89514f1; counters `ResolveNone` = regions popped without a tableau,
+`TabRefuse` = refusals, `TabRefuseRel` = refusals whose pivot is above 1e-6 times M_ii; default tableau budget, one solve each):
+
+| problem | regions | ResolveNone | share | TabRefuse | TabRefuseRel |
+|---|---:|---:|---:|---:|---:|
+| masses4_N2 | 325 | 65 | 20% | 198 | 158 |
+| masses4_N3 | 2891 | 450 | 16% | 2061 | 1156 |
+| masses4_N4 | 16054 | 2059 | 13% | 14440 | 5601 |
+| masses5_N2 | 369 | 89 | 24% | 311 | 261 |
+| masses5_N3 | 5067 | 1340 | 26% | 7536 | 4588 |
+| masses6_N2 | 379 | 89 | 23% | 300 | 267 |
+| masses7_N2 | 389 | 95 | 24% | 327 | 282 |
+| masses8_N2 | 395 | 99 | 25% | 304 | 273 |
+| pop_001 | 3529 | 6 | 0.2% | 15 | 2 |
+
+`ResolveNone` is 0 on the other 102 goal-status problems, on masses3_N2 to N7, and on pop_002 (default budget; 321026 regions, 28
+refusals, all inside `candidate_law`). With the tableau budget set to 1, masses3_N4 and masses3_N5 still show 0 and masses4_N4 2098:
+the budget rebuilds are not the source on the problems measured.
+
+**The fix.** `tableau_for` refuses a pivot only below `1e-11 * min(M_ii, 1)` (unchanged for rows of scale 1 and above), and a basis
+that fails in the given order is tried again with the largest remaining pivot (relative to M_ii) first; `candidate_law`'s one-pivot step uses
+the same scale. After it `ResolveNone` and `TabRefuseRel` are 0 on all 114 census runs (the 111 problems and masses3_N4, masses3_N5,
+masses4_N4 at budget 1) and the second pivot order was never needed (`TabRescued` 0): the relative floor alone removes the refusals.
+The refusals that remain (59432 over the 114 runs, nearly all in `candidate_law`'s fresh-tableau path) are bases whose pivot is below
+1e-6 times M_ii, a real near-singularity; no region is kept without a search (`ResolveNone` 0).
+
+**Regions and coverage** (`lexcheck`, 3000 samples on all 111 problems; the fix against main before it):
+
+3000 samples: 111 problems, identical hash 92, differ 19, new with gap/overlap/lex-infeasible: 0
+| problem | params | regions before | regions after | gaps | overlaps | lex-infeasible |
+|---|---:|---:|---:|---:|---:|---:|
+| pop_001 | 5 | 3529 | 3529 (+0) | 0 | 0 | 0 |
+| pop_012 | 5 | 1047 | 1047 (+0) | 0 | 0 | 0 |
+| pop_088 | 5 | 62318 | 62318 (+0) | 0 | 0 | 0 |
+| masses3_N2 | 6 | 169 | 169 (+0) | 0 | 0 | 0 |
+| masses3_N3 | 6 | 955 | 955 (+0) | 0 | 0 | 0 |
+| masses3_N4 | 6 | 3643 | 3643 (+0) | 0 | 0 | 0 |
+| masses3_N5 | 6 | 10436 | 10436 (+0) | 0 | 0 | 0 |
+| masses3_N6 | 6 | 22143 | 22143 (+0) | 0 | 0 | 0 |
+| masses3_N7 | 6 | 38327 | 38326 (-1) | 0 | 0 | 0 |
+| rand_t6_x6_m24_s0 | 6 | 17134 | 17134 (+0) | 0 | 0 | 0 |
+| masses4_N2 | 8 | 325 | 327 (+2) | 0 | 0 | 0 |
+| masses4_N3 | 8 | 2891 | 2947 (+56) | 0 | 0 | 0 |
+| masses4_N4 | 8 | 16054 | 16312 (+258) | 0 | 0 | 0 |
+| pop_047 | 8 | 48144 | 48144 (+0) | 0 | 0 | 0 |
+| masses5_N2 | 10 | 369 | 373 (+4) | 0 | 0 | 0 |
+| masses5_N3 | 10 | 5067 | 5268 (+201) | 0 | 0 | 0 |
+| masses6_N2 | 12 | 379 | 383 (+4) | 0 | 0 | 0 |
+| masses7_N2 | 14 | 389 | 393 (+4) | 0 | 0 | 0 |
+| masses8_N2 | 16 | 395 | 399 (+4) | 0 | 0 | 0 |
+
+20000 samples on the problems where the counter fired:
+
+20000 samples:
+| problem | params | regions before | regions after | feasible samples | gaps before | gaps after | overlaps before | overlaps after | lex-infeasible after |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| masses4_N2 | 8 | 325 | 327 | 4327 | 0 | 0 | 0 | 0 | 0 |
+| masses4_N3 | 8 | 2891 | 2947 | 3351 | 0 | 0 | 0 | 0 | 0 |
+| masses4_N4 | 8 | 16054 | 16312 | 2864 | 0 | 0 | 0 | 0 | 0 |
+| masses5_N2 | 10 | 369 | 373 | 2848 | 0 | 0 | 0 | 0 | 0 |
+| masses5_N3 | 10 | 5067 | 5268 | 2014 | 0 | 0 | 0 | 0 | 0 |
+| masses6_N2 | 12 | 379 | 383 | 1847 | 0 | 0 | 0 | 0 | 0 |
+| masses7_N2 | 14 | 389 | 393 | 1258 | 0 | 0 | 0 | 0 | 0 |
+| masses8_N2 | 16 | 395 | 399 | 861 | 0 | 0 | 0 | 0 | 0 |
+| pop_001 | 5 | 3529 | 3529 | 9018 | 0 | 0 | 0 | 0 | 0 |
+
+The fix has 0 gaps, 0 overlaps and 0 lexico-infeasible regions on all 111 problems at 3000 samples and on the nine problems at 20000.
+The sampled coverage was clean before the fix too (0 gaps), so it cannot tell the missing regions apart: they are slivers
+of small volume. Their evidence is that the regions found are lexico-feasible (count 0 of the others) and overlap-free, and
+that the search is now complete by construction (`ResolveNone` 0). Budget 1 against default budget (regions, before and after):
+
+budget = 1 (3000 samples), regions: default budget before / default after / budget 1 before / budget 1 after
+masses3_N4 3643 3643 3643 3643 hash default==budget1 (after): False gaps/ov/lex after b1: 0 0 0
+masses3_N5 10436 10436 10436 10436 hash default==budget1 (after): False gaps/ov/lex after b1: 0 0 0
+masses4_N4 16054 16312 16051 16313 hash default==budget1 (after): False gaps/ov/lex after b1: 0 0 0
+
+
+so the 1 to 4 slivers that budget = 1 lost on masses4_N4 now differ by one. The hash of the budget-1 run still differs from
+the default-budget run at the sliver boundary (equal counts on masses3_N4 and masses3_N5).
+
+**Serial time, restated** (paired, 148 tasks, 3 to 7 alternations; per task c345cdc, main before this fix, the fix and a copy of main as
+A/A, shuffled; geometric mean of the problems' median ratios):
+
+| group | problems | main (before the fix) / c345cdc | fix / c345cdc | fix / main | A/A (main vs copy) |
+|---|---:|---:|---:|---:|---|
+| masses, all | 21 | 0.732 | 0.862 | 1.178 | 0.999 (0.990 to 1.007) |
+| masses 2-5 params | 7 | 1.014 | 1.010 | 0.996 | 1.000 (0.995 to 1.005) |
+| masses 6+ params | 14 | 0.622 | 0.797 | 1.281 | 0.999 (0.990 to 1.007) |
+| 13 controls | 13 | 0.995 | 0.995 | 1.000 | 1.000 (0.989 to 1.011) |
+
+| params | problem | regions (c345cdc / main / fix) | c345cdc ms | main ms | fix ms | fix / c345cdc | fix / main | main / c345cdc | A/A | alternations |
+|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 2 | di_N10 | 11 / 11 / 11 | 0.15 | 0.15 | 0.15 | 1.040 | 1.000 | 1.034 | 0.993 | 7 |
+| 3 | sys3x2_N5 | 973 / 973 / 973 | 23.02 | 23.48 | 23.51 | 1.024 | 1.006 | 1.020 | 1.011 | 7 |
+| 4 | masses2_N10 | 6381 / 6381 / 6381 | 454.06 | 461.06 | 462.03 | 1.012 | 1.002 | 1.014 | 1.002 | 5 |
+| 4 | masses2_N12 | 12779 / 12779 / 12779 | 982.59 | 984.56 | 985.01 | 0.998 | 0.996 | 1.003 | 1.005 | 3 |
+| 4 | masses2_N4 | 307 / 307 / 307 | 13.18 | 13.39 | 13.29 | 1.013 | 0.997 | 1.015 | 0.997 | 7 |
+| 4 | masses2_N5 | 493 / 493 / 493 | 22.71 | 23.13 | 23.04 | 1.015 | 0.998 | 1.016 | 0.995 | 7 |
+| 4 | masses2_N6 | 901 / 901 / 901 | 45.01 | 46.84 | 46.08 | 1.023 | 0.991 | 1.037 | 0.996 | 7 |
+| 4 | masses2_N7 | 1641 / 1641 / 1641 | 86.92 | 87.37 | 86.68 | 1.003 | 0.989 | 1.006 | 1.000 | 5 |
+| 4 | masses2_N8 | 2837 / 2837 / 2837 | 156.21 | 158.26 | 157.63 | 1.009 | 1.000 | 1.009 | 1.005 | 5 |
+| 4 | pop_019 | 6857 / 6857 / 6857 | 2525.24 | 2495.80 | 2493.58 | 0.987 | 0.999 | 0.986 | 0.997 | 3 |
+| 4 | pop_043 | 899 / 899 / 899 | 38.03 | 38.03 | 37.88 | 1.000 | 1.000 | 1.000 | 1.007 | 7 |
+| 6 | masses3_N2 | 169 / 169 / 169 | 27.20 | 24.67 | 24.74 | 0.918 | 1.003 | 0.917 | 1.000 | 7 |
+| 6 | masses3_N3 | 955 / 955 / 955 | 305.97 | 226.48 | 226.10 | 0.739 | 0.999 | 0.740 | 0.995 | 5 |
+| 6 | masses3_N4 | 3643 / 3643 / 3643 | 2377.93 | 1506.90 | 1509.52 | 0.635 | 1.006 | 0.632 | 1.007 | 3 |
+| 6 | masses3_N5 | 10437 / 10436 / 10436 | 21787.30 | 11811.74 | 11791.85 | 0.541 | 0.998 | 0.542 | 0.996 | 3 |
+| 6 | masses3_N6 | 22145 / 22143 / 22143 | 58804.20 | 36677.87 | 36996.53 | 0.629 | 1.004 | 0.622 | 0.999 | 3 |
+| 6 | masses3_N7 | 38330 / 38327 / 38326 | 169798.92 | 100100.90 | 101294.59 | 0.598 | 1.012 | 0.590 | 0.990 | 3 |
+| 6 | pop_017 | 4142 / 4142 / 4142 | 525.17 | 525.54 | 529.56 | 1.009 | 1.008 | 1.000 | 1.002 | 5 |
+| 6 | pop_049 | 9341 / 9341 / 9341 | 1341.20 | 1349.31 | 1341.82 | 0.999 | 0.994 | 1.005 | 0.998 | 3 |
+| 7 | pop_005 | 10289 / 10289 / 10289 | 4504.60 | 4034.93 | 3981.68 | 0.883 | 0.987 | 0.896 | 0.989 | 3 |
+| 7 | pop_037 | 18615 / 18615 / 18615 | 3119.62 | 3091.43 | 3086.67 | 0.989 | 1.002 | 0.989 | 0.998 | 3 |
+| 8 | masses4_N2 | 325 / 325 / 327 | 144.35 | 115.31 | 147.47 | 1.022 | 1.276 | 0.799 | 0.998 | 5 |
+| 8 | masses4_N3 | 2891 / 2891 / 2947 | 3797.63 | 1940.04 | 3396.17 | 0.893 | 1.749 | 0.511 | 1.002 | 3 |
+| 8 | masses4_N4 | 16050 / 16054 / 16312 | 70379.05 | 34668.78 | 51570.59 | 0.730 | 1.488 | 0.494 | 0.992 | 3 |
+| 8 | pop_076 | 15006 / 15006 / 15006 | 4256.94 | 4246.50 | 4277.47 | 1.001 | 1.004 | 0.998 | 1.006 | 3 |
+| 8 | rand_t8_x5_m20_s0 | 4111 / 4111 / 4111 | 660.33 | 664.92 | 663.71 | 1.007 | 0.997 | 1.007 | 1.001 | 5 |
+| 10 | masses5_N2 | 370 / 369 / 373 | 381.30 | 266.82 | 296.66 | 0.778 | 1.111 | 0.699 | 0.999 | 5 |
+| 10 | masses5_N3 | 5060 / 5067 / 5268 | 30605.84 | 11445.96 | 25678.22 | 0.834 | 2.241 | 0.374 | 1.000 | 3 |
+| 10 | rand_t10_x5_m20_s0 | 6124 / 6124 / 6124 | 1675.04 | 1684.28 | 1682.45 | 1.005 | 1.000 | 1.005 | 1.001 | 3 |
+| 12 | masses6_N2 | 380 / 379 / 383 | 741.53 | 416.08 | 712.51 | 0.957 | 1.709 | 0.560 | 1.005 | 5 |
+| 14 | masses7_N2 | 390 / 389 / 393 | 1127.42 | 784.57 | 922.59 | 0.818 | 1.171 | 0.698 | 0.992 | 3 |
+| 14 | rand_t14_x5_m15_s0 | 2470 / 2470 / 2470 | 1333.47 | 1328.64 | 1330.96 | 0.998 | 1.002 | 0.996 | 1.000 | 3 |
+| 16 | masses8_N2 | 395 / 395 / 399 | 1592.72 | 1178.57 | 2234.02 | 1.403 | 1.894 | 0.741 | 1.005 | 3 |
+| 16 | rand_t16_x5_m15_s0 | 1876 / 1876 / 1876 | 1411.01 | 1402.82 | 1418.73 | 1.005 | 1.001 | 1.003 | 0.999 | 3 |
+
+
+The gain of the scale-free work on masses from 6 parameters is **0.797** of c345cdc (the 0.622 of main before this fix included the
+skipped searches), with the largest problems keeping a clear gain (masses3_N7 0.598, masses3_N5 0.541, masses3_N6 0.629, masses4_N4
+0.730, masses5_N3 0.834, masses3_N4 0.635) and the high-parameter ones losing it: masses8_N2 is 1.403 of c345cdc, masses6_N2 0.957,
+masses4_N2 1.022, masses4_N3 0.893. The 2 to 5 parameter masses problems (1.010) and the 13 controls (0.995) are unchanged.
+Tests: 144 passed, 0 failed, 3 ignored on the fixed tree (ci tag `tabfix`, job 45904258).
