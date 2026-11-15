@@ -57,6 +57,11 @@ caveats: [Performance](#performance).</sub>
 - **Robust on degenerate problems.** RPOPT closes holes that facet stepping (as implemented in PPOPT) leaves at
   degenerate points. On degenerate mpLPs, every RPOPT exact solver returns a gap-free partition; PPOPT's geometric
   and graph solvers leave 10% to 77% of the feasible parameter set uncovered on most of them.
+- **Duplicate rows merged.** Rows of `[A | F | b]` that are equal after scaling are merged during preprocessing (an
+  equality replaces an inequality it duplicates). The enumerating methods no longer report a region once per copy
+  on POP problems that repeat their variable bounds (pop_010, 052, 071, 081, 093).
+- **Weakly active constraints.** For mpQPs, a region labelled `A \ {i}` is dropped when the region labelled `A` has
+  the same law and `lambda_i = 0` on it, so one region is reported once (pop_031: 4 regions, as POP v1.5).
 - **Exact mixed-integer comparison.** mp-MIQP solutions with quadric region boundaries (Oberdieck and
   Pistikopoulos 2015), in addition to PPOPT's overlapping enumeration.
 - **Fast online evaluation.** Point location takes 9 to 32 ns per query with a hash table built to a storage
