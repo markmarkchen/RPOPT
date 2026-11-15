@@ -122,6 +122,21 @@ pub mod s {
     pub const SH_SV_TD: usize = 157;
     pub const SH_LPKEEP_ROWS: usize = 158;
     pub const SH_SETTLED: usize = 159;
+    // Farkas certificates: 4 variants, 8 slots each
+    pub const FK_BASE: usize = 170;
+    pub const FK_STRIDE: usize = 8;
+    // offsets: 0 tested prop-box rows, 1 caught, 2 tested exact-box rows, 3 caught, 4 tested LP-dropped rows, 5 caught, 6 ns, 7 calls
+    // ridge rule
+    pub const RG_CHILDREN: usize = 205;
+    pub const RG_PTS: usize = 206;
+    pub const RG_RIDGE: usize = 207;
+    pub const RG_UNIQUE: usize = 208;
+    pub const RG_UNIQUE_FACET: usize = 209;
+    pub const RG_UNIQUE_WRONG: usize = 210;
+    pub const RG_FACETS: usize = 211;
+    pub const RG_AMBIG: usize = 212;
+    pub const RG_AMBIG_WRONG: usize = 213;
+    pub const RG_NOENOUGH: usize = 214; // children whose shared points are fewer than d - 1
     // Clarkson simulation, variant A (seed: parameter-set rows) at SIM_A, variant B (A + entry + parent's kept rows) at SIM_B
     pub const SIM_A: usize = 50;
     pub const SIM_B: usize = 62;
@@ -387,6 +402,7 @@ fn box_study(e: &Mat, f: &[f64], center: &[f64], bx: &(Vec<f64>, Vec<f64>, Vec<V
         }
         if !feas.is_empty() {
             add(s::SH_ANY, 1);
+            SHARED.with(|c| *c.borrow_mut() = feas.iter().map(|x| (*x).clone()).collect());
             let t = Instant::now();
             let p0 = crate::census::piv_get();
             for j in 0..2 * n {
@@ -450,6 +466,7 @@ thread_local! {
     static HINT: RefCell<Option<Vec<f64>>> = const { RefCell::new(None) };
     static CLASSES: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
     static TABROWS: RefCell<Option<HashMap<(u8, usize), (Vec<f64>, f64)>>> = const { RefCell::new(None) };
+    static SHARED: RefCell<Vec<Vec<f64>>> = const { RefCell::new(Vec::new()) };
     static BOX: RefCell<Option<(Vec<f64>, Vec<f64>, Vec<Vec<f64>>)>> = const { RefCell::new(None) };
 }
 
@@ -468,6 +485,146 @@ pub fn set_entry(e: Option<&(Vec<f64>, f64)>, hint: Option<&[f64]>) {
 pub fn set_classes(c: Vec<u8>, bx: Option<(Vec<f64>, Vec<f64>, Vec<Vec<f64>>)>) {
     CLASSES.with(|p| *p.borrow_mut() = c);
     BOX.with(|p| *p.borrow_mut() = bx);
+}
+
+fn rank_aff(pts: &[&Vec<f64>]) -> usize {
+    if pts.is_empty() {
+        return 0;
+    }
+    let n = pts[0].len();
+    let scale = pts.iter().flat_map(|p| p.iter()).fold(1e-300f64, |a, v| a.max(v.abs()));
+    let mut q: Vec<Vec<f64>> = vec![];
+    for p in &pts[1..] {
+        let mut v: Vec<f64> = (0..n).map(|k| p[k] - pts[0][k]).collect();
+        for u in &q {
+            let c = dot(&v, u);
+            for k in 0..n {
+                v[k] -= c * u[k];
+            }
+        }
+        let nv = crate::linalg::norm(&v);
+        if nv > 1e-7 * scale {
+            for k in 0..n {
+                v[k] /= nv;
+            }
+            q.push(v);
+        }
+    }
+    q.len() + 1
+}
+
+/// Farkas certificates for the redundant rows and the ridge rule (count only).
+fn farkas_ridge(e: &Mat, f: &[f64], flags: &[bool], classes: &[u8], entry_p: Option<usize>, parent_kept: &[usize]) {
+    let (m, n) = (e.rows, e.cols);
+    let kept: Vec<usize> = (0..m).filter(|&p| flags[p]).collect();
+    let have = classes.len() == m;
+    for k in 0..m {
+        if flags[k] {
+            continue;
+        }
+        let cls = if have { classes[k] } else { 5 };
+        let slot = match cls {
+            0 => 0,
+            1 => 2,
+            _ => 4,
+        };
+        let ak = e.row(k);
+        // candidate supports
+        let mut by_cos: Vec<usize> = kept.clone();
+        by_cos.sort_by(|&a, &b| dot(e.row(b), ak).partial_cmp(&dot(e.row(a), ak)).unwrap_or(std::cmp::Ordering::Equal));
+        let sup1: Vec<usize> = by_cos.iter().copied().take(n).collect();
+        let sup2: Vec<usize> = by_cos.iter().copied().take(2 * n).collect();
+        let sup3: Vec<usize> = parent_kept.iter().copied().filter(|&p| p != k && flags[p]).collect();
+        let sup4: Vec<usize> = kept.clone();
+        for (v, sup) in [sup1, sup2, sup3, sup4].iter().enumerate() {
+            let base = s::FK_BASE + v * s::FK_STRIDE;
+            add(base + slot, 1);
+            if sup.is_empty() {
+                continue;
+            }
+            let t = Instant::now();
+            let caught = if v == 0 && sup.len() == n {
+                // square system A_S' lambda = a_k
+                let mut a = Mat::zeros(n, n);
+                for (j, &r) in sup.iter().enumerate() {
+                    for q in 0..n {
+                        a[(q, j)] = e[(r, q)];
+                    }
+                }
+                match crate::linalg::Lu::new(&a) {
+                    Some(lu) => {
+                        let lam = lu.solve(ak);
+                        let bsum: f64 = sup.iter().zip(&lam).map(|(&r, l)| l * f[r]).sum();
+                        lam.iter().all(|&l| l >= -1e-12) && bsum <= f[k] + 1e-9 * (1.0 + f[k].abs())
+                    }
+                    None => false,
+                }
+            } else {
+                // min b' lambda s.t. A_S' lambda = a_k, lambda >= 0
+                let q = sup.len();
+                let mut a = Mat::zeros(q + n, q);
+                let mut b = vec![0.0; q + n];
+                for j in 0..q {
+                    a[(j, j)] = -1.0;
+                }
+                for d in 0..n {
+                    for (j, &r) in sup.iter().enumerate() {
+                        a[(q + d, j)] = e[(r, d)];
+                    }
+                    b[q + d] = ak[d];
+                }
+                let eq: Vec<usize> = (q..q + n).collect();
+                let c: Vec<f64> = sup.iter().map(|&r| f[r]).collect();
+                match crate::solver::lp::solve_lp(Some(&c), &a, &b, &eq) {
+                    Some(sol) => sol.obj <= f[k] + 1e-9 * (1.0 + f[k].abs()),
+                    None => false,
+                }
+            };
+            add(base + 6, t.elapsed().as_nanos() as u64);
+            add(base + 7, 1);
+            if caught {
+                add(base + slot + 1, 1);
+            }
+        }
+    }
+    // ridge rule
+    let shared = SHARED.with(|c| std::mem::take(&mut *c.borrow_mut()));
+    if let Some(ep) = entry_p {
+        if !shared.is_empty() {
+            add(s::RG_CHILDREN, 1);
+            add(s::RG_PTS, shared.len() as u64);
+            if shared.len() + 1 < n {
+                add(s::RG_NOENOUGH, 1);
+            }
+            let tight: Vec<Vec<usize>> = (0..m).map(|r| (0..shared.len()).filter(|&i| (dot(e.row(r), &shared[i]) - f[r]).abs() <= 1e-9 * (1.0 + f[r].abs())).collect()).collect();
+            add(s::RG_FACETS, (0..m).filter(|&r| r != ep && flags[r]).count() as u64);
+            for r in 0..m {
+                if r == ep || tight[r].len() + 1 < n {
+                    continue;
+                }
+                let pts: Vec<&Vec<f64>> = tight[r].iter().map(|&i| &shared[i]).collect();
+                if rank_aff(&pts) + 1 < n {
+                    continue;
+                }
+                add(s::RG_RIDGE, 1);
+                // unique: no other row (besides the entry) is tight at the same affinely independent set, tested by any other row tight at all of these points
+                let dup = (0..m).any(|o| o != r && o != ep && tight[o].len() >= tight[r].len() && tight[r].iter().all(|i| tight[o].contains(i)));
+                if dup {
+                    add(s::RG_AMBIG, 1);
+                    if !flags[r] {
+                        add(s::RG_AMBIG_WRONG, 1);
+                    }
+                } else {
+                    add(s::RG_UNIQUE, 1);
+                    if flags[r] {
+                        add(s::RG_UNIQUE_FACET, 1);
+                    } else {
+                        add(s::RG_UNIQUE_WRONG, 1);
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn first_hit(e: &Mat, f: &[f64], c: &[f64], d: &[f64]) -> Option<(usize, f64, bool)> {
@@ -767,6 +924,18 @@ pub fn on_built(program: &crate::program::MpProgram, active_set: &[usize], e: &M
                 add(s::TABC_T0 + i, 1);
             }
         }
+    }
+    {
+        let pk: Vec<usize> = if let Some(pkey) = PARENT.with(|c| c.borrow().clone()) {
+            let st = STORE.get_or_init(|| Mutex::new(HashMap::new())).lock().unwrap();
+            match st.get(&pkey) {
+                Some(pr) => (0..m).filter(|&p| pr.verdict.get(&key[p]).copied().unwrap_or(false)).collect(),
+                None => vec![],
+            }
+        } else {
+            vec![]
+        };
+        farkas_ridge(e, f, flags, &classes, entry_p, &pk);
     }
     // hint margin
     if let Some(h) = HINT.with(|c| c.borrow().clone()) {

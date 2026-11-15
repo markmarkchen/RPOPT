@@ -837,5 +837,30 @@ fn build_study(rows: &[Row]) {
             g(r, d::SH_LPKEEP_ROWS) / any, pc(g(r, d::SH_SETTLED), g(r, d::SH_LPKEEP_ROWS)), g(r, d::SH_PTS_FEAS) / nn * nvar * 8.0 + 24.0
         );
     }
+    println!("\n### Build study 12: small Farkas certificates for the redundant rows (share caught, by how the row is decided today)\n");
+    println!("| problem | variant | rows decided by the propagated box (per region) | caught | rows decided by the exact box (per region) | caught | rows decided by a per-row LP (per region) | caught | us per test |");
+    println!("|---|---|---:|---:|---:|---:|---:|---:|---:|");
+    let names = ["d nearest kept rows (square solve)", "2d nearest kept rows (LP)", "parent's kept rows (LP)", "all kept rows (LP)"];
+    for r in &rs {
+        let reg = g(r, d::REG).max(1.0);
+        for (v, nm) in names.iter().enumerate() {
+            let b = d::FK_BASE + v * d::FK_STRIDE;
+            println!(
+                "| {} | {} | {:.1} | {} | {:.1} | {} | {:.1} | {} | {:.2} |",
+                r.problem, nm, g(r, b) / reg, pc(g(r, b + 1), g(r, b)), g(r, b + 2) / reg, pc(g(r, b + 3), g(r, b + 2)), g(r, b + 4) / reg, pc(g(r, b + 5), g(r, b + 4)), g(r, b + 6) / 1e3 / g(r, b + 7).max(1.0)
+            );
+        }
+    }
+    println!("\n### Build study 13: ridge rule on the shared-facet vertices (parent box vertices on the entry facet)\n");
+    println!("| problem | children with shared vertices | shared vertices per child | children with fewer than d - 1 | facets (not the entry) per child | rows with >= d - 1 affinely independent shared vertices tight | of which unique | unique and a facet | unique and NOT a facet | not unique | not unique and not a facet |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+    for r in &rs {
+        let c = g(r, d::RG_CHILDREN).max(1.0);
+        println!(
+            "| {} | {} | {:.2} | {} | {:.1} | {:.2} | {:.2} | {:.2} | {} | {:.2} | {} |",
+            r.problem, g(r, d::RG_CHILDREN), g(r, d::RG_PTS) / c, pc(g(r, d::RG_NOENOUGH), g(r, d::RG_CHILDREN)), g(r, d::RG_FACETS) / c, g(r, d::RG_RIDGE) / c, g(r, d::RG_UNIQUE) / c, g(r, d::RG_UNIQUE_FACET) / c,
+            g(r, d::RG_UNIQUE_WRONG), g(r, d::RG_AMBIG) / c, g(r, d::RG_AMBIG_WRONG)
+        );
+    }
     }
 }
