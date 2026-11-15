@@ -1052,7 +1052,7 @@ struct Cand {
 /// 4 (audit) apply to every count the vertex clip covers (2 to 6). At 2 parameters the problems are
 /// too small to repay the bookkeeping, and at 6 the check (many vertices per facet) can cost more
 /// than the search it saves (rand_t6_x5_m20_s0: 0.74x).
-static CERT: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+static CERT: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(1);
 
 /// Sets the facet-certificate mode of `Method::Pivot` and `Method::PivotParallel`: 0 off (the
 /// default: at 6 parameters it lost a real region on masses3_N4, and the stray overlapping regions of
