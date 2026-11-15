@@ -224,60 +224,37 @@ impl Tab {
     /// same operations as `clone` followed by `pivot`, without the copy of the untouched rows).
     /// `self` must have no pending pivot.
     fn pivoted(&self, r: usize, c: usize) -> Tab {
-        self.pivoted_into(r, c, None)
-    }
-
-    /// `pivoted`, reusing the buffers of the finished tableau `spare` (same dimensions) when given.
-    fn pivoted_into(&self, r: usize, c: usize, spare: Option<Tab>) -> Tab {
         debug_assert!(self.pend.is_none());
         let (n, nc, w) = (self.n, self.nc, self.w);
-        let inv = 1.0 / self.t[r * nc + c];
-        let (mut t, mut rho, mut row_var, mut col_var) = match spare {
-            Some(s) => (s.t, s.rho, s.row_var, s.col_var),
-            None => (Vec::new(), Vec::new(), Vec::new(), Vec::new()),
-        };
-        t.clear();
-        t.resize(n * nc, 0.0);
-        rho.clear();
-        rho.resize(n * w, 0.0);
-        row_var.clear();
-        row_var.extend_from_slice(&self.row_var);
-        col_var.clear();
-        col_var.extend_from_slice(&self.col_var);
-        {
-            let (tb, trest) = t.split_at_mut(r * nc);
-            let (trow, ta) = trest.split_at_mut(nc);
-            let (rb, rrest) = rho.split_at_mut(r * w);
-            let (rrow, ra) = rrest.split_at_mut(w);
-            for k in 0..nc {
-                trow[k] = if k == c { inv } else { -self.t[r * nc + k] * inv };
+        let p = self.t[r * nc + c];
+        let inv = 1.0 / p;
+        let fcol: Vec<f64> = (0..n).map(|i| self.t[i * nc + c]).collect();
+        let trow: Vec<f64> = (0..nc).map(|k| if k == c { inv } else { -self.t[r * nc + k] * inv }).collect();
+        let rrow: Vec<f64> = (0..w).map(|k| self.rho[r * w + k] * -inv).collect();
+        let tc = trow[c];
+        let mut t = Vec::with_capacity(n * nc);
+        let mut rho = Vec::with_capacity(n * w);
+        for i in 0..n {
+            let si = &self.t[i * nc..(i + 1) * nc];
+            let sr = &self.rho[i * w..(i + 1) * w];
+            if i == r {
+                t.extend_from_slice(&trow);
+                rho.extend_from_slice(&rrow);
+                continue;
             }
-            for k in 0..w {
-                rrow[k] = self.rho[r * w + k] * -inv;
+            let f = fcol[i];
+            if f == 0.0 {
+                t.extend_from_slice(si);
+                rho.extend_from_slice(sr);
+                continue;
             }
-            let tc = trow[c];
-            for i in 0..n {
-                if i == r {
-                    continue;
-                }
-                let (td, rd) = if i < r { (&mut tb[i * nc..(i + 1) * nc], &mut rb[i * w..(i + 1) * w]) } else { (&mut ta[(i - r - 1) * nc..(i - r) * nc], &mut ra[(i - r - 1) * w..(i - r) * w]) };
-                let si = &self.t[i * nc..(i + 1) * nc];
-                let sr = &self.rho[i * w..(i + 1) * w];
-                let f = self.t[i * nc + c];
-                if f == 0.0 {
-                    td.copy_from_slice(si);
-                    rd.copy_from_slice(sr);
-                    continue;
-                }
-                for ((d, o), s) in td.iter_mut().zip(si).zip(trow.iter()) {
-                    *d = o + f * s;
-                }
-                td[c] = f * tc;
-                for ((d, o), s) in rd.iter_mut().zip(sr).zip(rrow.iter()) {
-                    *d = o + f * s;
-                }
-            }
+            let start = t.len();
+            t.extend(si.iter().zip(trow.iter()).map(|(o, s)| o + f * s));
+            t[start + c] = f * tc;
+            rho.extend(sr.iter().zip(rrow.iter()).map(|(o, s)| o + f * s));
         }
+        let mut row_var = self.row_var.clone();
+        let mut col_var = self.col_var.clone();
         std::mem::swap(&mut row_var[r], &mut col_var[c]);
         Tab { n, nc, w, t, rho, row_var, col_var, pend: None }
     }
@@ -779,7 +756,7 @@ impl From<Option<Tab>> for TabSrc {
 
 impl TabSrc {
     /// The tableau, rebuilt from the active set of `cr` when there is none.
-    fn resolve(self, plcp: &Plcp, cr: &CriticalRegion, pool: &mut Vec<Tab>) -> Option<Tab> {
+    fn resolve(self, plcp: &Plcp, cr: &CriticalRegion) -> Option<Tab> {
         match self {
             TabSrc::Ready(t) => Some(t),
             TabSrc::Lazy(a, v, kk) => Some(match std::sync::Arc::try_unwrap(a) {
@@ -787,7 +764,7 @@ impl TabSrc {
                     t.pivot(v, kk);
                     t
                 }
-                Err(a) => a.pivoted_into(v, kk, pool.pop()),
+                Err(a) => a.pivoted(v, kk),
             }),
             TabSrc::None => tableau_of(plcp, cr),
         }
@@ -1051,12 +1028,10 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
     let mut queue: VecDeque<Item> = VecDeque::new();
     queue.push_back(Item { idx: 0, center: init_center, tab: TabSrc::None, depth: 0, entry: None });
     let mut ws: Option<Tab> = None;
-    // finished tableaux whose buffers the next copying pivot reuses
-    let mut pool: Vec<Tab> = vec![];
     let mut pending: Vec<(CriticalRegion, Option<Vec<f64>>, Option<(usize, usize)>, Option<Tab>, Option<(Vec<f64>, f64)>)> = vec![];
     while let Some(Item { idx, center, tab, depth, entry }) = queue.pop_front() {
         let cur = &regions[idx];
-        let Some(tab) = crate::census_timed!(MplcpTabNanos, tab.resolve(plcp, cur, &mut pool)) else { continue };
+        let Some(tab) = crate::census_timed!(MplcpTabNanos, tab.resolve(plcp, cur)) else { continue };
         let cands = crate::census_timed!(MplcpNbrNanos, expand_candidates(plcp, cur, center.as_ref(), &tab, depth, entry.as_ref(), &mut ws));
         for c in cands {
             let fresh = seen.insert(c.aset.clone());
@@ -1082,12 +1057,6 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
             };
             regions.push(cr);
             queue.push_back(Item { idx: regions.len() - 1, center: ce, tab: src, depth: nd, entry: ent });
-        }
-        // a tableau that no child took (all of them rebuilt, or none) is kept for its buffers
-        if let Ok(t) = std::sync::Arc::try_unwrap(tab) {
-            if pool.len() < 64 {
-                pool.push(t);
-            }
         }
     }
     regions
@@ -1124,7 +1093,7 @@ fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalR
         let expand = |ws: &mut Option<Tab>, item: Item| -> Option<(Arc<Tab>, usize, Vec<Cand>)> {
             let Item { idx, center, tab, depth, entry } = item;
             let cur = &regions[idx];
-            let tab = tab.resolve(plcp, cur, &mut Vec::new())?;
+            let tab = tab.resolve(plcp, cur)?;
             let cands = expand_candidates(plcp, cur, center.as_ref(), &tab, depth, entry.as_ref(), ws);
             Some((Arc::new(tab), depth, cands))
         };
