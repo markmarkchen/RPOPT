@@ -1660,16 +1660,9 @@ const ZERO_GUARD_MIN: f64 = 1e-12;
 const REFINE_STEPS: usize = 2;
 /// A refined multiplier of this size or below (in the scale of the dependency) is zero: an exact dependency comes out at rounding level 1e-15.
 const REFINED_ZERO: f64 = 1e-12;
-/// Switch for the refined classification of gap-band multipliers (off by default: it adds an overlapping sliver region on masses3_N6 and masses3_N7,
-/// see `bench/results/mplcp_mu_refine.md`).
-/// Census audit (`MPLCP_MU_AUDIT=1`): gap-band calls are answered by the refined enumeration and by the walk, and the neighbour sets compared.
-#[cfg(feature = "lp_census")]
-static MU_AUDIT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-#[cfg(feature = "lp_census")]
-pub fn set_mu_audit(on: bool) {
-    MU_AUDIT.store(on, std::sync::atomic::Ordering::Relaxed);
-}
-static REFINE_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// Switch for the refined classification of gap-band multipliers (on by default; `MPLCP_REFINE=0` in the examples turns it off). On the 158 problems it changes
+/// one region set: masses3_N7 gains the boundary sliver [5,7,8,9,10,64,97] (see `bench/results/mplcp_mu_refine.md`).
+static REFINE_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 pub fn set_refine_multipliers(on: bool) {
     REFINE_ON.store(on, std::sync::atomic::Ordering::Relaxed);
 }

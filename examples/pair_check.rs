@@ -3,7 +3,7 @@
 //! at the Chebyshev centre, the radius, the QP's active set at the centre, which regions of the current mplcp solve contain the centre strictly, and
 //! for every pair the largest violation of the other region's rows at each centre.
 //!
-//!   [MPLCP_REFINE=1] pair_check <problem.json> <sets.txt>
+//!   [MPLCP_REFINE=0] pair_check <problem.json> <sets.txt>
 use rpopt::algorithms::mplcp::{lex_diagnostic, tight_diagnostic};
 use rpopt::algorithms::{solve_mpqp, MpqpAlgorithm};
 use rpopt::critical_region::CriticalRegion;
@@ -15,8 +15,8 @@ fn main() {
     if std::env::var("MPLCP_NO_DEDUPE").is_ok() {
         rpopt::algorithms::mplcp::set_dedupe(false);
     }
-    if std::env::var("MPLCP_REFINE").is_ok() {
-        rpopt::algorithms::mplcp::set_refine_multipliers(true);
+    if let Ok(v) = std::env::var("MPLCP_REFINE") {
+        rpopt::algorithms::mplcp::set_refine_multipliers(v != "0");
     }
     let prog = Arc::new(MpProgram::from_json_file(std::path::Path::new(&a[1])).unwrap());
     let sol = solve_mpqp(&prog, MpqpAlgorithm::Mplcp);
