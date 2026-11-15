@@ -737,7 +737,12 @@ pub fn regions(program: &MpProgram, seed: u64, method: Method) -> Vec<CriticalRe
     }
 }
 
-const REFACTOR: usize = 8;
+/// A child reached by Case-1 pivots has its tableau rebuilt from scratch every REFACTOR levels. The
+/// tableau reached by pivots equals the rebuilt one in exact arithmetic (Lean `tableau_unique`); in
+/// floating point the difference does not grow with the depth (bench/results/mplcp_tableau_handling.md:
+/// at most 4e-12 relative to depth 28 on the 3 and 4 parameter problems, the same size as at depth
+/// 0 to 7), so the period only trades a rebuild (about |z| pivots) against nothing. 8 -> 32.
+const REFACTOR: usize = 32;
 
 /// Where a queued region's tableau comes from. `Lazy` is the parent's tableau shared with the
 /// siblings plus the principal pivot (row, column) that turns it into this region's tableau; the
