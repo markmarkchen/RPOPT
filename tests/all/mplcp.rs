@@ -306,7 +306,9 @@ fn dedupe_keeps_the_regions_and_the_output_shape() {
 fn dedupe_lex_count_is_zero_on_twin_problem() {
     use rpopt::algorithms::mplcp::{count_lex_infeasible, duplicate_rows, solve_with_dedupe, Method};
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("bench/problems_large");
-    let p = Arc::new(MpProgram::from_json_file(&dir.join("pop_001.json")).unwrap());
+    // without the preprocessing merge of duplicated rows, so that the program keeps its twins and the test still
+    // exercises mplcp's own dedupe and the reduced-program lexicographic count
+    let p = Arc::new(MpProgram::from_json_file_opts(&dir.join("pop_001.json"), false).unwrap());
     let rep = duplicate_rows(&p);
     assert!((0..p.a.rows).any(|i| rep[i] != i), "pop_001 must have twins");
     let red = solve_with_dedupe(&p, 0, Method::Pivot, true).unwrap();
