@@ -91,3 +91,36 @@ test, 2795 of 3517 walk calls on masses4_N3. Time shares of the solve: LP-empty 
 (masses5_N3), 11% (masses4_N4), 1% (pop_005), 19% (rand_t12); DAQP 0.7%, 2.8%, 7.4%, 12%, 1%. The root box costs 6.8%
 (masses4_N3), 11% (masses5_N3), 2.3% (masses4_N4), 1.5% (pop_005), 7.2% (rand_t12) of the solve, as much as or more
 than the LP time it saves, except on masses4_N4 (net about 2% to 4%). The pair proof is too weak and too costly.
+
+## Why the walks happen: rank1_case2 refuses on a small multiplier (scratch build on main 054eb58)
+Each walk call (case 3) is classed by the vanishing rows (k, slack or z), the scale-free pivot measure of each
+vanishing slack row, and the reason `rank1_case2` returned None (reason numbers are the order of its `return None`).
+One census solve each, node a025 or a032 (load 80 to 100), so ms are inflated.
+
+| problem | walk calls | walk ms | k=1 slack row, zero pivot (rank-1 target) | refused by reason 6 (small multiplier) | reason 5 (mu mismatch) | reason 3 (pivot measure above 1e-9) |
+|---|---:|---:|---:|---:|---:|---:|
+| masses4_N3 | 3517 | 571 | 3516 | 99.0% of walk ms | 1.0% | 0.0% |
+| masses5_N3 | 14478 | 5634 | 14476 | 88.3% | 11.7% | 0.0% |
+| masses4_N4 | 32534 | 22827 | 32393 | 96.2% | 2.2% | 1.6% |
+| pop_005 | 5184 | 1902 | 5184 | 91.9% | 0.1% | 8.0% |
+| rand_t12_x5_m20_s0 | 1192 | 1427 | 1192 | 99.8% | 0 | 0.2% |
+
+Reason 6 is the test `m > PTOL && m <= 1e-7 * max(mu_max, 1)` on a multiplier m = |T[i,kk]| of an active row. The
+offending multipliers are small: by walk time the decade of m is 1e-10 (about 60%), 1e-9 (about 30%), 1e-8 and 1e-7
+(under 10%), against mu_max between 1e-3 and 1e6. PTOL is 1e-10 and MEASURE_ZERO is 1e-9, so these multipliers are
+at the rounding level of the pivot test that already passed. Everything else (k >= 2, a z row vanishing, a nonzero
+pivot) is under 1% of the calls on all five problems.
+
+Experiment: the same binary with the reason-6 refusal switched off (`RPOPT_NO_R6=1`, such multipliers join P-), pairs
+run in shuffled order, 3 alternations per problem, same node per task. Solve ms, default / switched, medians:
+
+| problem | default | switched | ratio | regions default / switched | walk calls default / switched | region-set hash |
+|---|---:|---:|---:|---:|---:|---|
+| masses4_N3 | 2115 | 1516 | 0.72 | 2891 / 2891 | 3517 / 51 | identical |
+| masses5_N3 | 12318 | 7257 | 0.59 | 5067 / 5068 | 14478 / 87 | one extra region [37,46,53] |
+| masses4_N4 | 36833 | 13978 | 0.38 | 16054 / 16054 | 32534 / 1983 | identical |
+| pop_005 | 4229 | 2407 | 0.57 | 10289 / 10289 | 5184 / 1674 | identical |
+| rand_t12_x5_m20_s0 | 4311 | 2894 | 0.67 | 6143 / 6143 | 1192 / 42 | identical |
+
+`lexcheck 3000` on the switched variant: overlaps 0 and gaps 0 on all five problems (masses5_N3: 5068 regions).
+Region counts on masses5_N3 differ between builds anyway (5060, 5067, 5084, 5268), all with 0 gaps and 0 overlaps.
