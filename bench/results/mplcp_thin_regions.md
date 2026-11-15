@@ -70,3 +70,12 @@ against known regions differing in at most two constraints is the next item.
   and the same set hashes for base, fix and oracle; fix against oracle: 157 of 158 identical, masses3_N7 one genuine region more). The box chain and the twin snap change no region set on these 158 problems.
 * Timing (51 problems, `base` against `fix`, A/A pair): all 0.993, masses 0.979, not masses 0.997, 2 to 5 parameters 0.995, 6 to 16 parameters 0.989, A/A 0.999 to 1.000.
 * Suite (ci tag c2cost_N, 147 tests as a 1-CPU array): 145 passed, 0 failed, 3 ignored, the same as main (the two slow `pl_wnn` tests, 354 s and 1,231 s, were rerun once after a disk-quota failure of the first attempt).
+
+## With the twin-constraint dedupe underneath (merge of merge-dedupe df4176c, branch `coldretry-final`)
+
+Region sets (sorted active sets, `RPOPT_CANON=1` maps every set to the lowest-index row of each group of duplicated constraints), on the 12 problems the cold retry changes plus pop_001, pop_011 and pop_052:
+dedupe on (`M`) against dedupe off (`MPLCP_NO_DEDUPE=1`, same binary) identical on 14 of 15 (masses3_N5 10,444, masses3_N6 22,152, masses3_N7 38,343, masses4_N3 2,953, masses4_N4 16,342, masses5_N3 5,273,
+pop_091 145,022, rand_t10_x5_m20_s1 14,849, rand_t10_x6_m24_s0 71,221, rand_t6_x5_m20_s1 5,063, rand_t8_x6_m24_s0 32,476, pop_001 3,529, pop_011 397, pop_052 3). The region counts equal those of the cold retry alone.
+
+pop_076 is the one difference: 15,008 regions with the dedupe, 15,007 without. They are two regions, not one: the cold retry adds [10,15,22,24,29] (radius 7.4e-4, present with the dedupe on and off, in
+canonical numbering), the dedupe adds [6,15,21,23,25] (radius 1.5e-6, the hole it fills), present only with the dedupe on. Together they are the 15,006 of the old base plus 2.
