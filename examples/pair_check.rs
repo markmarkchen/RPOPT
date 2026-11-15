@@ -32,6 +32,7 @@ fn main() {
         let s = rpopt::utils::chebyshev_ball(&cr.e, &cr.f, &[]).unwrap();
         let centre: Vec<f64> = s.x[..nt].to_vec();
         let lex = lex_diagnostic(&prog, &cr);
+        println!("   LICQ margin (smallest pivot of the unit-diagonal Gram matrix of {aset:?}): {:?}", rpopt::algorithms::mplcp::licq_margin(&prog, &aset));
         let (tight, qp_agrees) = tight_diagnostic(&prog, &cr, &centre);
         let inside: Vec<Vec<usize>> = sol
             .critical_regions

@@ -3617,6 +3617,57 @@ fn lex_feasible_start(program: &MpProgram, init: &CriticalRegion) -> Option<Crit
     Some(cr)
 }
 
+/// Smallest pivot of the Gaussian elimination (partial pivoting) of the Gram matrix M_SS of the constraints in `rows` (pLCP row indices), scaled to a unit diagonal:
+/// 1 for orthogonal rows, near 0 when one row is nearly in the span of the others (the active set is at the edge of LICQ).
+fn gram_margin(p: &Plcp, rows: &[usize]) -> f64 {
+    let (n, k) = (p.n, rows.len());
+    if k == 0 {
+        return 1.0;
+    }
+    let sc: Vec<f64> = rows.iter().map(|&j| p.m[j * n + j].max(1e-300).sqrt()).collect();
+    let mut g = vec![0.0; k * k];
+    for (a, &ja) in rows.iter().enumerate() {
+        for (b, &jb) in rows.iter().enumerate() {
+            g[a * k + b] = p.m[ja * n + jb] / (sc[a] * sc[b]);
+        }
+    }
+    let mut min_piv = f64::INFINITY;
+    for c in 0..k {
+        let mut best = c;
+        for r in c + 1..k {
+            if g[r * k + c].abs() > g[best * k + c].abs() {
+                best = r;
+            }
+        }
+        let piv = g[best * k + c];
+        min_piv = min_piv.min(piv.abs());
+        if piv == 0.0 {
+            return 0.0;
+        }
+        if best != c {
+            for j in 0..k {
+                g.swap(c * k + j, best * k + j);
+            }
+        }
+        for r in c + 1..k {
+            let f = g[r * k + c] / piv;
+            if f != 0.0 {
+                for j in c..k {
+                    g[r * k + j] -= f * g[c * k + j];
+                }
+            }
+        }
+    }
+    min_piv
+}
+
+/// Diagnostic: `gram_margin` of an active set given by original constraint indices (no equality rows).
+pub fn licq_margin(program: &MpProgram, aset: &[usize]) -> Option<f64> {
+    let plcp = Plcp::new(program)?;
+    let rows: Vec<usize> = aset.iter().filter_map(|&i| plcp.pos.get(i).copied().filter(|&r| r != usize::MAX)).collect();
+    Some(gram_margin(&plcp, &rows))
+}
+
 /// Diagnostic for one region's basis: (lexico-feasible, rows whose theta part vanishes, smallest signed first significant entry of those rows' lexicographic vectors,
 /// smallest absolute first significant entry). A first entry of -1e-3 is a clear violation, one of +-1e-9 sits on the tolerance `ZTOL`.
 pub fn lex_diagnostic(program: &MpProgram, cr: &CriticalRegion) -> Option<(bool, usize, f64, f64)> {

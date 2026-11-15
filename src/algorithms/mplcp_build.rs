@@ -55,10 +55,21 @@ pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Opti
     };
     let mut start_r = start;
     start_r.push(0.0);
-    let s = cheb_from(&e, &f, &start_r)?;
-    if s.x[nt] <= 1e-8 {
-        return None;
-    }
+    // The LP started at the hint (a point on the facet the region was reached through, so on its boundary) can stop at radius 0 or fail on a thin
+    // region (masses5_N3: regions of radius 2e-6 and 4e-8 were dropped, and their active sets stayed claimed in `Seen`, so no later facet tried again);
+    // a cold Chebyshev LP then decides, as it does for every region built without a hint.
+    let warm = cheb_from(&e, &f, &start_r).filter(|s| s.x[nt] > 1e-8);
+    let s = match warm {
+        Some(s) => s,
+        None => {
+            crate::census_bump!(BuildColdRetry, 1);
+            let s = crate::utils::chebyshev_ball(&e, &f, &[])?;
+            if s.x[nt] <= 1e-8 {
+                return None;
+            }
+            s
+        }
+    };
     let cheb_radius = Some(s.x[nt]);
     let center: Vec<f64> = s.x[..nt].to_vec();
     // after the radius test: only the output fields need the primal law
