@@ -410,6 +410,12 @@ time of `graph` (119 problems solved).
   problems of 2 to 16 parameters 1.010 (A/A 0.99 to 1.01). The fix has 0 gaps, 0 overlaps and 0 lexico-infeasible regions on all 111
   problems and the same region hash as main on 94 of them (the others differ by slivers). Details in
   `bench/results/mplcp_scale_free_pivot.md`.
+- **Exploration order (measured, rejected).** A canonical neighbour order (candidates sorted by active set) made every
+  build 0% to 14% slower on the masses problems and did not explain the masses8_N2 swing, which came from the pivot rule
+  fixed above. After that fix, walks that return only known regions are 2% to 5% of the solve, and walks that find no
+  neighbour 0% to 3%, so deferring Case-2 facets or a cheaper boundary proof would gain little. The walk time is in
+  walks that find a new region, and 71% to 94% of their Chebyshev LPs prove a sub-facet empty
+  (`bench/results/mplcp_order_study.md`).
 
 ## Correctness
 
