@@ -157,3 +157,37 @@ expansion (8.60 ms each) against 175 ms for the 251 others (0.70 ms each).
 With `RPOPT_NO_R6=1` (same binary): masses8_N2 36 walk calls (all reasons 5 and 1, 1.8 ms in total), solve 1207 ms
 (0.47x), rel regions 0.26 ms each (38 ms); masses7_N2 28 walk calls (1.2 ms), solve 801 ms against 1072 ms (0.75x),
 rel regions 0.18 ms each. So the guard removes every expensive walk on both problems.
+
+## The neighbour search without walks: how much of it rediscovers known regions (main ddf0aa8, release build, one solve each)
+Scratch build (no lp_census; two `Instant::now` per `adjacent` call, about 50 ns). Per `adjacent` call: its class
+(none = no vanishing row; fast = Case-1 toggle; rank-1 by outcome: kind 0 the multiplier set P- is empty, kind 1 every
+member A + {c} - {j} was already in Seen so nothing is returned, kind 2 members tested by witness or LP), whether the
+returned neighbour was already known (fast: its toggle active set is in Seen), and the time. "pre" is the time up to
+the zero-row decision, which every class pays (zero-row loop, three allocations gam, zrows, rowsc). Node a014/a017,
+load 50 to 80, so the us/call are indicative. rand_t12 spends 1.4 s of its 4.3 s in the reason-6 walks (not in the table).
+
+| problem | solve ms | adjacent calls | none: calls, us, share | fast: calls, known, us, share | rank-1 kind 1 (all known): calls, us, share | rank-1 kind 2 (tested): calls, us, share | rank-1 kind 0 share | pre us |
+|---|---:|---:|---|---|---|---|---:|---:|
+| rand_t8_x5_m20_s0 | 711 | 58.3k | 21.4k, 0.31, 0.9% | 28.6k, 89%, 0.69, 2.8% | 29.6k, 2.46, 10.3% | 1.2k, 13.5, 2.3% | 0.7% | 0.31 to 0.38 |
+| rand_t10_x5_m20_s0 | 1890 | 181k | 66.4k, 0.36, 1.3% | 49.9k, 98%, 0.84, 2.2% | 51.7k, 3.45, 9.4% | 5.2k, 18.2, 5.0% | 0.5% | 0.36 to 0.47 |
+| pop_017 | 563 | 54.1k | 3.6k, 0.37, 0.2% | 21.3k, 86%, 0.80, 3.0% | 19.0k, 2.40, 8.1% | 7.6k, 9.9, 13.4% | 0.6% | 0.37 to 0.45 |
+| rand_t12_x5_m20_s0 | 4277 | 233k | 118.5k, 0.41, 1.1% | 47.1k, 90%, 0.89, 1.0% | 61.1k, 4.32, 6.2% | 1.3k, 28.5, 0.9% | 0.1% | 0.41 to 0.52 |
+
+- Adjacent time (all classes) is 17% (rand_t8), 18% (rand_t10), 25% (pop_017) of the solve; the rest of
+  `expand_candidates` (hints, candidate vectors, the Seen claims) is 1.7% to 3.6%.
+- Rediscovery dominates the counts: 55% (rand_t8), 56% (rand_t10), 48% (pop_017), 44% (rand_t12) of all `adjacent`
+  calls are rank-1 calls with every member known, or fast calls to a known toggle. The rank-1 all-known calls alone cost
+  6% to 10% of the solve (2.4 to 4.3 us each, against 0.3 to 0.5 us for the pre-decision part); the known fast calls
+  1% to 3%.
+- Lever (a), know before searching: the pre-decision part stays (the zero row must be found first), so it can only
+  remove the post-decision work of known calls. For the rank-1 all-known calls that is 2.0 to 3.9 us of 2.4 to 4.3 us.
+  If the member keys are tested in O(1) with allocation-free active-set keys, the achievable floor is about 1 us per
+  call (pre-decision 0.4 us plus the O(n) hypothesis checks), a saving of about 55% to 70% of those calls: 6% (rand_t8),
+  6% (rand_t10), 5% (pop_017), 4% (rand_t12) of the solve. For fast calls nothing is left in `adjacent` (0.3 to 0.4 us
+  after the decision, no Seen test there); the known ones cost the downstream `seen_claim` and Dup handling, within the
+  1.7% to 3.6% above.
+- Lever (b), pooling the 33 to 42 allocations per rank-1 call: at about 25 ns each that is about 0.8 to 1.0 us of the 2.4
+  to 4.3 us of an all-known call, a third of it: 3% to 4% (rand_t8, rand_t10, pop_017) and 2% (rand_t12) of the solve.
+  It overlaps lever (a), so the two together are about the (a) figure, not the sum. Kind-2 calls (9.9 to 28 us) are
+  dominated by witnesses and LPs, not allocations; pop_017 is the problem where those matter (13% of the solve).
+- The 1.2x to 1.3x loss to `parametric_daqp` is 20% to 30% of the solve; these levers close 4% to 6% of it.
