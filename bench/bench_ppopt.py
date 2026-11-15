@@ -32,7 +32,8 @@ def worker(problem_path, algorithm):
 
     with open(problem_path) as fh:
         d = json.load(fh)
-    m = {k: (numpy.array(v, dtype=float) if k != 'equality_indices' else v) for k, v in d.items()}
+    m = {k: (numpy.array(v, dtype=float) if k != 'equality_indices' else v) for k, v in d.items()
+         if not isinstance(v, dict)}  # skip metadata such as the 'mpc' plant description
 
     t0 = time.perf_counter()
     if 'Q' in m:

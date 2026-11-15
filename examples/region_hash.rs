@@ -25,6 +25,10 @@ fn main() {
         rpopt::algorithms::mplp_lex::set_mode(v.parse().unwrap());
     }
     let alg = MpqpAlgorithm::from_name(&args[1]).expect("algorithm");
+    // RPOPT_INDEX_FIRST=0|1|2: index-first lookup off, on (default), audit
+    if let Ok(m) = std::env::var("RPOPT_INDEX_FIRST") {
+        rpopt::algorithms::mplcp::set_index_first(m.parse().unwrap());
+    }
     // MPLCP_NO_RANK1=1: the Case-2 walk only (the oracle of the region-set gates)
     if std::env::var("MPLCP_NO_RANK1").is_ok() {
         rpopt::algorithms::mplcp::set_rank1(false);
@@ -54,10 +58,38 @@ fn main() {
         let p = Arc::new(MpProgram::from_json_file(std::path::Path::new(f)).unwrap());
         // RPOPT_CANON=1: active sets are mapped to the lowest-index row of each group of duplicated constraints (so that the
         // solve with and without MPLCP_NO_DEDUPE compare); RPOPT_SETS_OUT=<file>: the sorted sets are also written there
-        let rep = if std::env::var("RPOPT_CANON").is_ok() { Some(rpopt::algorithms::mplcp::duplicate_rows(&p)) } else { None };
+        // The preprocessing merge of duplicate rows (ported from RPOPT) renumbers the processed rows. Under RPOPT_CANON the
+        // sets are therefore mapped to the lowest-index twin of the program built without the merge (the indexing of trees
+        // that lack the merge), by matching each processed row of the merged program to the first equal row.
+        let rep = if std::env::var("RPOPT_CANON").is_ok() {
+            let u = MpProgram::from_json_file_opts(std::path::Path::new(f), false).unwrap();
+            let urep = rpopt::algorithms::mplcp::duplicate_rows(&u);
+            let row = |q: &MpProgram, i: usize| -> Vec<f64> {
+                let mut v = q.a.row(i).to_vec();
+                v.extend_from_slice(q.f.row(i));
+                v.push(q.b[i]);
+                v
+            };
+            let close = |x: &[f64], y: &[f64]| x.iter().zip(y).all(|(a, b)| (a - b).abs() <= 1e-9 * (1.0 + a.abs().max(b.abs())));
+            let urows: Vec<Vec<f64>> = (0..u.a.rows).map(|i| row(&u, i)).collect();
+            let map: Vec<usize> = (0..p.a.rows)
+                .map(|k| {
+                    let r = row(&p, k);
+                    let j = urows.iter().position(|x| close(&r, x)).unwrap_or_else(|| panic!("{f}: processed row {k} has no match in the unmerged program"));
+                    urep[j]
+                })
+                .collect();
+            println!("{} rows_unmerged {} rows_merged {}", std::path::Path::new(f).file_stem().unwrap().to_string_lossy(), u.a.rows, p.a.rows);
+            Some(map)
+        } else {
+            None
+        };
         let t0 = std::time::Instant::now();
         let sol = solve_mpqp(&p, alg);
         let dt = t0.elapsed().as_secs_f64();
+        if std::env::var("RPOPT_INDEX_FIRST").is_ok() {
+            eprintln!("index_first facets_skipped/audit_checks/audit_violations/regions_skipped/regions_would_skip/path_differs {:?}", rpopt::algorithms::mplcp::index_first_stats());
+        }
         let mut recs: Vec<(Vec<usize>, Vec<i64>)> = sol
             .critical_regions
             .iter()

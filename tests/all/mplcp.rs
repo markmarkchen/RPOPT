@@ -229,7 +229,7 @@ fn degenerate_mplp_enumeration_covers_theta() {
 fn no_region_is_skipped_without_trace() {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("bench");
     for name in ["problems/di_N6.json", "problems/masses2_N4.json", "problems/sys3x2_N3.json", "problems_large/pop_001.json"] {
-        let p = Arc::new(MpProgram::from_json_file(&dir.join(name)).unwrap());
+        let p = Arc::new(MpProgram::from_json_file_opts(&dir.join(name), false).unwrap());
         let m = solve_mpqp(&p, MpqpAlgorithm::Mplcp);
         assert!(!m.critical_regions.is_empty(), "{name}");
         assert_eq!(rpopt::algorithms::mplcp::resolve_fallbacks(), 0, "{name}");
@@ -247,7 +247,8 @@ fn dedupe_keeps_the_regions_and_the_output_shape() {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("bench/problems_large");
     let mut with_twins = 0;
     for name in ["pop_031", "pop_052", "pop_071", "pop_039", "pop_081", "pop_019", "pop_011"] {
-        let p = Arc::new(MpProgram::from_json_file(&dir.join(format!("{name}.json"))).unwrap());
+        // twins kept: this test is about mplcp's own dedupe, not the preprocessing merge
+        let p = Arc::new(MpProgram::from_json_file_opts(&dir.join(format!("{name}.json")), false).unwrap());
         let rep = duplicate_rows(&p);
         let m = p.a.rows;
         if (0..m).all(|i| rep[i] == i) {
@@ -305,7 +306,9 @@ fn dedupe_keeps_the_regions_and_the_output_shape() {
 fn dedupe_lex_count_is_zero_on_twin_problem() {
     use rpopt::algorithms::mplcp::{count_lex_infeasible, duplicate_rows, solve_with_dedupe, Method};
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("bench/problems_large");
-    let p = Arc::new(MpProgram::from_json_file(&dir.join("pop_001.json")).unwrap());
+    // without the preprocessing merge of duplicated rows, so that the program keeps its twins and the test still
+    // exercises mplcp's own dedupe and the reduced-program lexicographic count
+    let p = Arc::new(MpProgram::from_json_file_opts(&dir.join("pop_001.json"), false).unwrap());
     let rep = duplicate_rows(&p);
     assert!((0..p.a.rows).any(|i| rep[i] != i), "pop_001 must have twins");
     let red = solve_with_dedupe(&p, 0, Method::Pivot, true).unwrap();

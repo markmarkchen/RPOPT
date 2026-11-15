@@ -130,6 +130,26 @@ impl MpProgram {
         equality_indices: Vec<usize>,
         post_process: bool,
     ) -> Self {
+        Self::new_opts(a, b, c, h, q, a_t, b_t, f, equality_indices, post_process, true)
+    }
+
+    /// `new` with a switch for the duplicate-row merge of `base_constraint_processing`. With
+    /// `merge_duplicates = false` the twin rows stay in the program (for tests and experiments about
+    /// how a solver handles twins).
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_opts(
+        a: Mat,
+        b: Vec<f64>,
+        c: Vec<f64>,
+        h: Mat,
+        q: Option<Mat>,
+        a_t: Mat,
+        b_t: Vec<f64>,
+        f: Mat,
+        equality_indices: Vec<usize>,
+        post_process: bool,
+        merge_duplicates: bool,
+    ) -> Self {
         let nt = f.cols;
         let mut p = MpProgram {
             a,
@@ -151,7 +171,7 @@ impl MpProgram {
             qp_factor: OnceLock::new(),
             theta_bbox: OnceLock::new(),
         };
-        p.base_constraint_processing();
+        p.base_processing(merge_duplicates);
         p.warnings = p.compute_warnings();
         if post_process {
             p.process_constraints();
@@ -187,6 +207,11 @@ impl MpProgram {
 
     /// Loads the JSON format written by `bench/mpc_problems.py`; mpQP if "Q" is present.
     pub fn from_problem_data(d: &ProblemData) -> Self {
+        Self::from_problem_data_opts(d, true)
+    }
+
+    /// `from_problem_data` with the duplicate-row merge switched on or off.
+    pub fn from_problem_data_opts(d: &ProblemData, merge_duplicates: bool) -> Self {
         let a = Mat::from_rows(&d.a);
         let nx = a.cols;
         let f = Mat::from_rows(&d.f);
@@ -194,13 +219,18 @@ impl MpProgram {
         let h = if d.h.is_empty() { Mat::zeros(nx, nt) } else { Mat::from_rows(&d.h) };
         let a_t = Mat::from_rows(&d.a_t);
         let q = d.q.as_ref().map(|q| Mat::from_rows(q));
-        MpProgram::new(a, flat(&d.b), flat(&d.c), h, q, a_t, flat(&d.b_t), f, d.equality_indices.clone(), true)
+        MpProgram::new_opts(a, flat(&d.b), flat(&d.c), h, q, a_t, flat(&d.b_t), f, d.equality_indices.clone(), true, merge_duplicates)
     }
 
     pub fn from_json_file(path: &std::path::Path) -> std::io::Result<Self> {
+        Self::from_json_file_opts(path, true)
+    }
+
+    /// `from_json_file` with the duplicate-row merge switched on or off (off keeps twin rows).
+    pub fn from_json_file_opts(path: &std::path::Path, merge_duplicates: bool) -> std::io::Result<Self> {
         let txt = std::fs::read_to_string(path)?;
         let d: ProblemData = serde_json::from_str(&txt).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-        Ok(Self::from_problem_data(&d))
+        Ok(Self::from_problem_data_opts(&d, merge_duplicates))
     }
 
     pub fn is_qp(&self) -> bool {
@@ -343,6 +373,10 @@ impl MpProgram {
     // ------------------------------------------------------------------ processing
 
     pub fn base_constraint_processing(&mut self) {
+        self.base_processing(true);
+    }
+
+    fn base_processing(&mut self, merge_duplicates: bool) {
         self.invalidate();
         let m = self.num_constraints();
         if !self.equality_indices.is_empty() {
@@ -353,6 +387,9 @@ impl MpProgram {
         }
         self.process_program_constraints(1e-6);
         self.scale_constraints();
+        if merge_duplicates {
+            self.remove_duplicate_rows();
+        }
         self.find_implicit_equalities();
         self.generate_reduced_equality_constraints();
     }
@@ -408,6 +445,43 @@ impl MpProgram {
             }
             self.b[i] /= nrm;
         }
+        self.invalidate();
+    }
+
+    /// Removes duplicate rows of [A | F | b], compared after `scale_constraints` (so rows that differ
+    /// only by a positive factor are caught). A duplicated inequality is weakly redundant, so the
+    /// strong-redundancy test of `process_constraints` keeps both copies; every active set holding
+    /// both is then rank deficient, and two index sets describe the same region. The active-set
+    /// enumerations report the region twice (overlaps) and `mplcp` can return no region at all
+    /// (POP test set, e.g. pop_031, pop_052, pop_071). The first copy is kept, except that an
+    /// equality always replaces an inequality it duplicates.
+    fn remove_duplicate_rows(&mut self) {
+        let m = self.num_constraints();
+        let kept: Vec<usize> = {
+            let close = |x: f64, y: f64| (x - y).abs() <= 1e-12 * (1.0 + x.abs().max(y.abs()));
+            let same = |i: usize, j: usize| {
+                close(self.b[i], self.b[j])
+                    && self.a.row(i).iter().zip(self.a.row(j)).all(|(&x, &y)| close(x, y))
+                    && self.f.row(i).iter().zip(self.f.row(j)).all(|(&x, &y)| close(x, y))
+            };
+            let is_eq = |i: usize| self.equality_indices.contains(&i);
+            let mut kept: Vec<usize> = Vec::with_capacity(m);
+            for i in 0..m {
+                match kept.iter().position(|&j| same(i, j)) {
+                    None => kept.push(i),
+                    Some(p) if is_eq(i) && !is_eq(kept[p]) => kept[p] = i,
+                    Some(_) => {}
+                }
+            }
+            kept.sort_unstable();
+            kept
+        };
+        if kept.len() == m {
+            return;
+        }
+        let new_eq: Vec<usize> = kept.iter().enumerate().filter(|(_, i)| self.equality_indices.contains(i)).map(|(k, _)| k).collect();
+        self.reorder_rows(&kept);
+        self.equality_indices = new_eq;
         self.invalidate();
     }
 

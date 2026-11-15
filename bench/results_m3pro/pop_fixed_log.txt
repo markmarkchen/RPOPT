@@ -1,0 +1,470 @@
+== pop_001: x=7 t=5 constraints=25 (eq 0) build 0.231 ms
+  geometric                      3519 regions   14614.050 ms  (min 14614.050, runs 1)  LPs 42345 (PPOPT-equivalent LPs 128213 QPs 5148)  same-as-first: true  gaps 0 overlaps 0 wrong 2
+  graph                          3529 regions   17332.261 ms  (min 17332.261, runs 1)  LPs 57521 (PPOPT-equivalent LPs 141291 QPs 83)  same-as-first: false  gaps 0 overlaps 0 wrong 2
+  combinatorial_graph            3529 regions   16932.819 ms  (min 16932.819, runs 1)  LPs 126561 (PPOPT-equivalent LPs 186243 QPs 1)  same-as-first: false  gaps 0 overlaps 0 wrong 2
+  ahmadi                         3529 regions   18374.244 ms  (min 18374.244, runs 1)  LPs 95258 (PPOPT-equivalent LPs 202820 QPs 0)  same-as-first: false  gaps 0 overlaps 0 wrong 2
+  mplcp                          3529 regions   35236.997 ms  (min 35236.997, runs 1)  LPs 26645 (PPOPT-equivalent LPs 115714 QPs 1)  same-as-first: false  gaps 0 overlaps 0 wrong 2
+  verify_theta vs direct QP: 1999/2000 agree
+== pop_004: x=4 t=7 constraints=18 (eq 0) build 0.077 ms
+  geometric                       247 regions     282.190 ms  (min 157.857, runs 7)  LPs 31513 (PPOPT-equivalent LPs 11811 QPs 778)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           247 regions      26.493 ms  (min 18.096, runs 11)  LPs 7333 (PPOPT-equivalent LPs 11649 QPs 76)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             247 regions      24.030 ms  (min 15.655, runs 11)  LPs 6892 (PPOPT-equivalent LPs 9261 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                          247 regions      36.697 ms  (min 25.073, runs 9)  LPs 8555 (PPOPT-equivalent LPs 12158 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                           247 regions      46.055 ms  (min 27.034, runs 8)  LPs 6212 (PPOPT-equivalent LPs 16366 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_006: x=8 t=3 constraints=30 (eq 0) build 0.229 ms
+  geometric                      2375 regions     156.546 ms  (min 110.416, runs 7)  LPs 11352 (PPOPT-equivalent LPs 78975 QPs 2898)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                          2375 regions     409.557 ms  (min 231.033, runs 6)  LPs 140740 (PPOPT-equivalent LPs 150868 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph            2375 regions     319.262 ms  (min 207.515, runs 7)  LPs 228454 (PPOPT-equivalent LPs 208326 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                         2375 regions     597.967 ms  (min 446.434, runs 4)  LPs 329680 (PPOPT-equivalent LPs 401142 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                          2375 regions      97.844 ms  (min 60.414, runs 7)  LPs 14983 (PPOPT-equivalent LPs 73628 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_009: x=2 t=4 constraints=18 (eq 0) build 0.060 ms
+  geometric                        63 regions       3.669 ms  (min 1.641, runs 79)  LPs 636 (PPOPT-equivalent LPs 2062 QPs 172)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                            63 regions       1.281 ms  (min 0.896, runs 167)  LPs 228 (PPOPT-equivalent LPs 1707 QPs 83)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph              63 regions       1.146 ms  (min 0.772, runs 148)  LPs 288 (PPOPT-equivalent LPs 1689 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                           63 regions       1.981 ms  (min 1.421, runs 109)  LPs 794 (PPOPT-equivalent LPs 2355 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                            63 regions       3.275 ms  (min 1.708, runs 86)  LPs 383 (PPOPT-equivalent LPs 1576 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_010: x=1 t=8 constraints=36 (eq 0) build 0.107 ms
+  geometric                        36 regions      13.697 ms  (min 8.621, runs 20)  LPs 2509 (PPOPT-equivalent LPs 3038 QPs 254)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                            36 regions       5.742 ms  (min 3.082, runs 50)  LPs 1252 (PPOPT-equivalent LPs 1800 QPs 82)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph              36 regions       6.327 ms  (min 3.047, runs 47)  LPs 1254 (PPOPT-equivalent LPs 1801 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                           36 regions       8.553 ms  (min 4.523, runs 29)  LPs 1855 (PPOPT-equivalent LPs 2467 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                            36 regions      19.687 ms  (min 11.297, runs 15)  LPs 1997 (PPOPT-equivalent LPs 3477 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_011: x=4 t=6 constraints=22 (eq 0) build 0.089 ms
+  geometric                       397 regions    2106.351 ms  (min 2106.351, runs 1)  LPs 8435 (PPOPT-equivalent LPs 15356 QPs 592)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           397 regions    1624.429 ms  (min 1427.175, runs 2)  LPs 2090 (PPOPT-equivalent LPs 12957 QPs 84)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             397 regions     768.279 ms  (min 763.721, runs 3)  LPs 5085 (PPOPT-equivalent LPs 14660 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                          397 regions    1773.409 ms  (min 1694.524, runs 2)  LPs 8798 (PPOPT-equivalent LPs 20516 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                           397 regions      62.626 ms  (min 43.732, runs 7)  LPs 2716 (PPOPT-equivalent LPs 12335 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_012: x=4 t=5 constraints=26 (eq 0) build 0.116 ms
+  geometric                      1047 regions     108.864 ms  (min 68.426, runs 7)  LPs 10240 (PPOPT-equivalent LPs 46494 QPs 1899)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                          1047 regions      66.226 ms  (min 45.904, runs 7)  LPs 5157 (PPOPT-equivalent LPs 41024 QPs 83)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph            1047 regions      84.010 ms  (min 46.103, runs 7)  LPs 11741 (PPOPT-equivalent LPs 46332 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                         1047 regions     117.228 ms  (min 83.287, runs 7)  LPs 20092 (PPOPT-equivalent LPs 58274 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                          1047 regions      97.225 ms  (min 52.807, runs 7)  LPs 6510 (PPOPT-equivalent LPs 38739 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_013: x=7 t=3 constraints=20 (eq 0) build 0.139 ms
+  geometric                       391 regions      11.861 ms  (min 6.879, runs 25)  LPs 1688 (PPOPT-equivalent LPs 10256 QPs 642)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           391 regions      11.678 ms  (min 6.301, runs 25)  LPs 4505 (PPOPT-equivalent LPs 11615 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             391 regions      22.301 ms  (min 12.587, runs 13)  LPs 12739 (PPOPT-equivalent LPs 16987 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                          391 regions      26.894 ms  (min 11.595, runs 13)  LPs 8607 (PPOPT-equivalent LPs 17900 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                           391 regions       9.075 ms  (min 4.116, runs 32)  LPs 851 (PPOPT-equivalent LPs 9384 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_014: x=2 t=4 constraints=14 (eq 0) build 0.052 ms
+  geometric                        19 regions       0.446 ms  (min 0.341, runs 51)  LPs 211 (PPOPT-equivalent LPs 523 QPs 83)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                            19 regions       0.530 ms  (min 0.235, runs 294)  LPs 117 (PPOPT-equivalent LPs 413 QPs 86)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph              19 regions       0.488 ms  (min 0.186, runs 343)  LPs 151 (PPOPT-equivalent LPs 438 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                           19 regions       0.843 ms  (min 0.328, runs 242)  LPs 261 (PPOPT-equivalent LPs 622 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                            19 regions       0.877 ms  (min 0.354, runs 247)  LPs 93 (PPOPT-equivalent LPs 360 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_015: x=8 t=3 constraints=48 (eq 0) build 0.162 ms
+  geometric                       243 regions      12.105 ms  (min 8.264, runs 21)  LPs 898 (PPOPT-equivalent LPs 13770 QPs 243)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           243 regions      12.246 ms  (min 5.538, runs 22)  LPs 1191 (PPOPT-equivalent LPs 13850 QPs 66)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             243 regions      23.019 ms  (min 10.160, runs 14)  LPs 12455 (PPOPT-equivalent LPs 23442 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                          243 regions      27.440 ms  (min 12.229, runs 13)  LPs 12491 (PPOPT-equivalent LPs 25613 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                           243 regions       6.108 ms  (min 3.135, runs 37)  LPs 246 (PPOPT-equivalent LPs 13365 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_016: x=2 t=8 constraints=29 (eq 0) build 0.139 ms
+  geometric                       384 regions     167.021 ms  (min 120.106, runs 7)  LPs 19744 (PPOPT-equivalent LPs 24197 QPs 2170)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           384 regions      76.103 ms  (min 46.350, runs 7)  LPs 11009 (PPOPT-equivalent LPs 15781 QPs 89)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             384 regions      65.787 ms  (min 44.389, runs 7)  LPs 11033 (PPOPT-equivalent LPs 15795 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                          384 regions      96.841 ms  (min 63.432, runs 7)  LPs 14679 (PPOPT-equivalent LPs 19871 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                           384 regions     301.740 ms  (min 167.555, runs 7)  LPs 23941 (PPOPT-equivalent LPs 30682 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_017: x=4 t=6 constraints=28 (eq 0) build 0.145 ms
+  geometric                      4139 regions   23183.886 ms  (min 23183.886, runs 1)  LPs 157246 (PPOPT-equivalent LPs 187050 QPs 8585)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                          4142 regions   21110.334 ms  (min 21110.334, runs 1)  LPs 26426 (PPOPT-equivalent LPs 157785 QPs 99)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph            4142 regions   25075.409 ms  (min 25075.409, runs 1)  LPs 44358 (PPOPT-equivalent LPs 168853 QPs 1)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  ahmadi                         4142 regions   15288.635 ms  (min 15288.635, runs 1)  LPs 84423 (PPOPT-equivalent LPs 224717 QPs 0)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  mplcp                          4142 regions   17642.794 ms  (min 17642.794, runs 1)  LPs 72231 (PPOPT-equivalent LPs 154771 QPs 1)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_019: x=8 t=4 constraints=52 (eq 0) build 0.250 ms
+  geometric                      6857 regions    7071.129 ms  (min 7071.129, runs 1)  LPs 53431 (PPOPT-equivalent LPs 418806 QPs 7856)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                          6842 regions    2119.709 ms  (min 2119.709, runs 1)  LPs 106446 (PPOPT-equivalent LPs 447713 QPs 91)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph            6857 regions    3373.171 ms  (min 3373.171, runs 1)  LPs 1051136 (PPOPT-equivalent LPs 1079893 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                       TIMED OUT after 120 s (cap 120 s)
+== pop_019: x=8 t=4 constraints=52 (eq 0) build 0.222 ms
+  mplcp                          6857 regions    7134.215 ms  (min 7134.215, runs 1)  LPs 30859 (PPOPT-equivalent LPs 396413 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_021: x=3 t=7 constraints=20 (eq 0) build 0.105 ms
+  geometric                       679 regions     512.462 ms  (min 220.272, runs 5)  LPs 27945 (PPOPT-equivalent LPs 34374 QPs 1419)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           679 regions     191.505 ms  (min 52.819, runs 7)  LPs 16058 (PPOPT-equivalent LPs 24355 QPs 99)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             679 regions     178.964 ms  (min 55.690, runs 7)  LPs 16192 (PPOPT-equivalent LPs 24435 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                          679 regions     241.059 ms  (min 76.224, runs 7)  LPs 19741 (PPOPT-equivalent LPs 28865 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                           679 regions     666.605 ms  (min 373.017, runs 4)  LPs 31595 (PPOPT-equivalent LPs 46138 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_022: x=4 t=2 constraints=16 (eq 0) build 0.052 ms
+  geometric                         2 regions       0.023 ms  (min 0.009, runs 2000)  LPs 16 (PPOPT-equivalent LPs 36 QPs 2)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                             2 regions       0.047 ms  (min 0.035, runs 1680)  LPs 7 (PPOPT-equivalent LPs 32 QPs 81)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph               2 regions       0.013 ms  (min 0.010, runs 2000)  LPs 37 (PPOPT-equivalent LPs 62 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                            2 regions       0.024 ms  (min 0.016, runs 2000)  LPs 51 (PPOPT-equivalent LPs 78 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                             2 regions       0.008 ms  (min 0.006, runs 2000)  LPs 5 (PPOPT-equivalent LPs 29 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_023: x=6 t=4 constraints=31 (eq 0) build 0.178 ms
+  geometric                      4729 regions    2070.589 ms  (min 2070.589, runs 1)  LPs 28103 (PPOPT-equivalent LPs 198549 QPs 4796)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                          4729 regions     612.087 ms  (min 374.752, runs 4)  LPs 48115 (PPOPT-equivalent LPs 207251 QPs 91)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph            4729 regions     941.003 ms  (min 796.786, runs 3)  LPs 190555 (PPOPT-equivalent LPs 299277 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                         4729 regions    1452.605 ms  (min 1427.077, runs 2)  LPs 254380 (PPOPT-equivalent LPs 435988 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                          4729 regions     702.033 ms  (min 494.327, runs 4)  LPs 29690 (PPOPT-equivalent LPs 184431 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_025: x=4 t=6 constraints=31 (eq 0) build 0.141 ms
+  geometric                      5440 regions    6783.950 ms  (min 6783.950, runs 1)  LPs 67863 (PPOPT-equivalent LPs 286877 QPs 6530)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                          5441 regions    2387.120 ms  (min 2387.120, runs 1)  LPs 26908 (PPOPT-equivalent LPs 249907 QPs 72)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph            5441 regions    2464.578 ms  (min 2464.578, runs 1)  LPs 63546 (PPOPT-equivalent LPs 268721 QPs 1)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  ahmadi                         5441 regions    3553.336 ms  (min 3553.336, runs 1)  LPs 114070 (PPOPT-equivalent LPs 348097 QPs 0)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  mplcp                          5441 regions    4504.895 ms  (min 4504.895, runs 1)  LPs 86052 (PPOPT-equivalent LPs 240286 QPs 1)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_027: x=3 t=8 constraints=34 (eq 0) build 0.200 ms
+  geometric                      1472 regions    1449.886 ms  (min 1400.400, runs 2)  LPs 80413 (PPOPT-equivalent LPs 106618 QPs 9416)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                          1471 regions     743.170 ms  (min 599.842, runs 4)  LPs 49794 (PPOPT-equivalent LPs 76618 QPs 88)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph            1472 regions     653.153 ms  (min 575.624, runs 3)  LPs 51023 (PPOPT-equivalent LPs 77370 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                         1472 regions     925.609 ms  (min 865.981, runs 3)  LPs 74660 (PPOPT-equivalent LPs 103108 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                          1472 regions    1566.097 ms  (min 1512.408, runs 2)  LPs 66528 (PPOPT-equivalent LPs 150093 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_029: x=6 t=2 constraints=30 (eq 0) build 0.087 ms
+  geometric                        27 regions       0.619 ms  (min 0.217, runs 205)  LPs 128 (PPOPT-equivalent LPs 866 QPs 37)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                            27 regions       0.803 ms  (min 0.289, runs 186)  LPs 284 (PPOPT-equivalent LPs 969 QPs 88)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph              27 regions       1.619 ms  (min 0.608, runs 81)  LPs 1258 (PPOPT-equivalent LPs 1816 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                           27 regions       1.685 ms  (min 0.590, runs 74)  LPs 901 (PPOPT-equivalent LPs 1741 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                            27 regions       0.154 ms  (min 0.118, runs 422)  LPs 30 (PPOPT-equivalent LPs 814 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_030: x=8 t=7 constraints=33 (eq 0) build 0.266 ms
+  geometric                       286 regions      85.297 ms  (min 35.243, runs 7)  LPs 8048 (PPOPT-equivalent LPs 16119 QPs 286)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           286 regions      51.803 ms  (min 19.394, runs 7)  LPs 5982 (PPOPT-equivalent LPs 14044 QPs 64)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             286 regions     122.550 ms  (min 40.183, runs 7)  LPs 13937 (PPOPT-equivalent LPs 21100 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                          286 regions     126.535 ms  (min 41.327, runs 7)  LPs 13955 (PPOPT-equivalent LPs 22327 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                           286 regions      89.819 ms  (min 28.767, runs 7)  LPs 5644 (PPOPT-equivalent LPs 27408 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_031: x=1 t=2 constraints=7 (eq 0) build 0.035 ms
+  geometric                         4 regions       0.045 ms  (min 0.017, runs 2000)  LPs 31 (PPOPT-equivalent LPs 55 QPs 8)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                             5 regions       0.052 ms  (min 0.039, runs 1473)  LPs 27 (PPOPT-equivalent LPs 64 QPs 91)  same-as-first: false  gaps 0 overlaps 625 wrong 0
+  combinatorial_graph               5 regions       0.016 ms  (min 0.012, runs 2000)  LPs 22 (PPOPT-equivalent LPs 56 QPs 1)  same-as-first: false  gaps 0 overlaps 625 wrong 0
+  ahmadi                            5 regions       0.027 ms  (min 0.015, runs 2000)  LPs 34 (PPOPT-equivalent LPs 80 QPs 0)  same-as-first: false  gaps 0 overlaps 625 wrong 0
+  mplcp                             5 regions       0.052 ms  (min 0.019, runs 1644)  LPs 10 (PPOPT-equivalent LPs 46 QPs 1)  same-as-first: false  gaps 0 overlaps 625 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_035: x=5 t=3 constraints=16 (eq 0) build 0.066 ms
+  geometric                        77 regions       1.899 ms  (min 0.715, runs 66)  LPs 315 (PPOPT-equivalent LPs 1925 QPs 77)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                            77 regions       1.474 ms  (min 0.578, runs 94)  LPs 258 (PPOPT-equivalent LPs 1862 QPs 66)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph              77 regions       1.987 ms  (min 0.750, runs 58)  LPs 901 (PPOPT-equivalent LPs 2442 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                           77 regions       2.436 ms  (min 0.960, runs 52)  LPs 942 (PPOPT-equivalent LPs 2743 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                            77 regions       1.458 ms  (min 0.463, runs 82)  LPs 106 (PPOPT-equivalent LPs 1771 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_039: x=1 t=1 constraints=2 (eq 0) build 0.026 ms
+  geometric                         1 regions       0.003 ms  (min 0.002, runs 2000)  LPs 1 (PPOPT-equivalent LPs 1 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                             1 regions       0.020 ms  (min 0.015, runs 2000)  LPs 4 (PPOPT-equivalent LPs 3 QPs 95)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph               1 regions       0.001 ms  (min 0.001, runs 2000)  LPs 5 (PPOPT-equivalent LPs 4 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                            1 regions       0.003 ms  (min 0.001, runs 2000)  LPs 7 (PPOPT-equivalent LPs 8 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                             1 regions       0.003 ms  (min 0.001, runs 2000)  LPs 1 (PPOPT-equivalent LPs 1 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_040: x=7 t=5 constraints=48 (eq 0) build 0.269 ms
+  geometric                      2006 regions     632.587 ms  (min 624.409, runs 3)  LPs 16053 (PPOPT-equivalent LPs 128976 QPs 2256)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                          2007 regions     775.782 ms  (min 575.635, runs 4)  LPs 35323 (PPOPT-equivalent LPs 144743 QPs 91)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph            2007 regions    2065.701 ms  (min 2065.701, runs 1)  LPs 150432 (PPOPT-equivalent LPs 244926 QPs 1)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  ahmadi                         2007 regions    1104.658 ms  (min 895.621, runs 2)  LPs 94041 (PPOPT-equivalent LPs 213722 QPs 0)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  mplcp                          2007 regions    2094.919 ms  (min 2094.919, runs 1)  LPs 15177 (PPOPT-equivalent LPs 118273 QPs 1)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_041: x=6 t=3 constraints=27 (eq 0) build 0.149 ms
+  geometric                       523 regions      46.597 ms  (min 10.562, runs 7)  LPs 2195 (PPOPT-equivalent LPs 18880 QPs 536)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           523 regions      37.327 ms  (min 14.797, runs 8)  LPs 4477 (PPOPT-equivalent LPs 20248 QPs 75)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             523 regions      63.897 ms  (min 19.811, runs 7)  LPs 16575 (PPOPT-equivalent LPs 30301 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                          523 regions      80.043 ms  (min 23.687, runs 7)  LPs 14140 (PPOPT-equivalent LPs 31482 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                           523 regions      30.487 ms  (min 6.656, runs 12)  LPs 1243 (PPOPT-equivalent LPs 17782 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_042: x=1 t=1 constraints=3 (eq 0) build 0.028 ms
+  geometric                         2 regions       0.005 ms  (min 0.002, runs 2000)  LPs 1 (PPOPT-equivalent LPs 1 QPs 3)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                             2 regions       0.036 ms  (min 0.017, runs 2000)  LPs 8 (PPOPT-equivalent LPs 6 QPs 99)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph               2 regions       0.005 ms  (min 0.002, runs 2000)  LPs 7 (PPOPT-equivalent LPs 5 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                            2 regions       0.002 ms  (min 0.002, runs 2000)  LPs 11 (PPOPT-equivalent LPs 12 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                             2 regions       0.005 ms  (min 0.003, runs 2000)  LPs 1 (PPOPT-equivalent LPs 1 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_043: x=4 t=4 constraints=26 (eq 0) build 0.087 ms
+  geometric                       899 regions     220.453 ms  (min 66.662, runs 7)  LPs 6821 (PPOPT-equivalent LPs 36163 QPs 1194)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           899 regions     114.656 ms  (min 27.172, runs 7)  LPs 4302 (PPOPT-equivalent LPs 33057 QPs 88)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             899 regions     135.778 ms  (min 44.364, runs 7)  LPs 13323 (PPOPT-equivalent LPs 38200 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                          899 regions     213.735 ms  (min 59.649, runs 7)  LPs 19755 (PPOPT-equivalent LPs 50767 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                           899 regions     131.314 ms  (min 46.193, runs 7)  LPs 6429 (PPOPT-equivalent LPs 31335 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_045: x=4 t=3 constraints=30 (eq 0) build 0.093 ms
+  geometric                        59 regions       2.752 ms  (min 1.212, runs 44)  LPs 524 (PPOPT-equivalent LPs 2381 QPs 62)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                            61 regions       2.191 ms  (min 0.751, runs 62)  LPs 478 (PPOPT-equivalent LPs 2692 QPs 77)  same-as-first: false  gaps 0 overlaps 6 wrong 0
+  combinatorial_graph              62 regions       3.930 ms  (min 1.685, runs 38)  LPs 2920 (PPOPT-equivalent LPs 4430 QPs 1)  same-as-first: false  gaps 0 overlaps 10 wrong 0
+  ahmadi                           62 regions       4.087 ms  (min 1.816, runs 36)  LPs 1746 (PPOPT-equivalent LPs 4210 QPs 0)  same-as-first: false  gaps 0 overlaps 10 wrong 0
+  mplcp                            61 regions       2.430 ms  (min 0.760, runs 66)  LPs 302 (PPOPT-equivalent LPs 2206 QPs 1)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_046: x=3 t=6 constraints=9 (eq 0) build 0.055 ms
+  geometric                        24 regions       3.261 ms  (min 1.421, runs 39)  LPs 318 (PPOPT-equivalent LPs 785 QPs 24)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                            24 regions       1.872 ms  (min 0.909, runs 68)  LPs 73 (PPOPT-equivalent LPs 553 QPs 57)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph              24 regions       2.517 ms  (min 1.098, runs 52)  LPs 165 (PPOPT-equivalent LPs 624 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                           24 regions       2.572 ms  (min 1.042, runs 59)  LPs 174 (PPOPT-equivalent LPs 701 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                            24 regions       2.101 ms  (min 0.863, runs 69)  LPs 33 (PPOPT-equivalent LPs 528 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_048: x=3 t=4 constraints=19 (eq 0) build 0.074 ms
+  geometric                        46 regions      11.450 ms  (min 3.573, runs 20)  LPs 605 (PPOPT-equivalent LPs 1559 QPs 172)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                            45 regions      30.397 ms  (min 6.570, runs 11)  LPs 538 (PPOPT-equivalent LPs 1325 QPs 97)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph              46 regions      18.171 ms  (min 6.452, runs 12)  LPs 748 (PPOPT-equivalent LPs 1475 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                           46 regions      34.290 ms  (min 13.363, runs 10)  LPs 2007 (PPOPT-equivalent LPs 3159 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                            46 regions     386.063 ms  (min 171.180, runs 6)  LPs 431 (PPOPT-equivalent LPs 1109 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_049: x=5 t=6 constraints=38 (eq 0) build 0.210 ms
+  geometric                      9341 regions   20684.532 ms  (min 20684.532, runs 1)  LPs 172794 (PPOPT-equivalent LPs 553898 QPs 15374)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                          9340 regions    4486.569 ms  (min 4486.569, runs 1)  LPs 48205 (PPOPT-equivalent LPs 493945 QPs 60)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph            9341 regions    6286.585 ms  (min 6286.585, runs 1)  LPs 203998 (PPOPT-equivalent LPs 587917 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                         9341 regions    8091.145 ms  (min 8091.145, runs 1)  LPs 283450 (PPOPT-equivalent LPs 761200 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                          9341 regions    6783.964 ms  (min 6783.964, runs 1)  LPs 102511 (PPOPT-equivalent LPs 475241 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_050: x=2 t=2 constraints=9 (eq 0) build 0.063 ms
+  geometric                        18 regions       0.146 ms  (min 0.074, runs 569)  LPs 81 (PPOPT-equivalent LPs 218 QPs 33)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                            18 regions       0.210 ms  (min 0.082, runs 574)  LPs 71 (PPOPT-equivalent LPs 206 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph              18 regions       0.073 ms  (min 0.053, runs 987)  LPs 98 (PPOPT-equivalent LPs 223 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                           18 regions       0.110 ms  (min 0.081, runs 557)  LPs 150 (PPOPT-equivalent LPs 323 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                            18 regions       0.087 ms  (min 0.054, runs 816)  LPs 32 (PPOPT-equivalent LPs 178 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_052: x=1 t=1 constraints=3 (eq 0) build 0.023 ms
+  geometric                         3 regions       0.007 ms  (min 0.003, runs 2000)  LPs 1 (PPOPT-equivalent LPs 1 QPs 4)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                             3 regions       0.030 ms  (min 0.023, runs 2000)  LPs 10 (PPOPT-equivalent LPs 7 QPs 99)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph               3 regions       0.007 ms  (min 0.002, runs 2000)  LPs 9 (PPOPT-equivalent LPs 5 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                            3 regions       0.007 ms  (min 0.003, runs 2000)  LPs 11 (PPOPT-equivalent LPs 12 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                             3 regions       0.006 ms  (min 0.002, runs 2000)  LPs 1 (PPOPT-equivalent LPs 1 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_053: x=5 t=6 constraints=30 (eq 0) build 0.118 ms
+  geometric                      2441 regions   15389.949 ms  (min 15389.949, runs 1)  LPs 34654 (PPOPT-equivalent LPs 123223 QPs 2712)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                          2441 regions   18258.608 ms  (min 18258.608, runs 1)  LPs 14365 (PPOPT-equivalent LPs 109243 QPs 72)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph            2441 regions   14681.557 ms  (min 14681.557, runs 1)  LPs 35047 (PPOPT-equivalent LPs 126648 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                         2441 regions   17418.165 ms  (min 17418.165, runs 1)  LPs 49669 (PPOPT-equivalent LPs 156837 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                          2441 regions     792.917 ms  (min 712.452, runs 3)  LPs 20421 (PPOPT-equivalent LPs 104606 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_054: x=1 t=7 constraints=21 (eq 0) build 0.079 ms
+  geometric                        20 regions       3.486 ms  (min 1.322, runs 52)  LPs 725 (PPOPT-equivalent LPs 746 QPs 153)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                            20 regions       1.982 ms  (min 0.757, runs 88)  LPs 429 (PPOPT-equivalent LPs 463 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph              20 regions       1.760 ms  (min 0.647, runs 87)  LPs 429 (PPOPT-equivalent LPs 463 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                           20 regions       2.506 ms  (min 0.932, runs 61)  LPs 639 (PPOPT-equivalent LPs 695 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                            20 regions       4.926 ms  (min 1.851, runs 37)  LPs 564 (PPOPT-equivalent LPs 858 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_055: x=3 t=2 constraints=9 (eq 0) build 0.038 ms
+  geometric                         7 regions       0.035 ms  (min 0.028, runs 2000)  LPs 35 (PPOPT-equivalent LPs 114 QPs 7)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                             7 regions       0.082 ms  (min 0.055, runs 1383)  LPs 24 (PPOPT-equivalent LPs 107 QPs 81)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph               7 regions       0.035 ms  (min 0.029, runs 2000)  LPs 75 (PPOPT-equivalent LPs 149 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                            7 regions       0.080 ms  (min 0.032, runs 1953)  LPs 74 (PPOPT-equivalent LPs 169 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                             7 regions       0.023 ms  (min 0.018, runs 2000)  LPs 10 (PPOPT-equivalent LPs 98 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_056: x=3 t=7 constraints=16 (eq 0) build 0.061 ms
+  geometric                       107 regions      23.382 ms  (min 13.769, runs 12)  LPs 3411 (PPOPT-equivalent LPs 4733 QPs 173)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           107 regions       9.767 ms  (min 4.452, runs 21)  LPs 2267 (PPOPT-equivalent LPs 3746 QPs 87)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             107 regions      13.098 ms  (min 4.361, runs 21)  LPs 2498 (PPOPT-equivalent LPs 3729 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                          107 regions      17.681 ms  (min 7.809, runs 15)  LPs 2867 (PPOPT-equivalent LPs 4565 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                           107 regions      25.350 ms  (min 14.737, runs 12)  LPs 2480 (PPOPT-equivalent LPs 6613 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_057: x=2 t=5 constraints=14 (eq 0) build 0.050 ms
+  geometric                        34 regions     548.606 ms  (min 288.142, runs 5)  LPs 576 (PPOPT-equivalent LPs 1174 QPs 131)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                            34 regions     223.774 ms  (min 103.685, runs 7)  LPs 243 (PPOPT-equivalent LPs 863 QPs 99)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph              34 regions     826.580 ms  (min 536.034, runs 4)  LPs 243 (PPOPT-equivalent LPs 880 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                           34 regions     221.277 ms  (min 89.941, runs 7)  LPs 495 (PPOPT-equivalent LPs 1170 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                            34 regions     652.065 ms  (min 610.181, runs 3)  LPs 152 (PPOPT-equivalent LPs 859 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_058: x=2 t=2 constraints=9 (eq 0) build 0.036 ms
+  geometric                         8 regions       0.096 ms  (min 0.043, runs 1367)  LPs 51 (PPOPT-equivalent LPs 117 QPs 15)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                             8 regions       0.105 ms  (min 0.070, runs 1001)  LPs 56 (PPOPT-equivalent LPs 125 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph               8 regions       0.043 ms  (min 0.032, runs 2000)  LPs 74 (PPOPT-equivalent LPs 126 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                            8 regions       0.085 ms  (min 0.051, runs 1307)  LPs 109 (PPOPT-equivalent LPs 190 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                             8 regions       0.056 ms  (min 0.040, runs 1674)  LPs 30 (PPOPT-equivalent LPs 89 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_059: x=2 t=4 constraints=16 (eq 0) build 0.053 ms
+  geometric                        53 regions       8.830 ms  (min 3.596, runs 22)  LPs 1752 (PPOPT-equivalent LPs 1365 QPs 176)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                            54 regions       2.071 ms  (min 0.737, runs 71)  LPs 273 (PPOPT-equivalent LPs 1237 QPs 100)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph              54 regions       1.711 ms  (min 0.573, runs 103)  LPs 321 (PPOPT-equivalent LPs 1154 QPs 1)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  ahmadi                           54 regions       2.557 ms  (min 1.024, runs 62)  LPs 703 (PPOPT-equivalent LPs 1682 QPs 0)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  mplcp                            53 regions       2.964 ms  (min 1.219, runs 60)  LPs 352 (PPOPT-equivalent LPs 1007 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_060: x=8 t=3 constraints=42 (eq 0) build 0.488 ms
+  geometric                      2627 regions     510.077 ms  (min 275.719, runs 5)  LPs 11604 (PPOPT-equivalent LPs 128872 QPs 2736)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                          2627 regions     584.691 ms  (min 320.752, runs 4)  LPs 90238 (PPOPT-equivalent LPs 173800 QPs 72)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph            2627 regions     663.916 ms  (min 558.495, runs 3)  LPs 237890 (PPOPT-equivalent LPs 280503 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                         2627 regions     514.744 ms  (min 408.748, runs 5)  LPs 135687 (PPOPT-equivalent LPs 256580 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                          2627 regions     192.807 ms  (min 85.171, runs 7)  LPs 12017 (PPOPT-equivalent LPs 123470 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_065: x=3 t=7 constraints=30 (eq 0) build 0.103 ms
+  geometric                      1089 regions     629.973 ms  (min 428.835, runs 4)  LPs 48865 (PPOPT-equivalent LPs 66579 QPs 1538)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                          1089 regions     277.157 ms  (min 129.157, runs 7)  LPs 32359 (PPOPT-equivalent LPs 51205 QPs 79)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph            1089 regions     280.227 ms  (min 133.769, runs 7)  LPs 34599 (PPOPT-equivalent LPs 51625 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                         1089 regions     414.679 ms  (min 183.018, runs 6)  LPs 48029 (PPOPT-equivalent LPs 68440 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                          1089 regions     573.078 ms  (min 512.506, runs 4)  LPs 46994 (PPOPT-equivalent LPs 97979 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_066: x=6 t=2 constraints=26 (eq 0) build 0.075 ms
+  geometric                        93 regions       2.522 ms  (min 1.020, runs 76)  LPs 326 (PPOPT-equivalent LPs 2877 QPs 97)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                            93 regions       3.214 ms  (min 1.157, runs 70)  LPs 1012 (PPOPT-equivalent LPs 3286 QPs 91)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph              93 regions       5.959 ms  (min 2.113, runs 40)  LPs 3853 (PPOPT-equivalent LPs 5424 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                           93 regions      54.163 ms  (min 24.069, runs 7)  LPs 26115 (PPOPT-equivalent LPs 28921 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                            93 regions       1.104 ms  (min 0.453, runs 155)  LPs 134 (PPOPT-equivalent LPs 2750 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_068: x=3 t=7 constraints=14 (eq 0) build 0.093 ms
+  geometric                        86 regions      17.042 ms  (min 9.770, runs 17)  LPs 2937 (PPOPT-equivalent LPs 3696 QPs 226)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                            86 regions       9.673 ms  (min 3.838, runs 25)  LPs 1858 (PPOPT-equivalent LPs 2607 QPs 74)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph              86 regions       9.090 ms  (min 5.575, runs 25)  LPs 2011 (PPOPT-equivalent LPs 2713 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                           86 regions      11.930 ms  (min 6.376, runs 22)  LPs 2373 (PPOPT-equivalent LPs 3312 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                            86 regions      13.435 ms  (min 6.465, runs 19)  LPs 2028 (PPOPT-equivalent LPs 4959 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_069: x=1 t=8 constraints=26 (eq 0) build 0.128 ms
+  geometric                        26 regions       8.882 ms  (min 4.208, runs 26)  LPs 1225 (PPOPT-equivalent LPs 1462 QPs 280)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                            26 regions       4.657 ms  (min 2.076, runs 53)  LPs 657 (PPOPT-equivalent LPs 912 QPs 92)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph              26 regions       3.601 ms  (min 1.813, runs 59)  LPs 657 (PPOPT-equivalent LPs 912 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                           26 regions       5.588 ms  (min 2.545, runs 47)  LPs 982 (PPOPT-equivalent LPs 1264 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                            26 regions      10.330 ms  (min 5.669, runs 24)  LPs 868 (PPOPT-equivalent LPs 1734 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_070: x=4 t=5 constraints=35 (eq 0) build 0.153 ms
+  geometric                       701 regions     971.582 ms  (min 936.441, runs 3)  LPs 13462 (PPOPT-equivalent LPs 36939 QPs 701)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           703 regions     771.016 ms  (min 738.110, runs 3)  LPs 3919 (PPOPT-equivalent LPs 34103 QPs 61)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             703 regions     882.324 ms  (min 810.436, runs 3)  LPs 18188 (PPOPT-equivalent LPs 45410 QPs 1)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  ahmadi                          703 regions     913.153 ms  (min 865.599, runs 3)  LPs 20397 (PPOPT-equivalent LPs 53646 QPs 0)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  mplcp                           703 regions     130.100 ms  (min 74.903, runs 7)  LPs 7313 (PPOPT-equivalent LPs 32305 QPs 1)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_071: x=2 t=2 constraints=8 (eq 0) build 0.030 ms
+  geometric                         5 regions       0.023 ms  (min 0.017, runs 2000)  LPs 34 (PPOPT-equivalent LPs 61 QPs 6)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                             5 regions       0.051 ms  (min 0.040, runs 2000)  LPs 19 (PPOPT-equivalent LPs 52 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph               5 regions       0.020 ms  (min 0.014, runs 2000)  LPs 46 (PPOPT-equivalent LPs 73 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                            5 regions       0.026 ms  (min 0.019, runs 2000)  LPs 49 (PPOPT-equivalent LPs 94 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                             5 regions       0.014 ms  (min 0.012, runs 2000)  LPs 10 (PPOPT-equivalent LPs 44 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_073: x=1 t=7 constraints=23 (eq 0) build 0.077 ms
+  geometric                        23 regions       3.785 ms  (min 1.937, runs 49)  LPs 892 (PPOPT-equivalent LPs 930 QPs 191)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                            23 regions       2.361 ms  (min 1.015, runs 106)  LPs 525 (PPOPT-equivalent LPs 577 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph              23 regions       2.371 ms  (min 0.855, runs 100)  LPs 525 (PPOPT-equivalent LPs 577 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                           23 regions       3.119 ms  (min 1.294, runs 87)  LPs 777 (PPOPT-equivalent LPs 854 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                            23 regions       6.204 ms  (min 2.805, runs 42)  LPs 695 (PPOPT-equivalent LPs 1080 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_074: x=4 t=3 constraints=16 (eq 0) build 0.074 ms
+  geometric                        79 regions       2.306 ms  (min 0.825, runs 103)  LPs 405 (PPOPT-equivalent LPs 1661 QPs 168)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                            79 regions       1.336 ms  (min 0.540, runs 182)  LPs 386 (PPOPT-equivalent LPs 1576 QPs 99)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph              79 regions       1.274 ms  (min 0.801, runs 142)  LPs 1145 (PPOPT-equivalent LPs 1976 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                           79 regions       2.080 ms  (min 1.163, runs 102)  LPs 1273 (PPOPT-equivalent LPs 2720 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                            79 regions       1.015 ms  (min 0.548, runs 175)  LPs 163 (PPOPT-equivalent LPs 1422 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_075: x=5 t=5 constraints=16 (eq 0) build 0.077 ms
+  geometric                       119 regions       7.095 ms  (min 3.923, runs 37)  LPs 966 (PPOPT-equivalent LPs 3877 QPs 199)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           119 regions       5.370 ms  (min 2.937, runs 49)  LPs 485 (PPOPT-equivalent LPs 3356 QPs 71)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             119 regions       8.516 ms  (min 3.804, runs 34)  LPs 1325 (PPOPT-equivalent LPs 4121 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                          119 regions       9.275 ms  (min 4.068, runs 29)  LPs 1356 (PPOPT-equivalent LPs 4601 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                           119 regions       5.774 ms  (min 2.775, runs 48)  LPs 191 (PPOPT-equivalent LPs 3160 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_077: x=7 t=4 constraints=31 (eq 0) build 0.152 ms
+  geometric                      3914 regions     697.451 ms  (min 493.937, runs 3)  LPs 18661 (PPOPT-equivalent LPs 165109 QPs 3949)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                          3915 regions     240.688 ms  (min 161.648, runs 7)  LPs 25363 (PPOPT-equivalent LPs 167867 QPs 76)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph            3915 regions     392.441 ms  (min 235.351, runs 6)  LPs 123367 (PPOPT-equivalent LPs 245689 QPs 1)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  ahmadi                         3915 regions     453.038 ms  (min 392.516, runs 5)  LPs 105293 (PPOPT-equivalent LPs 266009 QPs 0)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  mplcp                          3915 regions     223.560 ms  (min 134.294, runs 7)  LPs 12809 (PPOPT-equivalent LPs 156603 QPs 1)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_078: x=8 t=3 constraints=29 (eq 0) build 0.200 ms
+  geometric                       706 regions      42.690 ms  (min 26.338, runs 7)  LPs 3407 (PPOPT-equivalent LPs 24184 QPs 1079)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           705 regions      50.863 ms  (min 35.884, runs 7)  LPs 16879 (PPOPT-equivalent LPs 32044 QPs 89)  same-as-first: false  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             706 regions     176.748 ms  (min 121.807, runs 7)  LPs 73395 (PPOPT-equivalent LPs 70041 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                          706 regions     426.001 ms  (min 260.541, runs 6)  LPs 100373 (PPOPT-equivalent LPs 123019 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                           706 regions      29.241 ms  (min 9.363, runs 9)  LPs 1686 (PPOPT-equivalent LPs 22716 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_079: x=8 t=3 constraints=47 (eq 0) build 0.169 ms
+  geometric                       126 regions      11.906 ms  (min 2.508, runs 27)  LPs 543 (PPOPT-equivalent LPs 7088 QPs 126)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           126 regions       3.974 ms  (min 1.771, runs 36)  LPs 400 (PPOPT-equivalent LPs 6942 QPs 66)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             126 regions      10.457 ms  (min 4.449, runs 19)  LPs 6476 (PPOPT-equivalent LPs 11973 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                          126 regions      19.080 ms  (min 5.997, runs 10)  LPs 6507 (PPOPT-equivalent LPs 13185 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                           126 regions       3.268 ms  (min 1.361, runs 35)  LPs 129 (PPOPT-equivalent LPs 6804 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_080: x=3 t=7 constraints=23 (eq 0) build 0.086 ms
+  geometric                       273 regions     106.649 ms  (min 42.048, runs 7)  LPs 10345 (PPOPT-equivalent LPs 13700 QPs 942)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           273 regions      47.178 ms  (min 31.739, runs 7)  LPs 6773 (PPOPT-equivalent LPs 10361 QPs 72)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             273 regions      63.043 ms  (min 23.707, runs 7)  LPs 7462 (PPOPT-equivalent LPs 10883 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                          273 regions      65.515 ms  (min 34.817, runs 7)  LPs 9822 (PPOPT-equivalent LPs 14276 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                           273 regions      91.168 ms  (min 35.962, runs 7)  LPs 8221 (PPOPT-equivalent LPs 19887 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_081: x=1 t=6 constraints=3 (eq 0) build 0.039 ms
+  geometric                         4 regions       0.126 ms  (min 0.100, runs 616)  LPs 72 (PPOPT-equivalent LPs 113 QPs 4)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                             4 regions       0.243 ms  (min 0.086, runs 574)  LPs 13 (PPOPT-equivalent LPs 67 QPs 57)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph               4 regions       0.074 ms  (min 0.055, runs 1046)  LPs 13 (PPOPT-equivalent LPs 67 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                            4 regions       0.075 ms  (min 0.055, runs 1031)  LPs 13 (PPOPT-equivalent LPs 73 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                             4 regions       0.151 ms  (min 0.065, runs 749)  LPs 9 (PPOPT-equivalent LPs 62 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_082: x=6 t=2 constraints=23 (eq 0) build 0.071 ms
+  geometric                        76 regions       1.539 ms  (min 0.612, runs 146)  LPs 262 (PPOPT-equivalent LPs 2233 QPs 76)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                            76 regions       1.706 ms  (min 0.659, runs 113)  LPs 362 (PPOPT-equivalent LPs 2281 QPs 81)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph              76 regions       2.548 ms  (min 0.898, runs 30)  LPs 1826 (PPOPT-equivalent LPs 3557 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                           76 regions       2.281 ms  (min 0.927, runs 58)  LPs 1786 (PPOPT-equivalent LPs 3846 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                            76 regions       0.560 ms  (min 0.297, runs 179)  LPs 79 (PPOPT-equivalent LPs 2128 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_084: x=5 t=6 constraints=18 (eq 0) build 0.086 ms
+  geometric                       665 regions     287.518 ms  (min 142.181, runs 7)  LPs 8204 (PPOPT-equivalent LPs 25427 QPs 665)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           665 regions     146.815 ms  (min 102.941, runs 7)  LPs 2585 (PPOPT-equivalent LPs 21536 QPs 57)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             665 regions     154.526 ms  (min 93.754, runs 7)  LPs 6183 (PPOPT-equivalent LPs 25084 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                          665 regions     147.197 ms  (min 118.326, runs 7)  LPs 6041 (PPOPT-equivalent LPs 27705 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                           665 regions     136.316 ms  (min 92.172, runs 7)  LPs 3718 (PPOPT-equivalent LPs 20591 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_085: x=3 t=7 constraints=16 (eq 0) build 0.075 ms
+  geometric                       121 regions      23.407 ms  (min 14.852, runs 13)  LPs 4310 (PPOPT-equivalent LPs 5260 QPs 214)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           121 regions      10.834 ms  (min 6.626, runs 25)  LPs 2825 (PPOPT-equivalent LPs 4037 QPs 76)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             121 regions      13.752 ms  (min 7.207, runs 23)  LPs 3099 (PPOPT-equivalent LPs 4233 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                          121 regions      15.474 ms  (min 11.662, runs 18)  LPs 3602 (PPOPT-equivalent LPs 5093 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                           121 regions      21.491 ms  (min 12.442, runs 15)  LPs 3127 (PPOPT-equivalent LPs 7457 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_086: x=3 t=7 constraints=40 (eq 0) build 0.167 ms
+  geometric                      3625 regions    2514.809 ms  (min 2514.809, runs 1)  LPs 182744 (PPOPT-equivalent LPs 217150 QPs 11829)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                          3625 regions    1085.129 ms  (min 1073.822, runs 2)  LPs 134847 (PPOPT-equivalent LPs 168662 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph            3625 regions     991.473 ms  (min 915.874, runs 3)  LPs 142867 (PPOPT-equivalent LPs 172672 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                         3625 regions    1550.134 ms  (min 1339.325, runs 2)  LPs 201633 (PPOPT-equivalent LPs 240985 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                          3625 regions    2377.631 ms  (min 2377.631, runs 1)  LPs 202115 (PPOPT-equivalent LPs 326205 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_087: x=7 t=2 constraints=26 (eq 0) build 0.131 ms
+  geometric                       148 regions       4.597 ms  (min 1.762, runs 59)  LPs 549 (PPOPT-equivalent LPs 4376 QPs 187)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           148 regions      10.376 ms  (min 4.509, runs 27)  LPs 4783 (PPOPT-equivalent LPs 7001 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             148 regions      15.588 ms  (min 10.342, runs 16)  LPs 11899 (PPOPT-equivalent LPs 12055 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                          148 regions       9.429 ms  (min 4.530, runs 27)  LPs 5034 (PPOPT-equivalent LPs 9167 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                           148 regions       2.020 ms  (min 0.935, runs 97)  LPs 323 (PPOPT-equivalent LPs 4129 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_090: x=2 t=8 constraints=37 (eq 0) build 0.153 ms
+  geometric                       438 regions     240.281 ms  (min 195.913, runs 7)  LPs 23213 (PPOPT-equivalent LPs 25682 QPs 3125)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           438 regions     121.204 ms  (min 79.911, runs 7)  LPs 14142 (PPOPT-equivalent LPs 17187 QPs 100)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             438 regions     100.810 ms  (min 77.092, runs 7)  LPs 14266 (PPOPT-equivalent LPs 17249 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                          438 regions     159.925 ms  (min 114.992, runs 7)  LPs 21298 (PPOPT-equivalent LPs 24886 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                           438 regions     387.023 ms  (min 254.623, runs 6)  LPs 21221 (PPOPT-equivalent LPs 33250 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_092: x=3 t=3 constraints=9 (eq 0) build 0.046 ms
+  geometric                        12 regions       0.249 ms  (min 0.092, runs 508)  LPs 90 (PPOPT-equivalent LPs 249 QPs 16)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                            12 regions       0.204 ms  (min 0.091, runs 425)  LPs 55 (PPOPT-equivalent LPs 214 QPs 68)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph              12 regions       0.115 ms  (min 0.066, runs 1343)  LPs 100 (PPOPT-equivalent LPs 253 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                           12 regions       0.168 ms  (min 0.082, runs 1036)  LPs 107 (PPOPT-equivalent LPs 295 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                            12 regions       0.184 ms  (min 0.058, runs 902)  LPs 22 (PPOPT-equivalent LPs 190 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_093: x=1 t=3 constraints=8 (eq 0) build 0.037 ms
+  geometric                         7 regions       0.149 ms  (min 0.054, runs 1351)  LPs 63 (PPOPT-equivalent LPs 124 QPs 18)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                             7 regions       0.086 ms  (min 0.054, runs 1574)  LPs 26 (PPOPT-equivalent LPs 93 QPs 93)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph               7 regions       0.044 ms  (min 0.024, runs 2000)  LPs 26 (PPOPT-equivalent LPs 93 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                            7 regions       0.056 ms  (min 0.036, runs 2000)  LPs 49 (PPOPT-equivalent LPs 130 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                             7 regions       0.080 ms  (min 0.051, runs 857)  LPs 26 (PPOPT-equivalent LPs 83 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_094: x=2 t=2 constraints=10 (eq 0) build 0.033 ms
+  geometric                        10 regions       0.119 ms  (min 0.045, runs 965)  LPs 52 (PPOPT-equivalent LPs 164 QPs 16)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                            10 regions       0.102 ms  (min 0.058, runs 1780)  LPs 35 (PPOPT-equivalent LPs 153 QPs 89)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph              10 regions       0.051 ms  (min 0.040, runs 2000)  LPs 78 (PPOPT-equivalent LPs 179 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                           10 regions       0.072 ms  (min 0.058, runs 1815)  LPs 111 (PPOPT-equivalent LPs 250 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                            10 regions       0.042 ms  (min 0.032, runs 1868)  LPs 20 (PPOPT-equivalent LPs 140 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_096: x=5 t=5 constraints=20 (eq 0) build 0.094 ms
+  geometric                       258 regions      80.206 ms  (min 32.769, runs 7)  LPs 2273 (PPOPT-equivalent LPs 8868 QPs 360)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           258 regions      63.972 ms  (min 24.109, runs 7)  LPs 2987 (PPOPT-equivalent LPs 8887 QPs 70)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             258 regions      39.407 ms  (min 14.656, runs 7)  LPs 6412 (PPOPT-equivalent LPs 11160 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                          258 regions     128.573 ms  (min 43.538, runs 7)  LPs 12280 (PPOPT-equivalent LPs 19382 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                           258 regions     135.511 ms  (min 54.170, runs 7)  LPs 1313 (PPOPT-equivalent LPs 7252 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_098: x=2 t=8 constraints=32 (eq 0) build 0.117 ms
+  geometric                       269 regions     228.263 ms  (min 70.714, runs 7)  LPs 14514 (PPOPT-equivalent LPs 18386 QPs 1150)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           269 regions     116.503 ms  (min 32.597, runs 7)  LPs 8658 (PPOPT-equivalent LPs 12598 QPs 87)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             269 regions      98.909 ms  (min 38.999, runs 7)  LPs 8765 (PPOPT-equivalent LPs 12517 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                          269 regions     124.785 ms  (min 68.991, runs 7)  LPs 12559 (PPOPT-equivalent LPs 16977 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                           269 regions     219.459 ms  (min 71.482, runs 7)  LPs 12283 (PPOPT-equivalent LPs 24169 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree
+== pop_099: x=7 t=3 constraints=25 (eq 0) build 0.130 ms
+  geometric                       458 regions      26.827 ms  (min 17.619, runs 11)  LPs 2030 (PPOPT-equivalent LPs 15208 QPs 570)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  graph                           458 regions      29.347 ms  (min 19.566, runs 10)  LPs 7737 (PPOPT-equivalent LPs 18267 QPs 96)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  combinatorial_graph             458 regions      43.784 ms  (min 28.616, runs 8)  LPs 20142 (PPOPT-equivalent LPs 27408 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  ahmadi                          458 regions      39.232 ms  (min 22.846, runs 7)  LPs 13056 (PPOPT-equivalent LPs 26978 QPs 0)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  mplcp                           458 regions      14.957 ms  (min 8.151, runs 20)  LPs 1312 (PPOPT-equivalent LPs 14198 QPs 1)  same-as-first: true  gaps 0 overlaps 0 wrong 0
+  verify_theta vs direct QP: 2000/2000 agree

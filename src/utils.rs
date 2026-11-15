@@ -95,6 +95,37 @@ fn canonical_bits(v: f64) -> u64 {
     if v == 0.0 { 0 } else { v.to_bits() }
 }
 
+/// For the kept rows `rows` of the unit-norm system `e x <= f`: true when no other row of the whole system lies on the same
+/// hyperplane (either orientation) within 1e-6. A tableau row can vanish identically on the facet of row p only if its affine
+/// function is proportional to row p's, that is, only if such a row exists. `dropped_zero`: some row of the unreduced system was
+/// dropped as numerically zero and is not in `e`; it may vanish identically, so nothing is certified then.
+pub fn unique_hyperplane_flags(e: &Mat, f: &[f64], rows: &[usize], dropped_zero: bool) -> Vec<bool> {
+    if dropped_zero {
+        return vec![false; rows.len()];
+    }
+    const TOL: f64 = 1e-6;
+    rows.iter()
+        .map(|&p| {
+            let a = e.row(p);
+            let fp = f[p];
+            let ot = TOL * (1.0 + fp.abs());
+            for q in 0..e.rows {
+                if q == p {
+                    continue;
+                }
+                let b = e.row(q);
+                if (f[q] - fp).abs() <= ot && a.iter().zip(b).all(|(x, y)| (x - y).abs() <= TOL) {
+                    return false;
+                }
+                if (f[q] + fp).abs() <= ot && a.iter().zip(b).all(|(x, y)| (x + y).abs() <= TOL) {
+                    return false;
+                }
+            }
+            true
+        })
+        .collect()
+}
+
 pub fn cheap_remove_redundant_constraints(a: &Mat, b: &[f64]) -> (Mat, Vec<f64>) {
     let (a, b) = remove_zero_rows(a, b);
     let (a, b) = scale_constraint(&a, &b);

@@ -1,0 +1,432 @@
+{
+ "di_N10/combinatorial": {
+  "timeout_s": 120.0
+ },
+ "di_N10/combinatorial_graph": {
+  "build_s": 0.10245466697961092,
+  "solve_s": 0.22311637504026294,
+  "regions": 11,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "di_N10/graph": {
+  "build_s": 0.09748583380132914,
+  "solve_s": 0.25411450024694204,
+  "regions": 11,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "di_N10/geometric": {
+  "build_s": 0.09919599955901504,
+  "solve_s": 0.08589750016108155,
+  "regions": 11,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 6775.868753902614,
+  "pl_hit_fraction": 0.6764
+ },
+ "di_N10/combinatorial_parallel": {
+  "timeout_s": 120.0
+ },
+ "di_N4/combinatorial": {
+  "build_s": 0.1971346251666546,
+  "solve_s": 1.1412487919442356,
+  "regions": 9,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 13762.597902677953,
+  "pl_hit_fraction": 0.6764
+ },
+ "di_N4/combinatorial_graph": {
+  "build_s": 0.11571933329105377,
+  "solve_s": 0.19838545797392726,
+  "regions": 9,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "di_N4/graph": {
+  "build_s": 0.09077370772138238,
+  "solve_s": 0.18708779197186232,
+  "regions": 9,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "di_N4/geometric": {
+  "build_s": 0.33797870809212327,
+  "solve_s": 0.21703408332541585,
+  "regions": 9,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 16468.395804986358,
+  "pl_hit_fraction": 0.6764
+ },
+ "di_N4/combinatorial_parallel": {
+  "build_s": 0.1168731669895351,
+  "solve_s": 0.3207345409318805,
+  "regions": 9,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "di_N6/combinatorial": {
+  "build_s": 0.09304837509989738,
+  "solve_s": 27.59597733290866,
+  "regions": 11,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 13727.147900499403,
+  "pl_hit_fraction": 0.6764
+ },
+ "di_N6/combinatorial_graph": {
+  "build_s": 0.12117395829409361,
+  "solve_s": 0.3008137089200318,
+  "regions": 11,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "di_N6/graph": {
+  "build_s": 0.09360929066315293,
+  "solve_s": 0.33039445895701647,
+  "regions": 11,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "di_N6/geometric": {
+  "build_s": 0.09769966686144471,
+  "solve_s": 0.08674441697075963,
+  "regions": 11,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 15333.36874563247,
+  "pl_hit_fraction": 0.6764
+ },
+ "di_N6/combinatorial_parallel": {
+  "build_s": 0.1096797906793654,
+  "solve_s": 5.359438917133957,
+  "regions": 11,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "di_N8/combinatorial": {
+  "timeout_s": 120.0
+ },
+ "di_N8/combinatorial_graph": {
+  "build_s": 0.08326829131692648,
+  "solve_s": 0.17053379165008664,
+  "regions": 11,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "di_N8/graph": {
+  "build_s": 0.08349291700869799,
+  "solve_s": 0.20491141686215997,
+  "regions": 11,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "di_N8/geometric": {
+  "build_s": 0.0829493342898786,
+  "solve_s": 0.06619716575369239,
+  "regions": 11,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 6328.1562412157655,
+  "pl_hit_fraction": 0.6764
+ },
+ "di_N8/combinatorial_parallel": {
+  "build_s": 0.08233737526461482,
+  "solve_s": 67.05043670814484,
+  "regions": 11,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "di_doc_N3/combinatorial": {
+  "build_s": 0.09423599997535348,
+  "solve_s": 0.11502004181966186,
+  "regions": 7,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 6938.658352009952,
+  "pl_hit_fraction": 0.6806
+ },
+ "di_doc_N3/combinatorial_graph": {
+  "build_s": 0.0768848336301744,
+  "solve_s": 0.03935791598632932,
+  "regions": 7,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "di_doc_N3/graph": {
+  "build_s": 0.07869941694661975,
+  "solve_s": 0.05173374991863966,
+  "regions": 7,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "di_doc_N3/geometric": {
+  "build_s": 0.07329095806926489,
+  "solve_s": 0.02660204190760851,
+  "regions": 7,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 6591.014564037323,
+  "pl_hit_fraction": 0.6806
+ },
+ "di_doc_N3/combinatorial_parallel": {
+  "build_s": 0.07354404171928763,
+  "solve_s": 0.10300324996933341,
+  "regions": 7,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "dinv_N4/combinatorial": {
+  "build_s": 0.07547295792028308,
+  "solve_s": 0.3408922916278243,
+  "regions": 9,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 6791.360396891832,
+  "pl_hit_fraction": 0.6639
+ },
+ "dinv_N4/combinatorial_graph": {
+  "build_s": 0.07827516691759229,
+  "solve_s": 0.06152425007894635,
+  "regions": 9,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "dinv_N4/graph": {
+  "build_s": 0.07654612511396408,
+  "solve_s": 0.0947621245868504,
+  "regions": 9,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "dinv_N4/geometric": {
+  "build_s": 0.07453591702505946,
+  "solve_s": 0.03309483313933015,
+  "regions": 9,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 6556.270853616297,
+  "pl_hit_fraction": 0.6639
+ },
+ "dinv_N4/combinatorial_parallel": {
+  "build_s": 0.07473783427849412,
+  "solve_s": 0.15821370761841536,
+  "regions": 9,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "dinv_N6/combinatorial": {
+  "build_s": 0.08085058303549886,
+  "solve_s": 8.348586791660637,
+  "regions": 11,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 6973.779201507568,
+  "pl_hit_fraction": 0.6764
+ },
+ "dinv_N6/combinatorial_graph": {
+  "build_s": 0.08156404132023454,
+  "solve_s": 0.14451554184779525,
+  "regions": 11,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "dinv_N6/graph": {
+  "build_s": 0.08147870795801282,
+  "solve_s": 0.18444941705092788,
+  "regions": 11,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "dinv_N6/geometric": {
+  "build_s": 0.08170179091393948,
+  "solve_s": 0.06401795893907547,
+  "regions": 11,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 6880.577094852924,
+  "pl_hit_fraction": 0.6764
+ },
+ "dinv_N6/combinatorial_parallel": {
+  "build_s": 0.08098891610279679,
+  "solve_s": 1.9405433339998126,
+  "regions": 11,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "dinv_N8/combinatorial": {
+  "timeout_s": 120.0
+ },
+ "dinv_N8/combinatorial_graph": {
+  "build_s": 0.08995900023728609,
+  "solve_s": 0.1748075420036912,
+  "regions": 11,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "dinv_N8/graph": {
+  "build_s": 0.0891525000333786,
+  "solve_s": 0.20973541727289557,
+  "regions": 11,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "dinv_N8/geometric": {
+  "build_s": 0.09031283296644688,
+  "solve_s": 0.06854158407077193,
+  "regions": 11,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 6826.195842586458,
+  "pl_hit_fraction": 0.6764
+ },
+ "dinv_N8/combinatorial_parallel": {
+  "build_s": 0.08435483369976282,
+  "solve_s": 49.645291625056416,
+  "regions": 11,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "masses2_N4/combinatorial": {
+  "build_s": 0.08937441697344184,
+  "solve_s": 7.764524832833558,
+  "regions": 307,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 22425.83956103772,
+  "pl_hit_fraction": 0.42775
+ },
+ "masses2_N4/combinatorial_graph": {
+  "build_s": 0.087310291826725,
+  "solve_s": 4.921822250355035,
+  "regions": 307,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "masses2_N4/graph": {
+  "build_s": 0.08699612505733967,
+  "solve_s": 4.24109424976632,
+  "regions": 307,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "masses2_N4/geometric": {
+  "build_s": 0.08411525003612041,
+  "solve_s": 4.422255416866392,
+  "regions": 307,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 22468.83953921497,
+  "pl_hit_fraction": 0.42775
+ },
+ "masses2_N4/combinatorial_parallel": {
+  "build_s": 0.08660366712138057,
+  "solve_s": 1.9334446657449007,
+  "regions": 307,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "masses2_N6/combinatorial": {
+  "timeout_s": 120.0
+ },
+ "masses2_N6/combinatorial_graph": {
+  "build_s": 0.12527037505060434,
+  "solve_s": 41.09868220798671,
+  "regions": 901,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "masses2_N6/graph": {
+  "build_s": 0.13959879195317626,
+  "solve_s": 28.00433358270675,
+  "regions": 901,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "masses2_N6/geometric": {
+  "build_s": 0.13693404104560614,
+  "solve_s": 21.633384624961764,
+  "regions": 901,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 68711.44999749959,
+  "pl_hit_fraction": 0.38645
+ },
+ "masses2_N6/combinatorial_parallel": {
+  "build_s": 0.10729420790448785,
+  "solve_s": 66.98777770809829,
+  "regions": 901,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "sys3x2_N3/combinatorial": {
+  "build_s": 0.07766608288511634,
+  "solve_s": 14.109039458911866,
+  "regions": 211,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 16799.177112989128,
+  "pl_hit_fraction": 0.71435
+ },
+ "sys3x2_N3/combinatorial_graph": {
+  "build_s": 0.07413204200565815,
+  "solve_s": 2.555479541886598,
+  "regions": 211,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "sys3x2_N3/graph": {
+  "build_s": 0.07260724995285273,
+  "solve_s": 2.312667000107467,
+  "regions": 211,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "sys3x2_N3/geometric": {
+  "build_s": 0.0733282919973135,
+  "solve_s": 1.5842652912251651,
+  "regions": 211,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 16914.533358067274,
+  "pl_hit_fraction": 0.71435
+ },
+ "sys3x2_N3/combinatorial_parallel": {
+  "build_s": 0.07208812516182661,
+  "solve_s": 3.3681277497671545,
+  "regions": 211,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "sys3x2_N5/combinatorial": {
+  "timeout_s": 120.0
+ },
+ "sys3x2_N5/combinatorial_graph": {
+  "build_s": 0.12388120824471116,
+  "solve_s": 85.40177020896226,
+  "regions": 973,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "sys3x2_N5/graph": {
+  "build_s": 0.12988616712391376,
+  "solve_s": 57.8272206671536,
+  "regions": 973,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog"
+ },
+ "sys3x2_N5/geometric": {
+  "build_s": 0.12486095819622278,
+  "solve_s": 15.504931207746267,
+  "regions": 973,
+  "lp_solver": "gurobi",
+  "qp_solver": "quadprog",
+  "pl_ns_per_query": 63876.35834980756,
+  "pl_hit_fraction": 0.592
+ },
+ "sys3x2_N5/combinatorial_parallel": {
+  "timeout_s": 120.0
+ }
+}

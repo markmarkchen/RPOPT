@@ -16,7 +16,9 @@ use std::sync::Arc;
 #[test]
 fn mplcp_pop_001_twin_rows_lex_feasible() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("bench/problems_large/pop_001.json");
-    let prog = Arc::new(MpProgram::from_json_file(&path).unwrap());
+    // the program with its twin rows: the preprocessing merge of duplicate rows is off, so the test
+    // keeps testing mplcp's own handling of twins (with the merge on, the twins are gone before mplcp runs)
+    let prog = Arc::new(MpProgram::from_json_file_opts(&path, false).unwrap());
     // the solve with the twin rows in the program (the invariant this test is about)
     let regions = rpopt::algorithms::mplcp::solve_with_dedupe(&prog, 0, rpopt::algorithms::mplcp::Method::Pivot, false).unwrap();
     let sets: Vec<Vec<usize>> = regions

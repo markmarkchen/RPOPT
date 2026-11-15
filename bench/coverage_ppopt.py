@@ -57,7 +57,8 @@ def worker(problem_path, algorithm, events_path):
 
     with open(problem_path) as f:
         d = json.load(f)
-    m = {k: (numpy.array(v, dtype=float) if k != 'equality_indices' else v) for k, v in d.items()}
+    m = {k: (numpy.array(v, dtype=float) if k != 'equality_indices' else v) for k, v in d.items()
+         if not isinstance(v, dict)}  # skip metadata such as the 'mpc' plant description
     prog = MPQP_Program(m['A'], m['b'], m['c'], m['H'], m['Q'], m['A_t'], m['b_t'], m['F'],
                         equality_indices=m['equality_indices'])
     start[0] = time.perf_counter()
