@@ -1305,7 +1305,7 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
         if mi > 0.0 && nu > MU_NONZERO {
             pm.push(i);
             pm_mu.push(mi);
-        } else if mi > 0.0 && nu_tab > 0.0 && nu_tab <= MU_ZERO {
+        } else if mi > 0.0 && nu_tab > ZERO_GUARD_MIN && nu_tab <= MU_ZERO {
             // a positive tableau multiplier decided zero without a recomputation (a rounded zero, or a tiny true positive)
             zeroed_pos.push(ai);
         }
@@ -1608,6 +1608,9 @@ fn dependent_set(p: &Plcp, aset: &[usize]) -> bool {
     crate::linalg::Lu::new(&g).is_none()
 }
 
+/// A positive tableau multiplier below this (in the scale of the dependency) is at the rounding level of the tableau: it cannot be told from an exact
+/// zero there, and a member basis with such a pivot would not pass the relative pivot floor of `tableau_for` anyway, so the empty-P- safeguard ignores it.
+const ZERO_GUARD_MIN: f64 = 1e-12;
 const REFINE_STEPS: usize = 2;
 /// A refined multiplier of this size or below (in the scale of the dependency) is zero: an exact dependency comes out at rounding level 1e-15.
 const REFINED_ZERO: f64 = 1e-12;
