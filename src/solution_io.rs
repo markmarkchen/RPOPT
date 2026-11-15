@@ -1,7 +1,7 @@
 //! Save / load of explicit solutions: compact deterministic binary and JSON.
 
 use crate::critical_region::CriticalRegion;
-use crate::io::{Error, Reader, Writer};
+use crate::io::{Error, Reader, Sink, StreamHasher, Writer};
 use crate::linalg::Mat;
 use crate::program::MpProgram;
 use crate::solution::{Solution, SolutionData};
@@ -173,9 +173,46 @@ impl Solution {
     /// Deterministic compact binary encoding (see [`SOLUTION_FORMAT_VERSION`]). Self-contained:
     /// includes the processed program.
     pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
+        let mut w = Writer::new(SOL_MAGIC, SOLUTION_FORMAT_VERSION, self.memory_bytes() / 2 + 64);
+        self.encode(&mut w)?;
+        Ok(w.finish())
+    }
+
+    /// Writes exactly the bytes of [`Solution::to_bytes`] to `path` in chunks, so the peak extra memory
+    /// is about 2 MiB instead of the whole encoding. Returns the file size.
+    pub fn save_streaming(&self, path: impl AsRef<Path>) -> Result<u64, Error> {
+        let mut count = Writer::streaming(SOL_MAGIC, SOLUTION_FORMAT_VERSION, 0, Sink::Count(0));
+        self.encode(&mut count)?;
+        let plen = count.finish_stream()?;
+        let file = std::io::BufWriter::with_capacity(1 << 20, std::fs::File::create(path)?);
+        let mut w = Writer::streaming(SOL_MAGIC, SOLUTION_FORMAT_VERSION, plen, Sink::File(file, StreamHasher::new()));
+        self.encode(&mut w)?;
+        w.finish_stream()
+    }
+
+    /// Checks that the file at `path` holds exactly the encoding of this solution, by encoding in chunks and
+    /// comparing them with the file (no second copy of the solution in memory, unlike [`Solution::load`]).
+    pub fn file_matches(&self, path: impl AsRef<Path>) -> Result<bool, Error> {
+        let mut head = [0u8; 20];
+        let mut file = std::fs::File::open(path.as_ref())?;
+        std::io::Read::read_exact(&mut file, &mut head)?;
+        let plen = u64::from_le_bytes(head[12..20].try_into().unwrap());
+        let rd = std::io::BufReader::with_capacity(1 << 20, std::fs::File::open(path.as_ref())?);
+        let mut w = Writer::streaming(SOL_MAGIC, SOLUTION_FORMAT_VERSION, plen, Sink::Compare(rd, StreamHasher::new()));
+        match self.encode(&mut w) {
+            Err(Error::Corrupt(m)) if m.starts_with("saved file") => return Ok(false),
+            r => r?,
+        }
+        match w.finish_stream() {
+            Ok(_) => Ok(true),
+            Err(Error::Corrupt(_)) => Ok(false),
+            Err(e) => Err(e),
+        }
+    }
+
+    fn encode(&self, w: &mut Writer) -> Result<(), Error> {
         let p = self.saved_program()?;
         validate(p, &self.critical_regions)?;
-        let mut w = Writer::new(SOL_MAGIC, SOLUTION_FORMAT_VERSION, self.memory_bytes() / 2 + 64);
         w.u32(self.is_overlapping as u32);
         w.f64(self.point_location_tolerance);
         w.mat(&p.a)?;
@@ -198,9 +235,10 @@ impl Solution {
         w.usizes(&p.equality_indices)?;
         w.len(self.critical_regions.len())?;
         for r in &self.critical_regions {
-            write_region(&mut w, r)?;
+            write_region(w, r)?;
+            w.spill()?;
         }
-        Ok(w.finish())
+        Ok(())
     }
 
     /// Decodes [`Solution::to_bytes`]. Never panics: bad magic, version, truncation, corruption
@@ -303,7 +341,9 @@ impl Solution {
     /// Writes the solution (with its program) to `path`.
     pub fn save(&self, path: impl AsRef<Path>, format: Format) -> Result<(), Error> {
         match format {
-            Format::Binary => std::fs::write(path, self.to_bytes()?)?,
+            Format::Binary => {
+                self.save_streaming(path)?;
+            }
             Format::Json => {
                 let p = self.saved_program()?;
                 validate(p, &self.critical_regions)?;
