@@ -44,6 +44,8 @@ struct Plcp {
     pos: Vec<usize>,
     /// X = M_EE^{-1} [M_EI | q_E | R_E], ne x (n + 1 + nt) (empty without equalities)
     xe: Mat,
+    /// Euclidean radius of the parameter box (every region lies within it), or -1 when the box is unbounded or unknown
+    coord_bound: f64,
 }
 
 impl Plcp {
@@ -113,7 +115,11 @@ impl Plcp {
             }
             xe = x;
         }
-        Some(Plcp { n, nt, m, q, r, ineq, eq, pos, xe })
+        let coord_bound = match program.theta_bbox() {
+            Some((lo, hi)) if lo.iter().chain(hi.iter()).all(|v| v.is_finite()) => lo.iter().zip(hi).map(|(l, h)| (l * l).max(h * h)).sum::<f64>().sqrt(),
+            _ => -1.0,
+        };
+        Some(Plcp { n, nt, m, q, r, ineq, eq, pos, xe, coord_bound })
     }
 
     /// Full active set (equalities first) of the z-basic rows.
@@ -612,7 +618,7 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
                 #[cfg(feature = "lp_census")]
                 let boxe = if bwit.is_none() && bcentre.is_none() { box_probe(&ef, &ff, fpoly.ef.rows) } else { false };
                 crate::census_lap!(cm, Census);
-                let dq = bwit.is_none() && bcentre.is_none() && daqp_certainly_empty(&ef, &ff, d1);
+                let dq = bwit.is_none() && bcentre.is_none() && daqp_certainly_empty(&ef, &ff, d1, p.coord_bound);
                 if bwit.is_none() && bcentre.is_none() {
                     crate::census_lap!(cm, Daqp);
                 }
@@ -1294,7 +1300,7 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
             crate::census_lap!(cm, R1Out);
             continue;
         }
-        let dq = daqp_certainly_empty(&e2, &f2, d1);
+        let dq = daqp_certainly_empty(&e2, &f2, d1, p.coord_bound);
         crate::census_lap!(cm, Daqp);
         if dq {
             crate::census_bump!(R1EmptyMember, 1);
@@ -1797,9 +1803,6 @@ pub fn regions(program: &MpProgram, seed: u64, method: Method) -> Vec<CriticalRe
 /// 0 to 7), so the period only trades a rebuild (about |z| pivots) against nothing. 8 -> 32.
 const REFACTOR: usize = 32;
 
-/// Bound on the coordinates of a sub-facet polytope, used to check an infeasibility certificate of DAQP.
-const DAQP_COORD_BOUND: f64 = 1e3;
-
 static DAQP_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
 /// Switches the DAQP emptiness filter of the sub-facet tests (default on); off sends every test to the LP.
@@ -1830,13 +1833,17 @@ thread_local! {
 
 /// True when `{x in R^d1 : e x <= f}` is certainly empty: DAQP reports it infeasible and its certificate checks.
 /// DAQP's infeasibility answer alone is not enough, because on nearly parallel rows its null-vector step can claim
-/// infeasibility for a polytope with a ball of radius 1e-6 inside (seen on masses4_N3). A certificate `p >= 0` with
-/// residual `r = sum p_i a_i` and gap `g = sum p_i b_i` proves emptiness when `g + |r|_1 R < 0` for coordinates
-/// bounded by `R`, so only certificates that pass this check are used. Most sub-facet tests of the neighbour search
-/// are empty, and one DAQP solve costs a fraction of the LP; everything not certified goes to the LP unchanged.
-fn daqp_certainly_empty(e: &Mat, f: &[f64], d1: usize) -> bool {
+/// infeasibility for a polytope with a ball of radius 1e-6 inside (seen on masses4_N3). The multipliers `p` of its
+/// certificate are clamped to `max(p, 0)`, and from the clamped vector the residual `r = sum p_i a_i` and the gap
+/// `g = sum p_i b_i` are recomputed. Every `x` of the polytope satisfies `0 <= p.(b - A x) = g - r.x`, so the polytope is empty
+/// when `g + |r|_1 R < 0`, where `R` bounds `|x|_inf`: the facet coordinates are the parameters minus the component along
+/// the facet normal, so `|x|_inf <= |x|_2 <= |theta|_2 <= bound`, the Euclidean radius of the parameter box
+/// (`coord_bound`; negative when the box is unbounded or unknown, and then no certificate is accepted).
+/// Most sub-facet tests of the neighbour search are empty, and one DAQP solve costs a fraction of the LP; everything not
+/// certified goes to the LP unchanged.
+fn daqp_certainly_empty(e: &Mat, f: &[f64], d1: usize, bound: f64) -> bool {
     use crate::algorithms::pdaqp::daqp::{Rows, Status};
-    if d1 == 0 || e.rows == 0 || !DAQP_ON.load(std::sync::atomic::Ordering::Relaxed) {
+    if d1 == 0 || e.rows == 0 || !(bound >= 0.0) || !DAQP_ON.load(std::sync::atomic::Ordering::Relaxed) {
         return false;
     }
     #[cfg(feature = "lp_census")]
@@ -1879,15 +1886,13 @@ fn daqp_certainly_empty(e: &Mat, f: &[f64], d1: usize) -> bool {
         let tc = std::time::Instant::now();
         let certified = st_inf && {
             let (w, p) = dq.certificate();
-            let sp: f64 = p.iter().sum();
-            if !(sp > 0.0) || p.iter().any(|v| !v.is_finite()) {
+            if p.iter().any(|v| !v.is_finite()) {
                 false
             } else {
-                // a multiplier that came out slightly negative is charged to the residual
-                let neg: f64 = p.iter().map(|&v| (-v).max(0.0)).sum();
-                let gap: f64 = w.iter().zip(p).map(|(&i, &v)| v * rhs[i]).sum();
-                let res: f64 = (0..d1).map(|t| w.iter().zip(p).map(|(&i, &v)| v * cols[t * n + i]).sum::<f64>().abs()).sum();
-                gap + (res + neg) * DAQP_COORD_BOUND < -1e-10 * sp
+                let sp: f64 = p.iter().map(|&v| v.max(0.0)).sum();
+                let gap: f64 = w.iter().zip(p).map(|(&i, &v)| v.max(0.0) * rhs[i]).sum();
+                let res: f64 = (0..d1).map(|t| w.iter().zip(p).map(|(&i, &v)| v.max(0.0) * cols[t * n + i]).sum::<f64>().abs()).sum();
+                sp > 0.0 && gap + res * bound < -1e-10 * sp
             }
         };
         #[cfg(feature = "lp_census")]
@@ -2795,7 +2800,7 @@ fn lp_plcp(program: &MpProgram) -> Plcp {
             r[(2 * nx + j) * nt + t] = program.f[(j, t)];
         }
     }
-    Plcp { n, nt, m, q, r, ineq: vec![], eq: vec![], pos: vec![], xe: Mat::zeros(0, 0) }
+    Plcp { n, nt, m, q, r, ineq: vec![], eq: vec![], pos: vec![], xe: Mat::zeros(0, 0), coord_bound: -1.0 }
 }
 
 /// State of the depth-first form of Algorithm 1 (pairs are decided one by one; `choice[j]` is
@@ -2974,7 +2979,7 @@ fn permuted(p: &Plcp, perm: &[usize]) -> Plcp {
             m[a * n + b] = p.m[i * n + j];
         }
     }
-    Plcp { n, nt, m, q, r, ineq: p.ineq.clone(), eq: p.eq.clone(), pos: p.pos.clone(), xe: p.xe.clone() }
+    Plcp { n, nt, m, q, r, ineq: p.ineq.clone(), eq: p.eq.clone(), pos: p.pos.clone(), xe: p.xe.clone(), coord_bound: p.coord_bound }
 }
 
 /// Herceg et al. (2015) Algorithm 1: enumerates the feasible complementary bases of the pLCP and
