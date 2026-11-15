@@ -252,8 +252,14 @@ mod imp {
         WalkBudget,
         FallbackAcross,
         FallbackFail,
+        /// non-leaf Case-2 branches accepted as nonempty by a witness point (no Chebyshev LP), of which
+        /// the ones whose piece equals the parent polytope; branches where candidates were tried and
+        /// none cleared the margin (the LP then runs)
+        WitnessAccept,
+        WitnessNoCuts,
+        WitnessFail,
     }
-    pub const NC: usize = 80;
+    pub const NC: usize = 83;
 
     #[derive(Clone, Debug)]
     pub struct Stats {
