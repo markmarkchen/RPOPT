@@ -382,7 +382,17 @@ time of `graph`. Those runs come from a shared, busy machine.
 - **`examples/mplp_bench.rs`** checks every mpLP solution at 2,000 random parameters against direct LP solves (no
   gaps, feasible laws, optimal objective). Every exact RPOPT solver has 0 gaps and 0 errors on all
   `bench/problems_lp` problems it finishes.
-- **`cargo test --release`** (133 tests) covers:
+- **`cargo test --profile gate`** (137 tests, 3 more ignored) covers the list below.
+  - The `gate` profile is release optimisation without fat LTO, so test builds are fast. A cold build of all
+    test binaries takes 42 s instead of 246 s, and a rebuild after a one-file change 3.2 s instead of 242 s
+    (Negishi, 16 CPUs).
+  - Results match the release profile: region hashes were identical for `mplcp`, `graph`, `geometric` and
+    `combinatorial_graph` on 58 problem runs.
+  - The integration tests compile as one binary (`tests/all/`). `mplcp_rows` and `mplcp_tableau_law` stay
+    separate, because they flip a process-wide switch.
+  - Timing builds keep `--release`.
+
+  The tests cover:
   - parity with PPOPT's results and examples;
   - each new algorithm against `geometric` and `combinatorial`, on the benchmark and on random problems;
   - degenerate problems (gaps and overlaps on 20,000 samples), including gap-free graph solvers on degenerate
@@ -400,9 +410,13 @@ time of `graph`. Those runs come from a shared, busy machine.
   that a pLCP solution gives the unique mp-QP optimizer, that each region's tableau law is optimal on its region
   and equals the KKT-solve law, that pivots and the Case-1 facet step are correct, that lexico-feasible bases
   never overlap (both solvers), and that the entry-facet skip is safe when the parent region is lexico-feasible.
-  Open: KKT necessity, the Case-2 degenerate-facet step, and the facet-graph connectivity behind coverage.
-  Tolerances and floating point are not modelled. The model traced the pop_001 overlap to absolute tolerances in
-  the Case-2 sign test of `pivot_facet`; the fix is in progress.
+  For the Case-2 degenerate-facet step they show that every basis it returns from a genuine facet is
+  lexico-feasible just across it, that its sub-facets cover the facet, and that its pivot walk never repeats a
+  state from a lexico-feasible start (so the `depth > 6` and `8n + 50` caps can become a cycle check that reports
+  instead of dropping neighbours). The known-region skip of Case-2 facets is safe when the known region is
+  lexico-feasible. Open: KKT necessity, Case-2 completeness (a Lemke-type termination statement), and the
+  facet-graph connectivity behind coverage. Tolerances and floating point are not modelled. The model traced the
+  pop_001 overlap to absolute tolerances in the Case-2 sign test of `pivot_facet`; the fix is in progress.
 
 ## How it is fast
 
@@ -525,7 +539,8 @@ src/
   mpc.rs, problem_generator.rs, reduction/lowrank/trimming  MPC models, test problems, extras
   bin/ppopt_bench.rs    the benchmark and correctness harness
 examples/               profiling, LP replay, coverage, I/O, DP, MPR, approximation and sequence benchmarks
-tests/                  integration tests (one file per method or feature)
+tests/                  integration tests: all/ (one module per method or feature, one binary) and two
+                        separate binaries that flip a process-wide switch
 bench/                  problem generators (problems: mpQP MPC, problems_lp: mpLP MPC, problems_large),
                         PPOPT runner, comparison scripts, results (see bench/README.md)
 python/                 rpopt-py, the PPOPT-compatible Python bindings
