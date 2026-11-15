@@ -170,6 +170,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering as AO};
 static G_REG: AtomicU64 = AtomicU64::new(0);
 static G_FB: AtomicU64 = AtomicU64::new(0);
 static G_OFF: AtomicBool = AtomicBool::new(false);
+static G_ENG: AtomicU64 = AtomicU64::new(0);
 /// Switch for tests and comparisons: `false` sends every region to the shared builder.
 static CHAIN: AtomicBool = AtomicBool::new(true);
 
@@ -181,6 +182,7 @@ pub(super) fn set_chain(on: bool) {
 pub(super) fn reset_guard() {
     G_REG.store(0, AO::Relaxed);
     G_FB.store(0, AO::Relaxed);
+    G_ENG.store(0, AO::Relaxed);
     G_OFF.store(false, AO::Relaxed);
 }
 
@@ -190,7 +192,12 @@ fn chain_on() -> bool {
 
 /// Fallback guard: after 100 regions, a chain whose objectives fall back to the engine in more than
 /// 20% of the cases is switched off for the rest of the solve (the shared builder takes over).
-fn note_chain(regions: u64, fallbacks: u64, n: usize) {
+pub(super) fn chain_stats() -> (u64, u64, u64, bool) {
+    (G_REG.load(AO::Relaxed), G_FB.load(AO::Relaxed), G_ENG.load(AO::Relaxed), G_OFF.load(AO::Relaxed))
+}
+
+fn note_chain(regions: u64, fallbacks: u64, engine: u64, n: usize) {
+    G_ENG.fetch_add(engine, AO::Relaxed);
     let r = G_REG.fetch_add(regions, AO::Relaxed) + regions;
     let f = G_FB.fetch_add(fallbacks, AO::Relaxed) + fallbacks;
     if r >= 100 && (f as f64) > 0.2 * (r as f64) * (2 * n) as f64 {
@@ -240,7 +247,7 @@ fn lp_path(program: &MpProgram, active_set: &[usize], prep: crate::mpqp_utils::P
             };
             let mut st = crate::boxlp::Stats::default();
             let r = crate::boxlp::box_chain(&el, &fl, &center, start.as_deref(), &mut st);
-            note_chain(1, st.fallbacks, nt);
+            note_chain(1, st.fallbacks, st.engine_lps, nt);
             if let Some((_, _, pts)) = &r {
                 boxflat = Some(pts.iter().flat_map(|p| p.iter().copied()).collect());
             }

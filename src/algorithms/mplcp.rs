@@ -2447,6 +2447,11 @@ fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>
     cands
 }
 
+/// (regions built by the chain, objectives that fell back to the engine, engine LPs, chain switched off by the guard) of the last solve.
+pub fn box_chain_stats() -> (u64, u64, u64, bool) {
+    build::chain_stats()
+}
+
 /// Switches the chained bounding-box LPs of the LP-path region builder (6 or more parameters; default on).
 /// Off sends every region to the shared builder, the previous behaviour; for comparisons.
 pub fn set_box_chain(on: bool) {

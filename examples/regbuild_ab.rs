@@ -45,7 +45,11 @@ fn main() {
                 regions = sol.critical_regions.len();
             }
         }
+        // one more chained solve for the fallback statistics
+        rpopt::algorithms::mplcp::set_box_chain(true);
+        let _ = solve_mpqp(&prog, MpqpAlgorithm::Mplcp);
+        let (creg, cfb, ceng, coff) = rpopt::algorithms::mplcp::box_chain_stats();
         let meds: Vec<f64> = times.iter().map(|v| med(v.clone())).collect();
-        println!("{}", serde_json::json!({"name": name, "regions": regions, "modes": modes, "order": order, "median_ms": meds, "times": times}));
+        println!("{}", serde_json::json!({"name": name, "regions": regions, "modes": modes, "order": order, "median_ms": meds, "times": times, "chain_regions": creg, "chain_fallbacks": cfb, "chain_engine_lps": ceng, "chain_off": coff}));
     }
 }
