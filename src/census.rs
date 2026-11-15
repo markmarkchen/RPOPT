@@ -467,6 +467,19 @@ mod imp {
         CandLawSmallPiv,
         /// bases that `tableau_for` accepted only in the second, largest-pivot-first order
         TabRescued,
+        /// refined multipliers used by the enumeration: band entries decided as zero, as real, or still between (call goes to the walk)
+        MuRefinedZero,
+        MuRefinedReal,
+        MuRefinedBand,
+        /// audit (every gap-band call run both ways): compared, same neighbour sets, different, walk incomplete or enumeration undecided
+        AuditCalls,
+        AuditSame,
+        AuditDiff,
+        AuditExplained,
+        AuditExtraWalk,
+        AuditNoPositive,
+        AuditSkip,
+        AuditAltNone,
         /// end marker: the Case-2 component block starts here
         CounterEnd,
     }
@@ -545,7 +558,11 @@ mod imp {
     /// everything smaller), in four classes: [0] refused by the old guard (mu <= 1e-7 mu_max), [1] not refused, each split by whether the
     /// reason-5 mismatch test passed (+2 when it failed)
     pub const NU_BASE: usize = EO_BASE + 16;
-    pub const NC: usize = NU_BASE + 16 * 4;
+    /// refined multipliers of the gap-band calls: [0] calls, [1] entries in the tableau's band, [2] of those refined nu <= 1e-12, [3] >= 1e-6,
+    /// [4] still between, [5] calls with every band entry decided, [6] ns, [7] large entries compared, [8] of those disagreeing (sign or 1e-6
+    /// relative), [9..25] decade histogram of the refined nu of the band entries, [25] tableau zeros the refined value does not call zero
+    pub const MU2_BASE: usize = NU_BASE + 16 * 4;
+    pub const NC: usize = MU2_BASE + 32;
     pub fn bump_slot(i: usize, n: u64) {
         MINE.with(|m| m.lock().unwrap().counters[i] += n);
     }

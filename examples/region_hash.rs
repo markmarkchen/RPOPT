@@ -17,6 +17,10 @@ fn main() {
         rpopt::algorithms::mplp_lex::set_mode(v.parse().unwrap());
     }
     let alg = MpqpAlgorithm::from_name(&args[1]).expect("algorithm");
+    // MPLCP_NO_REFINE=1: no recomputation of gap-band multipliers (they go to the walk)
+    if std::env::var("MPLCP_NO_REFINE").is_ok() {
+        rpopt::algorithms::mplcp::set_refine_multipliers(false);
+    }
     // MPLCP_NO_DAQP=1: answer every sub-facet nonemptiness test with the LP
     if std::env::var("MPLCP_NO_DAQP").is_ok() {
         rpopt::algorithms::mplcp::set_daqp_tests(false);

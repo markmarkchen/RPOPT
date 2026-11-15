@@ -28,6 +28,12 @@ fn child(path: &str, alg: &str) {
     let algo = MpqpAlgorithm::from_name(alg).unwrap_or_else(|| panic!("unknown algorithm {alg}"));
     let opts = SolveOptions::default();
     // RPOPT_CERT=0|1|2|3|4: mplcp facet certificate off (default), on (3 to 5 parameters), audit, on at 2 to 6, audit at 2 to 6
+    if std::env::var("MPLCP_MU_AUDIT").is_ok() {
+        rpopt::algorithms::mplcp::set_mu_audit(true);
+    }
+    if std::env::var("MPLCP_NO_REFINE").is_ok() {
+        rpopt::algorithms::mplcp::set_refine_multipliers(false);
+    }
     if let Ok(m) = std::env::var("RPOPT_CERT") {
         rpopt::algorithms::mplcp::set_certificate(m.parse().unwrap());
     }
@@ -649,6 +655,23 @@ fn highdim_tables(rows: &[Row], skipped: &[(String, String)]) {
             "| {} | {} | {} | {} | {} | {} | {} | {} |",
             r.problem, r.regions, c(r, Counter::TabRefuse), c(r, Counter::TabRefuseRel), c(r, Counter::ResolveNone), c(r, Counter::CandLawNoTab), c(r, Counter::CandLawSmallPiv), c(r, Counter::TabRescued)
         );
+    }
+    println!("\n### High-dimension 3t: gap-band multipliers recomputed from the original data (Gram solve plus 2 refinement steps)\n");
+    println!("| problem | gap-band calls | entries in the band | refined nu <= 1e-12 (noise) | refined nu >= 1e-6 (real) | still between | calls with every entry decided | us per recomputation | large entries compared | disagreeing | tableau zeros not zero when refined | refined nu decade of the band entries (1e0 ... 1e-14, below) |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && r.s.counters[census::MU2_BASE] > 0) {
+        let g = |k: usize| r.s.counters[census::MU2_BASE + k] as f64;
+        let h: Vec<String> = (0..16).map(|d| format!("{}", r.s.counters[census::MU2_BASE + 9 + d])).collect();
+        println!(
+            "| {} | {} | {} | {} | {} | {} | {} ({}) | {:.1} | {} | {} | {} | {} |",
+            r.problem, g(0), g(1), g(2), g(3), g(4), g(5), pct(g(5), g(0)), g(6) / g(0).max(1.0) / 1e3, g(7), g(8), g(25), h.join(" / ")
+        );
+    }
+    println!("\n### High-dimension 3u: refined multipliers in the enumeration, and the audit against the walk\n");
+    println!("| problem | band entries decided zero | decided real | still between (walk) | audited calls | same neighbour sets | walk has extra sets, all linearly dependent (no region) | walk has other extra sets, no real positive multiplier (walk wandered on a noise multiplier) | walk has other extra sets, a real positive multiplier exists | enumeration has a set the walk lacks | walk incomplete | enumeration undecided (back to the walk) | walk calls left |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::AdjCase2) > 0.0) {
+        println!("| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |", r.problem, c(r, Counter::MuRefinedZero), c(r, Counter::MuRefinedReal), c(r, Counter::MuRefinedBand), c(r, Counter::AuditCalls), c(r, Counter::AuditSame), c(r, Counter::AuditExplained), c(r, Counter::AuditNoPositive), c(r, Counter::AuditExtraWalk), c(r, Counter::AuditDiff), c(r, Counter::AuditSkip), c(r, Counter::AuditAltNone), c(r, Counter::R1Fallback));
     }
     println!("\n### High-dimension 4: vertex clipping (`clip_flags`) outcomes per call\n");
     println!("| problem | algorithm | clip calls/region | ok | nt outside 2..=6 | more than 128 hyperplanes | infinite box | more than 600 vertices | too few vertices | vertex violates a row | redundancy LPs/region |");
