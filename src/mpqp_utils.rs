@@ -573,7 +573,7 @@ fn region_bbox_pts(e: &Mat, f: &[f64], c: &[f64]) -> Option<(Vec<f64>, Vec<f64>,
 /// exactly when it contains a vertex. In degenerate cases extra points of the polytope can appear
 /// in the list; they change neither a maximum nor a "some point lies on this hyperplane" answer.
 /// Result per row: 1 touches (a vertex within 1e-9 of it), 0 does not (all vertices at least 1e-7
-/// away), -1 undecided (in between). None when the problem does not fit (nt outside 2..=6, more
+/// away), -1 undecided (in between). None when the problem does not fit (nt outside 2..=5, more
 /// than 128 hyperplanes, an infinite box, too many vertices) or a vertex violates a row.
 fn clip_flags(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &[f64]) -> Option<Vec<i8>> {
     crate::census_bump!(ClipCalls, 1);
@@ -590,7 +590,7 @@ fn clip_flags(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &[f64]) -> Op
         3 => clip_n::<3>(e, f, order, lo, hi),
         4 => clip_n::<4>(e, f, order, lo, hi),
         5 => clip_n::<5>(e, f, order, lo, hi),
-        6 => clip_n::<6>(e, f, order, lo, hi),
+        // 6 parameters and more take the LP path, which is 1.2x to 10x faster there (see mplcp_build)
         _ => {
             crate::census_bump!(ClipNtOut, 1);
             None
