@@ -45,6 +45,7 @@ fn splitmix(x: &mut u64) -> u64 {
 }
 
 #[cfg(feature = "lp_census")]
+#[allow(dead_code)]
 pub(crate) mod stats {
     use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
     pub static LOOKUPS: AtomicU64 = AtomicU64::new(0);

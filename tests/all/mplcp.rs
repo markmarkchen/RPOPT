@@ -221,3 +221,80 @@ fn degenerate_mplp_enumeration_covers_theta() {
         assert!(s.verify_theta(&th));
     }
 }
+
+/// A region whose tableau cannot be factored when it is popped takes the probe-across fallback and is counted; the
+/// counter is expected to stay 0 (a refusal needs a basis that is singular in both pivot orders tried), and a
+/// release build must not skip such a region without a trace. The twin-row problem pop_001 is included.
+#[test]
+fn no_region_is_skipped_without_trace() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("bench");
+    for name in ["problems/di_N6.json", "problems/masses2_N4.json", "problems/sys3x2_N3.json", "problems_large/pop_001.json"] {
+        let p = Arc::new(MpProgram::from_json_file(&dir.join(name)).unwrap());
+        let m = solve_mpqp(&p, MpqpAlgorithm::Mplcp);
+        assert!(!m.critical_regions.is_empty(), "{name}");
+        assert_eq!(rpopt::algorithms::mplcp::resolve_fallbacks(), 0, "{name}");
+    }
+}
+
+/// Duplicated constraints (rows of [A | F | b] that are positive multiples of another row) are removed inside the pivoting
+/// methods. On the twin-bearing problems the deduplicated solve must give the same regions as the solve with the
+/// duplicates once every twin is replaced by its group's lowest-index row, report only lowest-index rows, keep one row of
+/// `c`/`d` per active constraint, and give `regular_set.0` as the position in the full list of inactive constraints.
+#[test]
+fn dedupe_keeps_the_regions_and_the_output_shape() {
+    use rpopt::algorithms::mplcp::{duplicate_rows, solve_with_dedupe, Method};
+    use std::collections::BTreeSet;
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("bench/problems_large");
+    let mut with_twins = 0;
+    for name in ["pop_031", "pop_052", "pop_071", "pop_039", "pop_081", "pop_019", "pop_011"] {
+        let p = Arc::new(MpProgram::from_json_file(&dir.join(format!("{name}.json"))).unwrap());
+        let rep = duplicate_rows(&p);
+        let m = p.a.rows;
+        if (0..m).all(|i| rep[i] == i) {
+            continue;
+        }
+        with_twins += 1;
+        let full = solve_with_dedupe(&p, 0, Method::Pivot, false).unwrap();
+        let red = solve_with_dedupe(&p, 0, Method::Pivot, true).unwrap();
+        let canon = |regs: &[CriticalRegion]| -> BTreeSet<Vec<usize>> {
+            regs.iter()
+                .map(|r| {
+                    let mut s: Vec<usize> = r.active_set.iter().map(|&i| rep[i]).collect();
+                    s.sort_unstable();
+                    s.dedup();
+                    s
+                })
+                .collect()
+        };
+        assert_eq!(full.len(), red.len(), "{name}: region count");
+        assert_eq!(canon(&full), canon(&red), "{name}: sorted active sets after mapping the twins");
+        let neq = p.num_equality_constraints();
+        for r in &red {
+            assert!(r.active_set.iter().all(|&i| rep[i] == i), "{name}: active set holds a removed twin");
+            assert!(r.lambda_set.iter().all(|&i| rep[i] == i), "{name}: lambda set holds a removed twin");
+            assert!(r.regular_set.1.iter().all(|&i| rep[i] == i && !r.active_set.contains(&i)), "{name}: regular set");
+            assert_eq!(r.c.rows, r.active_set.len() - neq, "{name}: one row of c per active inequality");
+            assert_eq!(r.d.len(), r.c.rows, "{name}: d");
+            let inactive: Vec<usize> = (0..m).filter(|i| !r.active_set.contains(i)).collect();
+            for (&pos, &idx) in r.regular_set.0.iter().zip(&r.regular_set.1) {
+                assert_eq!(inactive[pos], idx, "{name}: regular_set.0 is the position in the list of inactive constraints");
+            }
+        }
+        // same primal law wherever the same canonical set occurs
+        for r in &red {
+            let mut s: Vec<usize> = r.active_set.iter().map(|&i| rep[i]).collect();
+            s.sort_unstable();
+            let q = full.iter().find(|f| {
+                let mut t: Vec<usize> = f.active_set.iter().map(|&i| rep[i]).collect();
+                t.sort_unstable();
+                t.dedup();
+                t == s
+            });
+            let q = q.expect("matching region");
+            let scale = 1.0 + q.a.data.iter().chain(q.b.iter()).fold(0.0f64, |m, v| m.max(v.abs()));
+            let err = q.a.data.iter().zip(&r.a.data).chain(q.b.iter().zip(&r.b)).fold(0.0f64, |m, (x, y)| m.max((x - y).abs()));
+            assert!(err <= 1e-6 * scale, "{name}: primal law differs by {err}");
+        }
+    }
+    assert!(with_twins >= 4, "the test needs twin-bearing problems");
+}

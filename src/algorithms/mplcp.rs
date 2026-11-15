@@ -46,6 +46,49 @@ struct Plcp {
     xe: Mat,
     /// Euclidean radius of the parameter box (every region lies within it), or -1 when the box is unbounded or unknown
     coord_bound: f64,
+    /// constraint rows that have a positive multiple among the other rows of [M | q | R] (twin and duplicate constraints):
+    /// exactly the places where a tableau has structural zeros that a fresh factorization fills with rounding noise
+    /// computed on first use (only the tableau rebuild path needs it)
+    twin: std::sync::OnceLock<Vec<bool>>,
+}
+
+/// Rows of [M | q | R] that are a positive multiple of another row (within 1e-9 of the row's largest entry).
+#[cold]
+#[inline(never)]
+fn twin_rows(n: usize, nt: usize, m: &[f64], q: &[f64], r: &[f64]) -> Vec<bool> {
+    let w = n + 1 + nt;
+    let row = |i: usize| -> Vec<f64> {
+        let mut v = Vec::with_capacity(w);
+        v.extend_from_slice(&m[i * n..(i + 1) * n]);
+        v.push(q[i]);
+        v.extend_from_slice(&r[i * nt..(i + 1) * nt]);
+        v
+    };
+    let rows: Vec<Vec<f64>> = (0..n).map(row).collect();
+    let norm2: Vec<f64> = rows.iter().map(|v| v.iter().map(|x| x * x).sum::<f64>()).collect();
+    // positive multiples have the same normalized sum of entries: sort by it (quantized) and compare only rows whose
+    // keys are equal or adjacent, instead of all pairs
+    let key: Vec<i64> = (0..n).map(|i| if norm2[i] > 0.0 { (rows[i].iter().sum::<f64>() / norm2[i].sqrt() * 1e6).round() as i64 } else { i64::MIN }).collect();
+    let mut order: Vec<usize> = (0..n).collect();
+    order.sort_unstable_by_key(|&i| key[i]);
+    let mut twin = vec![false; n];
+    for p in 0..n {
+        let i = order[p];
+        if key[i] == i64::MIN {
+            continue;
+        }
+        for &j in &order[p + 1..] {
+            if key[j] - key[i] > 1 {
+                break;
+            }
+            let c = rows[i].iter().zip(&rows[j]).map(|(a, b)| a * b).sum::<f64>() / norm2[j];
+            if c > 0.0 && rows[i].iter().zip(&rows[j]).all(|(a, b)| (a - c * b).abs() <= 1e-9 * norm2[i].sqrt()) {
+                twin[i] = true;
+                twin[j] = true;
+            }
+        }
+    }
+    twin
 }
 
 impl Plcp {
@@ -119,7 +162,7 @@ impl Plcp {
             Some((lo, hi)) if lo.iter().chain(hi.iter()).all(|v| v.is_finite()) => lo.iter().zip(hi).map(|(l, h)| (l * l).max(h * h)).sum::<f64>().sqrt(),
             _ => -1.0,
         };
-        Some(Plcp { n, nt, m, q, r, ineq, eq, pos, xe, coord_bound })
+        Some(Plcp { n, nt, m, q, r, ineq, eq, pos, xe, coord_bound, twin: Default::default() })
     }
 
     /// Full active set (equalities first) of the z-basic rows.
@@ -307,8 +350,11 @@ fn pivot_floor(p: &Plcp, i: usize) -> f64 {
 
 /// Persistent tableau of the basis with z-basic rows `z`: rows [q | R | I], T = M, then one
 /// principal pivot per z row (nonsingular when M_zz is positive definite). The pivots go in the order of `z`; if one falls
-/// below its floor the basis is tried again with the largest remaining pivot (relative to the diagonal of M) first, which
-/// accepts every basis that has a pivot order above the floors; only then is it refused.
+/// below its floor the basis is tried again with a greedy order (at each step the largest remaining pivot relative to the
+/// diagonal of M); only if that also meets a pivot below its floor is the basis refused. So a basis is accepted when the
+/// given order or the greedy order stays above the floors. That is weaker than "when some order does": Lean finds a
+/// 3-pair counterexample where both tried orders refuse a basis that the order 1, 3, 2 accepts, so a refusal means
+/// "not found with these two orders" (the callers fall back, see `TabSrc::resolve`), not "singular".
 fn tableau_for(p: &Plcp, z: &[usize]) -> Option<Tab> {
     let (n, nt) = (p.n, p.nt);
     let w = 1 + nt;
@@ -2036,10 +2082,36 @@ pub enum Method {
 /// The enumeration method has no perturbation: where several bases describe the same
 /// parameter set (degenerate mpLPs) it may return overlapping regions.
 pub fn solve(program: &MpProgram, seed: u64, method: Method) -> Result<Vec<CriticalRegion>, String> {
+    solve_with_dedupe(program, seed, method, DEDUPE.load(std::sync::atomic::Ordering::Relaxed))
+}
+
+static DEDUPE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// Switches the removal of duplicated constraints inside the pivoting methods (default on).
+pub fn set_dedupe(on: bool) {
+    DEDUPE.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// `solve` with the removal of duplicated constraints chosen explicitly. Inequality rows of [A | F | b] that are a positive
+/// multiple of an earlier inequality row describe the same half-space; the pivoting methods solve the program without them
+/// (a twin makes a tableau carry structural zeros, which a fresh factorization fills with rounding noise, and sends the
+/// rank-1 enumeration back to the facet walk) and the regions are reported in the numbering of `program`: every index of
+/// `active_set`, `lambda_set` and `regular_set` is the lowest-index row of its group, `regular_set.0` is recomputed for the
+/// full list of inactive constraints, and `c`, `d` keep one row per active constraint (the multiplier of the kept row is the
+/// total of the group). `omega_set` (rows of `A_t`) is unchanged; duplicates among those are not removed.
+pub fn solve_with_dedupe(program: &MpProgram, seed: u64, method: Method, dedupe: bool) -> Result<Vec<CriticalRegion>, String> {
     match method {
         Method::Pivot | Method::PivotParallel => {
             if program.q.is_none() {
                 return Err("mplcp: mpLP not supported by the pivoting method (use mplcp_enum)".into());
+            }
+            if dedupe {
+                if let Some((reduced, kept)) = dedupe_program(program) {
+                    if let Some(plcp) = Plcp::new(&reduced) {
+                        let regions = if method == Method::PivotParallel { pivot_solve_par(&reduced, &plcp, seed) } else { pivot_solve(&reduced, &plcp, seed) };
+                        return Ok(unreduce_regions(regions, &kept, program.a.rows));
+                    }
+                }
             }
             let plcp = Plcp::new(program).ok_or("mplcp: no pLCP form (Q not positive definite or singular equality block)")?;
             let regions = if method == Method::PivotParallel { pivot_solve_par(program, &plcp, seed) } else { pivot_solve(program, &plcp, seed) };
@@ -2047,6 +2119,114 @@ pub fn solve(program: &MpProgram, seed: u64, method: Method) -> Result<Vec<Criti
         }
         Method::Enumeration => enum_solve(program),
     }
+}
+
+/// For each constraint, the lowest-index inequality row of which it is a positive multiple (itself when there is none).
+/// Rows are compared as [A_i | F_i | b_i] to a relative 1e-11 of the row norm. Equality rows are never merged.
+pub fn duplicate_rows(program: &MpProgram) -> Vec<usize> {
+    let m = program.a.rows;
+    let rows: Vec<Vec<f64>> = (0..m)
+        .map(|i| {
+            let mut v = program.a.row(i).to_vec();
+            v.extend_from_slice(program.f.row(i));
+            v.push(program.b[i]);
+            v
+        })
+        .collect();
+    // norm of the constraint part [A_i | F_i]; a row with no constraint part is left alone
+    let norm2: Vec<f64> = rows.iter().map(|v| v[..v.len() - 1].iter().map(|x| x * x).sum::<f64>()).collect();
+    let is_eq = |i: usize| program.equality_indices.contains(&i);
+    // positive multiples have the same normalized sum of entries: sort by it (quantized) and compare only rows whose keys
+    // are equal or adjacent
+    let key: Vec<i64> = (0..m).map(|i| if norm2[i] > 0.0 && !is_eq(i) { (rows[i].iter().sum::<f64>() / norm2[i].sqrt() * 1e6).round() as i64 } else { i64::MIN }).collect();
+    let mut order: Vec<usize> = (0..m).collect();
+    order.sort_unstable_by_key(|&i| (key[i], i));
+    let mut rep: Vec<usize> = (0..m).collect();
+    for p in 0..m {
+        let i = order[p];
+        if key[i] == i64::MIN {
+            continue;
+        }
+        for &j in &order[p + 1..] {
+            if key[j] - key[i] > 1 {
+                break;
+            }
+            if key[j] == i64::MIN {
+                continue;
+            }
+            // i and j in either order of index: the lower index is the representative of the group
+            let (lo, hi) = if i < j { (i, j) } else { (j, i) };
+            let c = rows[lo][..rows[lo].len() - 1].iter().zip(&rows[hi]).map(|(a, b)| a * b).sum::<f64>() / norm2[hi];
+            if c > 0.0 && rows[lo].iter().zip(&rows[hi]).all(|(a, b)| (a - c * b).abs() <= 1e-11 * norm2[lo].sqrt().max(1e-300)) {
+                let r = rep[lo].min(lo);
+                rep[hi] = rep[hi].min(r);
+                rep[lo] = r;
+            }
+        }
+    }
+    // path compression: the representative of a representative
+    for i in 0..m {
+        let mut r = rep[i];
+        while rep[r] != r {
+            r = rep[r];
+        }
+        rep[i] = r;
+    }
+    rep
+}
+
+/// The program without its duplicated inequality rows and the index (in `program`) of each remaining row; `None` when it
+/// has no duplicates.
+fn dedupe_program(program: &MpProgram) -> Option<(MpProgram, Vec<usize>)> {
+    let m = program.a.rows;
+    let rep = duplicate_rows(program);
+    let kept: Vec<usize> = (0..m).filter(|&i| rep[i] == i).collect();
+    if kept.len() == m {
+        return None;
+    }
+    let mut new_idx = vec![usize::MAX; m];
+    for (k, &i) in kept.iter().enumerate() {
+        new_idx[i] = k;
+    }
+    let a = Mat::from_rows(&kept.iter().map(|&i| program.a.row(i).to_vec()).collect::<Vec<_>>());
+    let b: Vec<f64> = kept.iter().map(|&i| program.b[i]).collect();
+    let f = Mat::from_rows(&kept.iter().map(|&i| program.f.row(i).to_vec()).collect::<Vec<_>>());
+    let eq: Vec<usize> = program.equality_indices.iter().map(|&i| new_idx[i]).collect();
+    // from_raw_parts: the data is already processed (`MpProgram::new` would scale the rows a second time)
+    let reduced = MpProgram::from_raw_parts(a, b, program.c.clone(), program.h.clone(), program.q.clone(), program.a_t.clone(), program.b_t.clone(), f, program.c_c, program.c_t.clone(), program.q_t.clone(), eq);
+    Some((reduced, kept))
+}
+
+/// Maps the regions of the deduplicated program back to the numbering of the full program (`m` constraints, `kept[k]` the
+/// index of row `k` of the reduced program).
+fn unreduce_regions(mut regions: Vec<CriticalRegion>, kept: &[usize], m: usize) -> Vec<CriticalRegion> {
+    let mut active = vec![false; m];
+    let mut before = vec![0usize; m];
+    for r in regions.iter_mut() {
+        for v in r.active_set.iter_mut() {
+            *v = kept[*v];
+        }
+        for v in r.lambda_set.iter_mut() {
+            *v = kept[*v];
+        }
+        active.iter_mut().for_each(|a| *a = false);
+        for &i in &r.active_set {
+            active[i] = true;
+        }
+        // position of each constraint in the sorted list of inactive constraints
+        let mut c = 0;
+        for i in 0..m {
+            before[i] = c;
+            if !active[i] {
+                c += 1;
+            }
+        }
+        for (pos, idx) in r.regular_set.0.iter_mut().zip(r.regular_set.1.iter_mut()) {
+            *idx = kept[*idx];
+            *pos = before[*idx];
+        }
+    }
+    regions
 }
 
 /// `solve` for the dispatcher: an unsupported program gives an empty list and a warning on stderr.
@@ -2227,6 +2407,7 @@ fn item_bytes(it: &Item) -> usize {
         + it.center.as_ref().map_or(0, |c| c.capacity() * 8)
         + it.entry.as_ref().map_or(0, |e| e.0.capacity() * 8)
         + it.verts.as_ref().map_or(0, |v| v.capacity() * 8)
+        + it.boxpts.as_ref().map_or(0, |v| v.capacity() * 8)
         + match &it.tab {
             TabSrc::Ready(t) => (t.t.capacity() + t.rho.capacity() + t.row_var.capacity() + t.col_var.capacity()) * 8,
             _ => 0,
@@ -2271,13 +2452,7 @@ impl TabSrc {
                 }
                 Err(a) => a.pivoted(v, kk),
             }),
-            TabSrc::None => {
-                let t = tableau_of(plcp, cr);
-                if t.is_none() {
-                    crate::census_bump!(ResolveNone, 1);
-                }
-                t
-            }
+            TabSrc::None => rebuild_dropped(plcp, cr),
         }
     }
 }
@@ -2314,6 +2489,10 @@ struct Item {
     entry: Option<(Vec<f64>, f64)>,
     /// vertices of the region polytope (flattened) when the fast clip builder produced them
     verts: Option<Vec<f64>>,
+    /// the 2n optimal points of the region's bounding-box LPs (flattened, n coordinates each) when
+    /// the LP-path builder produced them: the children entered through a facet start their own box
+    /// LPs at one that lies on the shared facet
+    boxpts: Option<Vec<f64>>,
 }
 
 /// The initial region of the exploration (and its center) or `None` when the program has none.
@@ -2333,9 +2512,138 @@ fn initial_region(program: &MpProgram, seed: u64) -> Option<(CriticalRegion, Opt
 
 /// The tableau of region `cr`, rebuilt from its active set.
 fn tableau_of(plcp: &Plcp, cr: &CriticalRegion) -> Option<Tab> {
+    tableau_for(plcp, &z_of(plcp, cr))
+}
+
+/// The tableau of a queued child whose tableau was dropped (or of the root), factored from its active set, with the
+/// rounding noise of structural zeros removed (`snap_noise`).
+#[cold]
+#[inline(never)]
+fn rebuild_dropped(plcp: &Plcp, cr: &CriticalRegion) -> Option<Tab> {
+    let z = z_of(plcp, cr);
+    let mut t = tableau_for(plcp, &z);
+    match t.as_mut() {
+        None => {
+            crate::census_bump!(ResolveNone, 1);
+        }
+        Some(tb) => {
+            let _snapped = snap_noise(plcp, tb, &z);
+            crate::census_bump!(SnapRebuilds, 1);
+            crate::census_bump!(SnapEntries, _snapped);
+        }
+    }
+    t
+}
+
+/// The z-basic rows of the region's basis, in the order of its active set.
+fn z_of(plcp: &Plcp, cr: &CriticalRegion) -> Vec<usize> {
     let neq = plcp.eq.len();
-    let z: Vec<usize> = cr.active_set[neq..].iter().map(|c| plcp.ineq.iter().position(|x| x == c).unwrap()).collect();
-    tableau_for(plcp, &z)
+    cr.active_set[neq..].iter().map(|c| plcp.ineq.iter().position(|x| x == c).unwrap()).collect()
+}
+
+impl Tab {
+    /// A tableau with no rows, for a region that has none (its children are all built without a parent pivot).
+    fn empty() -> Tab {
+        Tab { n: 0, nc: 0, w: 0, t: vec![], rho: vec![], row_var: vec![], col_var: vec![], pend: None }
+    }
+}
+
+/// The neighbours of a region whose tableau cannot be factored: for each facet, the lexicographic Lemke basis at a point
+/// just across it (the facet point nearest to the region's centre, moved by 1e-6 along the unit normal). A facet whose
+/// nearest point lies outside the facet gives some other region, which is harmless (it is a region of the solution, or
+/// already seen), but the search is then no longer guaranteed to find every neighbour; that is why every use is counted
+/// in `resolve_fallbacks` instead of being silent.
+#[cold]
+#[inline(never)]
+fn across_fallback(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>>) -> Vec<Cand> {
+    let mut cands = vec![];
+    let Some(c) = center.cloned().or_else(|| chebyshev_ball(&cur.e, &cur.f, &[]).map(|s| s.x[..cur.e.cols].to_vec())) else { return cands };
+    for k in 0..cur.e.rows {
+        let a = cur.e.row(k);
+        let nrm = a.iter().map(|v| v * v).sum::<f64>().sqrt();
+        if !(nrm > 0.0) {
+            continue;
+        }
+        let g: Vec<f64> = a.iter().map(|v| v / nrm).collect();
+        let sft = (cur.f[k] - a.iter().zip(&c).map(|(x, y)| x * y).sum::<f64>()) / nrm;
+        let on: Vec<f64> = c.iter().zip(&g).map(|(ci, gi)| ci + sft * gi).collect();
+        let delta = 1e-6 * (1.0 + on.iter().fold(0.0f64, |m, v| m.max(v.abs())));
+        let pt: Vec<f64> = on.iter().zip(&g).map(|(x, gk)| x + delta * gk).collect();
+        let basis = lex_lemke(plcp, &pt).filter(|z| tableau_for(plcp, z).map_or(false, |t| lex_feasible(&t)));
+        if let Some(z) = basis {
+            cands.push(Cand { aset: plcp.active_set(z.into_iter()), hint: Some(pt), piv: None, entry: None, cert: None });
+        }
+    }
+    cands
+}
+
+/// Two values of one entry from two factorizations that have no digit in common: opposite signs, or magnitudes a factor
+/// of 10 apart. (An ill-conditioned but real value is reproduced to at least its leading digit by both orders.)
+fn unrelated(a: f64, b: f64) -> bool {
+    a * b < 0.0 || a.abs() > 10.0 * b.abs() || b.abs() > 10.0 * a.abs()
+}
+
+/// An entry is noise only if it is this small against the largest entry of its row: the noise seen on pop_001 is 1e-20 to
+/// 1e-23 of it, and an entry below 1e-18 of its row is far below the 1e-16 resolution of a double against the row's
+/// largest entry, so it is not a value the row can carry.
+const SNAP_REL: f64 = 1e-18;
+
+/// Entries of a tableau that is factored from scratch which are rounding noise where the exact value is zero.
+///
+/// A tableau reached by pivoting keeps the structural zeros of the problem exactly (twin or duplicate constraints give
+/// rows and columns that are exactly zero, and pivoting never turns 0 into non-zero), but a fresh factorization leaves
+/// noise of 1e-13 to 1e-20 relative to the largest entry in the same places. Ties between twin rows are decided by the
+/// sign of exactly such entries, so the noise changes the neighbour search (pop_001: 3,529 regions become 4,710 when
+/// every queued child is rebuilt). The same basis is factored a second time with the pivots in the reverse order; an
+/// entry that the two factorizations do not agree on to a relative 1e-3 carries no information, and when it is also
+/// small against its own row (below `SNAP_REL` of the largest entry of the row) it is set to zero. A real small entry (the
+/// masses problems have slacks of 1e-13 against rows of 1e13) is reproduced by both orders to many digits and is kept.
+/// Returns the number of entries set to zero.
+#[cold]
+#[inline(never)]
+fn snap_noise(plcp: &Plcp, t: &mut Tab, z: &[usize]) -> usize {
+    // twin constraints are the only places with structural zeros that rounding can fill: without them there is nothing to do
+    let twin = plcp.twin.get_or_init(|| twin_rows(plcp.n, plcp.nt, &plcp.m, &plcp.q, &plcp.r));
+    if !twin.iter().any(|&b| b) {
+        return 0;
+    }
+    let mut r = z.to_vec();
+    r.reverse();
+    let Some(mut u) = tableau_for(plcp, &r) else { return 0 };
+    t.flush();
+    u.flush();
+    // the same basis has the same variables in the same rows and columns up to a permutation: align by variable
+    if t.n != u.n || t.nc != u.nc || t.w != u.w {
+        return 0;
+    }
+    let row_of_u: Vec<usize> = t.row_var.iter().map(|v| u.row_var.iter().position(|x| x == v).unwrap_or(usize::MAX)).collect();
+    let col_of_u: Vec<usize> = t.col_var.iter().map(|v| u.col_var.iter().position(|x| x == v).unwrap_or(usize::MAX)).collect();
+    if row_of_u.iter().any(|&i| i == usize::MAX) || col_of_u.iter().any(|&i| i == usize::MAX) {
+        return 0;
+    }
+    let (n, nc, w) = (t.n, t.nc, t.w);
+    let mut count = 0;
+    for i in 0..n {
+        let iu = row_of_u[i];
+        let rmax = t.t[i * nc..(i + 1) * nc].iter().chain(t.rho[i * w..(i + 1) * w].iter()).fold(0.0f64, |a, v| a.max(v.abs()));
+        let small = SNAP_REL * rmax;
+        let row_twin = twin[t.row_var[i] % plcp.n];
+        for j in 0..nc {
+            let (a, b) = (t.t[i * nc + j], u.t[iu * nc + col_of_u[j]]);
+            if (row_twin || twin[t.col_var[j] % plcp.n]) && a != 0.0 && a.abs() <= small && b.abs() <= small && unrelated(a, b) {
+                t.t[i * nc + j] = 0.0;
+                count += 1;
+            }
+        }
+        for j in 0..w {
+            let (a, b) = (t.rho[i * w + j], u.rho[iu * w + j]);
+            if row_twin && a != 0.0 && a.abs() <= small && b.abs() <= small && unrelated(a, b) {
+                t.rho[i * w + j] = 0.0;
+                count += 1;
+            }
+        }
+    }
+    count
 }
 
 /// A neighbour found by the facet pivoting, before its region is built.
@@ -2371,6 +2679,16 @@ pub fn set_certificate(mode: u8) {
 
 static AUDIT_CERTIFIED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static AUDIT_EXTRA: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Regions whose tableau could not be factored when they were popped, so that their neighbours were looked for by the
+/// probe-across fallback (`across_fallback`) instead of the facet pivoting. Always counted (also in release builds); it
+/// is expected to stay 0, and the test suite asserts it.
+static RESOLVE_FALLBACKS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Number of regions that took the probe-across fallback because their tableau could not be factored.
+pub fn resolve_fallbacks() -> usize {
+    RESOLVE_FALLBACKS.load(std::sync::atomic::Ordering::Relaxed)
+}
 
 /// Audit mode counters: candidates returned across certified facets, and those of them that built
 /// a new region (see `pivot_solve`; the regions are found anyway, the order can change).
@@ -2655,6 +2973,17 @@ fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>
     cands
 }
 
+/// (regions built by the chain, objectives that fell back to the engine, engine LPs, chain switched off by the guard) of the last solve.
+pub fn box_chain_stats() -> (u64, u64, u64, bool) {
+    build::chain_stats()
+}
+
+/// Switches the chained bounding-box LPs of the LP-path region builder (6 or more parameters; default on).
+/// Off sends every region to the shared builder, the previous behaviour; for comparisons.
+pub fn set_box_chain(on: bool) {
+    build::set_chain(on);
+}
+
 /// Switch between the multiplier law read from the tableau (the default) and the Cholesky KKT solve
 /// `optimal_control_law_dual` (opt-out, and always the fallback for a doubtful basis: a tiny pivot
 /// element or a non-finite row). The tableau law gives identical regions and saves the KKT solve of
@@ -2829,8 +3158,54 @@ fn tight_residual(program: &MpProgram, cr: &CriticalRegion, centre: &[f64]) -> f
 }
 
 
-fn build_cand(program: &MpProgram, plcp: &Plcp, parent: &Tab, c: &Cand, want_verts: bool) -> Option<(CriticalRegion, Option<Vec<f64>>, Option<Tab>, Option<Vec<f64>>)> {
+#[cfg(feature = "lp_census")]
+fn diag_tab_rows(plcp: &Plcp, parent: &Tab, c: &Cand) {
+    let Some((r, col)) = c.piv else {
+        crate::census_diag::add(crate::census_diag::s::TAB_NOPIV, 1);
+        crate::census_diag::set_tab_rows(None);
+        return;
+    };
+    let t = crate::census_diag::t0();
+    let (n, w) = (plcp.n, 1 + plcp.nt);
+    let inv = 1.0 / parent.tv(r, col);
+    let rrow: Vec<f64> = (0..w).map(|k| parent.rv(r, k) * -inv).collect();
+    let mut rows: Vec<(u8, usize, Vec<f64>)> = Vec::with_capacity(n);
+    for i in 0..n {
+        let (var, row): (usize, Vec<f64>) = if i == r {
+            (parent.col_var[col], rrow.clone())
+        } else {
+            let f = parent.tv(i, col);
+            (parent.row_var[i], (0..w).map(|j| parent.rv(i, j) + f * rrow[j]).collect())
+        };
+        let (kind, k) = if var < n { (1u8, var) } else { (0u8, var - n) };
+        let nrm = crate::linalg::norm(&row[1..]);
+        if !(nrm > 1e-12) {
+            continue;
+        }
+        let mut e: Vec<f64> = row[1..].iter().map(|v| -v / nrm).collect();
+        e.push(row[0] / nrm);
+        rows.push((kind, plcp.ineq[k], e));
+    }
+    crate::census_diag::lap(crate::census_diag::s::TAB_ROWS_NS, t);
+    let m: std::collections::HashMap<(u8, usize), (Vec<f64>, f64)> = rows
+        .into_iter()
+        .map(|(k, id, mut e)| {
+            let f = e.pop().unwrap();
+            ((k, id), (e, f))
+        })
+        .collect();
+    crate::census_diag::set_tab_rows(Some(m));
+}
+
+fn build_cand(program: &MpProgram, plcp: &Plcp, parent: &Tab, c: &Cand, want_verts: bool, parent_box: Option<&[f64]>) -> Option<(CriticalRegion, Option<Vec<f64>>, Option<Tab>, Option<Vec<f64>>, Option<Vec<f64>>)> {
     if program.num_t() > 1 {
+        #[cfg(feature = "lp_census")]
+        if crate::census_diag::on() {
+            crate::census_diag::set_entry(c.entry.as_ref(), c.hint.as_deref());
+            diag_tab_rows(plcp, parent, c);
+        }
+        #[cfg(feature = "lp_census")]
+        let _tlaw = crate::census_diag::t0();
         let (law, own) = if TABLEAU_LAW.load(std::sync::atomic::Ordering::Relaxed) {
             match candidate_law(plcp, parent, c) {
                 Some((l, t)) => (Some(l), t),
@@ -2839,7 +3214,9 @@ fn build_cand(program: &MpProgram, plcp: &Plcp, parent: &Tab, c: &Cand, want_ver
         } else {
             (None, None)
         };
-        let (cr, ce, verts) = build::build_region(program, &c.aset, c.hint.as_deref(), law, want_verts)?;
+        #[cfg(feature = "lp_census")]
+        crate::census_diag::lap(crate::census_diag::s::LAW_NS, _tlaw);
+        let (cr, ce, verts, boxpts) = build::build_region(program, &c.aset, c.hint.as_deref(), law, want_verts, parent_box, c.entry.as_ref())?;
         // A basis that is singular in exact arithmetic (parallel rows both active) can pass every
         // other test with a garbage law; its region then overlaps the true ones (pop_005, pop_007,
         // pop_011). Legitimate regions have residuals up to 1e-5 (masses5_N3), garbage ones 1e-1. The
@@ -2856,14 +3233,15 @@ fn build_cand(program: &MpProgram, plcp: &Plcp, parent: &Tab, c: &Cand, want_ver
             }
             crate::census_bump!(TightKeptByQp, 1);
         }
-        Some((cr, Some(ce), own, verts))
+        Some((cr, Some(ce), own, verts, boxpts))
     } else {
-        Some((gen_cr_from_active_set_lambda_first(program, &c.aset, true)?, None, None, None))
+        Some((gen_cr_from_active_set_lambda_first(program, &c.aset, true)?, None, None, None, None))
     }
 }
 
 fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegion> {
     let Some((initial, init_center)) = initial_region(program, seed) else { return vec![] };
+    build::reset_guard();
     let mut seen: Seen = new_seen(plcp);
     seen.insert(&initial.active_set, Slot::Built(0));
     let mut regions = vec![initial];
@@ -2873,9 +3251,9 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
         known.add(0, &regions[0]);
     }
     let mut queue: VecDeque<Item> = VecDeque::new();
-    queue.push_back(Item { idx: 0, center: init_center, tab: TabSrc::None, depth: 0, entry: None, verts: None });
+    queue.push_back(Item { idx: 0, center: init_center, tab: TabSrc::None, depth: 0, entry: None, verts: None, boxpts: None });
     let mut ws: Option<Tab> = None;
-    let mut pending: Vec<(CriticalRegion, Option<Vec<f64>>, Option<(usize, usize)>, Option<Tab>, Option<(Vec<f64>, f64)>, Option<Vec<f64>>)> = vec![];
+    let mut pending: Vec<(CriticalRegion, Option<Vec<f64>>, Option<(usize, usize)>, Option<Tab>, Option<(Vec<f64>, f64)>, Option<Vec<f64>>, Option<Vec<f64>>)> = vec![];
     let mut wave_limit = 1usize;
     LIVE_PARENTS.store(0, std::sync::atomic::Ordering::Relaxed);
     PEAK_PARENTS.store(0, std::sync::atomic::Ordering::Relaxed);
@@ -2891,14 +3269,27 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
         if let TabSrc::Ready(t) = &it.tab {
             ready_bytes -= tab_len_bytes(t);
         }
-        let Item { idx, center, tab, depth, entry, verts } = it;
+        let Item { idx, center, tab, depth, entry, verts, boxpts: parent_box } = it;
         if idx >= wave_limit {
             wave_limit = regions.len();
         }
         let cur = &regions[idx];
-        let Some(tab) = crate::census_timed!(MplcpTabNanos, tab.resolve(plcp, cur)) else { continue };
-        let cx = CertCtx::new(cmode, verts.as_deref(), &known, &regions, plcp.nt, wave_limit);
-        let cands = crate::census_timed!(MplcpNbrNanos, expand_candidates(plcp, cur, center.as_ref(), &tab, depth, entry.as_ref(), cx.as_ref(), Some(&seen), program, &mut ws));
+        let (tab, cands) = match crate::census_timed!(MplcpTabNanos, tab.resolve(plcp, cur)) {
+            Some(tab) => {
+                let cx = CertCtx::new(cmode, verts.as_deref(), &known, &regions, plcp.nt, wave_limit);
+                let cands = crate::census_timed!(MplcpNbrNanos, expand_candidates(plcp, cur, center.as_ref(), &tab, depth, entry.as_ref(), cx.as_ref(), Some(&seen), program, &mut ws));
+                (tab, cands)
+            }
+            None => {
+                // never skip a region silently: probe across its facets and count it
+                RESOLVE_FALLBACKS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                (Tab::empty(), across_fallback(plcp, cur, center.as_ref()))
+            }
+        };
+        #[cfg(feature = "lp_census")]
+        if crate::census_diag::on() {
+            crate::census_diag::set_parent(&cur.active_set);
+        }
         for c in cands {
             let fresh = seen_claim(&mut seen, &c.aset);
             #[cfg(feature = "lp_census")]
@@ -2908,8 +3299,8 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
                 continue;
             }
             crate::census_bump!(CandGen, 1);
-            let built = crate::census_timed!(MplcpBuildNanos, build_cand(program, plcp, &tab, &c, cert_active(cmode, plcp.nt)));
-            if let Some((cr, ce, own, vt)) = built {
+            let built = crate::census_timed!(MplcpBuildNanos, build_cand(program, plcp, &tab, &c, cert_active(cmode, plcp.nt), parent_box.as_deref()));
+            if let Some((cr, ce, own, vt, bp)) = built {
                 if c.cert.is_some() {
                     // audit: the search across a certified facet also reached a new region (it
                     // touches the facet only in a lower dimension; it is found through another
@@ -2917,7 +3308,7 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
                     AUDIT_EXTRA.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     crate::census_bump!(CertExtra, 1);
                 }
-                pending.push((cr, ce, c.piv, own, c.entry, vt));
+                pending.push((cr, ce, c.piv, own, c.entry, vt, bp));
             }
         }
         // the neighbours' tableaux are one pivot away (rebuilt from scratch every REFACTOR levels);
@@ -2928,7 +3319,7 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
         let over = budget > 0 && (LIVE_PARENTS.load(std::sync::atomic::Ordering::Relaxed) + 1) * tbytes + ready_bytes > budget;
         let tab = std::sync::Arc::new(tab);
         let mut lazy_children = 0usize;
-        for (cr, ce, piv, own, ent, vt) in pending.drain(..) {
+        for (cr, ce, piv, own, ent, vt, bp) in pending.drain(..) {
             let (src, nd) = match piv {
                 Some((v, kk)) if !over => {
                     lazy_children += 1;
@@ -2949,7 +3340,7 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
             if cmode != 6 && cert_active(cmode, plcp.nt) {
                 known.add(regions.len() - 1, regions.last().unwrap());
             }
-            let it = Item { idx: regions.len() - 1, center: ce, tab: src, depth: nd, entry: ent, verts: vt };
+            let it = Item { idx: regions.len() - 1, center: ce, tab: src, depth: nd, entry: ent, verts: vt, boxpts: bp };
             queue_bytes += item_bytes(&it);
             queue.push_back(it);
             PEAK_QUEUE_LEN.fetch_max(queue.len(), std::sync::atomic::Ordering::Relaxed);
@@ -2986,6 +3377,7 @@ fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalR
         return pivot_solve(program, plcp, seed);
     }
     let Some((initial, init_center)) = initial_region(program, seed) else { return vec![] };
+    build::reset_guard();
     let mut seen: Seen = new_seen(plcp);
     seen.insert(&initial.active_set, Slot::Built(0));
     let mut regions = vec![initial];
@@ -2994,18 +3386,26 @@ fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalR
     if cmode != 6 && cert_active(cmode, plcp.nt) {
         known.add(0, &regions[0]);
     }
-    let mut wave: Vec<Item> = vec![Item { idx: 0, center: init_center, tab: TabSrc::None, depth: 0, entry: None, verts: None }];
+    let mut wave: Vec<Item> = vec![Item { idx: 0, center: init_center, tab: TabSrc::None, depth: 0, entry: None, verts: None, boxpts: None }];
     // measured serial cost (ns) of expanding one region and of building one candidate
     let mut ns_expand: f64 = 0.0;
     let mut ns_build: f64 = 0.0;
     while !wave.is_empty() {
         let wave_limit = regions.len();
         let expand = |ws: &mut Option<Tab>, item: Item| -> Option<(Arc<Tab>, usize, Vec<Cand>)> {
-            let Item { idx, center, tab, depth, entry, verts } = item;
+            let Item { idx, center, tab, depth, entry, verts, .. } = item;
             let cur = &regions[idx];
-            let tab = tab.resolve(plcp, cur)?;
-            let cx = CertCtx::new(cmode, verts.as_deref(), &known, &regions, plcp.nt, wave_limit);
-            let cands = expand_candidates(plcp, cur, center.as_ref(), &tab, depth, entry.as_ref(), cx.as_ref(), Some(&seen), program, ws);
+            let (tab, cands) = match tab.resolve(plcp, cur) {
+                Some(tab) => {
+                    let cx = CertCtx::new(cmode, verts.as_deref(), &known, &regions, plcp.nt, wave_limit);
+                    let cands = expand_candidates(plcp, cur, center.as_ref(), &tab, depth, entry.as_ref(), cx.as_ref(), Some(&seen), program, ws);
+                    (tab, cands)
+                }
+                None => {
+                    RESOLVE_FALLBACKS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    (Tab::empty(), across_fallback(plcp, cur, center.as_ref()))
+                }
+            };
             Some((Arc::new(tab), depth, cands))
         };
         let nw = wave.len();
@@ -3031,7 +3431,7 @@ fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalR
             }
         }
         let build = |(tab, depth, c): &(Arc<Tab>, usize, Cand)| -> Option<(CriticalRegion, Option<Vec<f64>>, Option<Tab>, usize, Option<(Vec<f64>, f64)>, Option<Vec<f64>>)> {
-            let (cr, center, own, vt) = build_cand(program, plcp, tab, c, cert_active(cmode, plcp.nt))?;
+            let (cr, center, own, vt, _) = build_cand(program, plcp, tab, c, cert_active(cmode, plcp.nt), None)?;
             let (ntab, nd) = match c.piv {
                 Some((v, kk)) => {
                     (Some(tab.pivoted(v, kk)), depth + 1)
@@ -3055,7 +3455,7 @@ fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalR
             if cmode != 6 && cert_active(cmode, plcp.nt) {
                 known.add(regions.len() - 1, regions.last().unwrap());
             }
-            wave.push(Item { idx: regions.len() - 1, center, tab: tab.into(), depth, entry, verts });
+            wave.push(Item { idx: regions.len() - 1, center, tab: tab.into(), depth, entry, verts, boxpts: None });
         }
     }
     regions
@@ -3094,7 +3494,7 @@ fn lp_plcp(program: &MpProgram) -> Plcp {
             r[(2 * nx + j) * nt + t] = program.f[(j, t)];
         }
     }
-    Plcp { n, nt, m, q, r, ineq: vec![], eq: vec![], pos: vec![], xe: Mat::zeros(0, 0), coord_bound: -1.0 }
+    Plcp { n, nt, m, q, r, ineq: vec![], eq: vec![], pos: vec![], xe: Mat::zeros(0, 0), coord_bound: -1.0, twin: Default::default() }
 }
 
 /// State of the depth-first form of Algorithm 1 (pairs are decided one by one; `choice[j]` is
@@ -3273,7 +3673,7 @@ fn permuted(p: &Plcp, perm: &[usize]) -> Plcp {
             m[a * n + b] = p.m[i * n + j];
         }
     }
-    Plcp { n, nt, m, q, r, ineq: p.ineq.clone(), eq: p.eq.clone(), pos: p.pos.clone(), xe: p.xe.clone(), coord_bound: p.coord_bound }
+    Plcp { n, nt, m, q, r, ineq: p.ineq.clone(), eq: p.eq.clone(), pos: p.pos.clone(), xe: p.xe.clone(), coord_bound: p.coord_bound, twin: Default::default() }
 }
 
 /// Herceg et al. (2015) Algorithm 1: enumerates the feasible complementary bases of the pLCP and
@@ -3490,6 +3890,53 @@ fn lex_feasible_start(program: &MpProgram, init: &CriticalRegion) -> Option<Crit
         return None;
     }
     Some(cr)
+}
+
+/// Diagnostic for one region's basis: (lexico-feasible, rows whose theta part vanishes, smallest signed first significant entry of those rows' lexicographic vectors,
+/// smallest absolute first significant entry). A first entry of -1e-3 is a clear violation, one of +-1e-9 sits on the tolerance `ZTOL`.
+pub fn lex_diagnostic(program: &MpProgram, cr: &CriticalRegion) -> Option<(bool, usize, f64, f64)> {
+    let plcp = Plcp::new(program)?;
+    let tab = tableau_of(&plcp, cr)?;
+    let (n, w) = (tab.n, tab.w);
+    let mut wcol = vec![usize::MAX; n];
+    for (c, &v) in tab.col_var.iter().enumerate() {
+        if v < n {
+            wcol[v] = c;
+        }
+    }
+    let mut wrow = vec![usize::MAX; n];
+    for (r, &v) in tab.row_var.iter().enumerate() {
+        if v < n {
+            wrow[v] = r;
+        }
+    }
+    let mut v = vec![0.0; 1 + n];
+    let (mut rows, mut feas) = (0usize, true);
+    let (mut min_signed, mut min_abs) = (f64::INFINITY, f64::INFINITY);
+    for i in 0..n {
+        if (1..w).any(|k| tab.rv(i, k).abs() > ZTOL) {
+            continue;
+        }
+        rows += 1;
+        v[0] = tab.rv(i, 0);
+        for j in 0..n {
+            v[1 + j] = if wcol[j] != usize::MAX {
+                -tab.tv(i, wcol[j])
+            } else if wrow[j] == i {
+                1.0
+            } else {
+                0.0
+            };
+        }
+        if let Some(x) = v.iter().find(|x| x.abs() > ZTOL) {
+            if *x < 0.0 {
+                feas = false;
+            }
+            min_signed = min_signed.min(*x);
+            min_abs = min_abs.min(x.abs());
+        }
+    }
+    Some((feas, rows, min_signed, min_abs))
 }
 
 /// Diagnostic: number of `regions` whose basis is lexico-infeasible (0 for the output of `solve`).

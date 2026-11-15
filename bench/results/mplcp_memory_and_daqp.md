@@ -230,16 +230,9 @@ pop_002 totals 2,649 B per region by capacity.
 ### Correctness caveat of the rebuild path
 
 Dropping a tableau and rebuilding it from the active set is exact only in exact arithmetic. With `MPLCP_TAB_BUDGET=1000000`
-(every child rebuilt) the sorted active sets differ from the unbudgeted run on `masses4_N4` and `masses5_N3` (1 to 3
-sliver regions) and on **`pop_001`: 3,529 regions become 4,710, with 9,009 of 13,497 sampled points inside two regions**
-(2,354 regions share their law with another). Still present after merging the `tableau_for` fix (ddf0aa8). Bisection on
-pop_001 with `MPLCP_TAB_BUDGET=1000000`: dropping only the owned (Case-2) tableaux gives 3,529 regions; dropping only the
-lazily pivoted children gives 4,710. Rebuilding those children with `tableau_of` when they are popped (`TabSrc::None`)
-gives 4,710, but rebuilding the same tableau when they are queued (`TabSrc::Ready(tableau_of(...))`) gives 3,529, as does
-replacing the pivoted tableau by the rebuilt one inside `resolve` (rows and columns of the two tableaux are in the same order
-in all 2,389 pairs compared), and `REFACTOR = 1` (3,529). It is not the entry-facet skip and not the depth counter, and I did not find the cause. The budget only triggers beyond 512 MiB of tableaux, which no problem
-below pop_001 size reaches, and on pop_002 and pop_033 (past the budget) the sets equal the unbudgeted run, but a large
-twin-row problem could be affected.
+(every queued child rebuilt) `pop_001` gave 4,710 regions instead of 3,529, with 9,009 of 13,497 sampled points inside two
+regions; the cause (rounding noise where a pivoted tableau has exact zeros, decided on twin rows) and the safeguard
+that fixes it are in section 6.
 
 ### Gates for this change
 
@@ -247,3 +240,163 @@ twin-row problem could be affected.
   Default budget against no budget (`MPLCP_TAB_BUDGET=0`) on the merged tree, 58 problems: identical.
 * Paired serial timing, u1 against main, 14 problems at 2 to 16 parameters, 5 alternations, A/A geometric mean 1.0005:
   geometric mean 0.9985 (per problem 0.986 to 1.013): the accounting costs nothing below the budget.
+
+## 6. The rebuild path: noise in a tableau factored from scratch (twin rows), and no silent skips
+
+### Cause of the pop_001 failure (budget 1 MB gives 4,710 regions, budget 0 gives 3,529)
+
+* Diffing the two runs pop by pop (candidate sets per popped region): identical up to pop 1037, where the budget run gets
+  one extra candidate; the first extra regions that are actually built come from the parent `[3, 8, 9, 16, 17, 23]`, whose
+  facet 7 returns the Z-neighbour `[3, 4, 8, 16, 17]` in the budget run and `[3, 8, 16, 17, 23]` in the budget-0 run. Rows
+  4 and 23 are twin rows of pop_001 (the same constraint), so these are two active sets of one region; the budget run builds
+  both, which gives the 1,181 extra regions (2,354 regions share a law with another).
+* At that facet `adjacent` finds the same single vanishing-slack row in both runs, but in the pivoted tableau its
+  `gam` and constant are exactly 0, while in the tableau rebuilt from the active set they are `-2.8e-15` and `-2.5e-13`.
+  A pivot chain keeps the structural zeros of the problem exactly (0 stays 0); a fresh factorization of a matrix with
+  entries up to 1e6 leaves rounding noise of 1e-20 to 1e-23 of the row maximum in exactly those places. The tie between the
+  twin rows is then decided by the sign of noise and the walk ends in the other twin basis.
+* The state of the popped item is the same in the compared runs (kind `Lazy`, depth 5, same entry facet and centre) at
+  the first divergent pop of the correct and the wrong run; the tableau bits differ in all three runs compared (budget 0,
+  every lazy child rebuilt, budget 1 MB; the 1 MB run has the fewest exact zeros: 66 against 97 and 89 in `t`, 0 against 8
+  and 6 in `rho`). Two 1 MB runs give bit-identical results, so the failure is deterministic. Rebuilding every lazy
+  child (3,529) and the stress budget (4,710) both use noisy tableaux; whether the noise flips a twin tie is chaotic.
+* An earlier version of this note said that rebuilding at queue time (`Ready(tableau_of)`) was correct and rebuilding at
+  pop time was not. That contrast was an artefact of my debug code (the `ready_bytes` counter went negative and wrapped,
+  so almost nothing was dropped); queue-time and pop-time rebuilds are the same function of the same input and are
+  bit-identical. The cause is the noise, not the moment of the rebuild.
+* Ruled out: the entry-facet skip, the depth counter, the facet certificate (`RPOPT_CERT=0` fails the same way), hints and
+  centres, and multiplicative noise of up to 1e-12 on the pivoted tableau (it cannot create or remove noise-level entries).
+
+### The safeguard
+
+`TabSrc::resolve` for `TabSrc::None` (a child whose tableau was dropped beyond the budget) factors the basis a second time
+with the pivots in the reverse order (`snap_noise`). An entry is set to zero when both factorizations give a value below
+`1e-18` of the largest entry of its row, the two values have opposite signs or differ by a factor of 10 or more, and the
+entry lies in a row or column of a twin constraint (constraint rows of `[M | q | R]` that are a positive multiple of another
+row, found once per solve on first use). It is a numerical safeguard for exact-zero structure, not a proof; the same noise
+exists in the tableaux rebuilt every 32 levels by REFACTOR on main, which are untouched (pop_001 passes there because
+its chains rarely reach depth 32).
+
+Things that were tried and rejected: zeroing every entry below a global fraction of the largest entry (1e-19 to 1e-17):
+it fixes pop_001 but loses 6 to 11 regions on masses5_N3 and masses4_N4, whose rows span 13 orders of magnitude;
+the same rule restricted to entries on which two orders disagree and restricted to a row-relative bound still lost 2
+regions on masses5_N3. Restricting to twin rows leaves the problems without twins untouched (0 entries snapped on
+masses5_N3 and masses4_N3, 5,069 and 2,529 rebuilds).
+
+### Gate (tree `x1` = 09fc452, main 59b2afb plus these changes, Negishi, 1-CPU tasks)
+
+* 58 problems, default budget against budget 0: hashes and sorted-set hashes identical (58 of 58).
+* 58 problems at the stress budget (1 MB) against budget 0: sorted sets identical on 57 of 58: `pop_001` 3,529 (was 4,710),
+  `masses5_N3` 5,266 (both), `masses2_N8`, `masses3_N3` to `N5`, `masses4_N3`, `pop_005`, `pop_007`, `pop_017` equal. The
+  exception is `masses4_N4` (16,313 against 16,312), a sliver that the unsnapped build shows as well (the snap does not
+  act there).
+* `pop_002` (321,026 regions) and `pop_033` (860,655 regions) at the default budget, which takes the rebuild path past
+  512 MiB, against budget 0: sorted sets identical (`cb70fefe84cd4bd8` and `1adc7e3c8d0b4eb3`); times 94.8 s against
+  87.1 s and 311.2 s against 295.7 s (single runs, +9% and +5%).
+* Tests on `x1` as a 1-CPU array of 148 tests: 144 passed and 3 ignored; the 20-minute `pl_wnn::random_mpqp_theta8_b`
+  (it does not call mplcp) was still running when this was written.
+* Timing at the default budget against main 59b2afb, 14 problems at 2 to 16 parameters, 5 alternations (`x2` = 702e0f3,
+  after the rebuild, snap and fallback code was moved out of line and the twin search was made O(n log n)): geometric
+  mean of medians 1.0041, A/A 1.0017; per problem 0.996 to 1.008 except `di_N6` (0.1 ms per solve) 1.032, which is 3 us.
+  (The first version of this change measured 1.009 with `pop_005` +2.5%.)
+* Census at the 1 MB budget: `pop_001` 2,158 tableaux rebuilt and 22,803 entries set to zero (10.6 per rebuild);
+  `masses5_N3` 5,069 rebuilt, 0 set to zero; `masses4_N3` 2,529 rebuilt, 0 set to zero. The counters are `SnapRebuilds` and
+  `SnapEntries` in table 3j of `lp_census`.
+
+### Duplicated constraints in the benchmark (for the principled fix, `examples/dedupe_check.rs`)
+
+52 of the 150 benchmark problems (all `pop_*`) have constraint rows of [A | F | b] that are positive multiples of another
+row (1 to 16 pairs per problem; `pop_002` 16, `pop_033` 5; the program as loaded, after the library's own row scaling).
+`dedupe_check` solves each with mplcp as loaded and again without the duplicates (kept row = lowest index; the reduced
+program is assembled with `MpProgram::from_raw_parts`, because `MpProgram::new(.., post_process = false)` rescales the rows
+again, which made `pop_040` 4x slower and `pop_028` gain a region in my first measurement; both were artefacts of the
+construction), maps every twin of the full solve to its kept row, and compares the sorted active sets.
+
+* 51 of the 52 problems give identical sets (same region count, no region contains both a twin and its kept row),
+  including `pop_002` (321,026 regions, canonical-set hash `cb70fefe84cd4bd8` both) and `pop_033` (860,655 regions,
+  `1adc7e3c8d0b4eb3` both, measured as two separate tasks). The exception is `pop_076`: the reduced solve has one more
+  region (15,007 against 15,006), a sliver of Chebyshev radius 1.5e-6 (`[6, 15, 21, 23, 25]`). Slivers of this size are
+  kept by one build and dropped by another elsewhere in this note as well, so it is not an effect of the dedupe as such.
+* `lexcheck` on both solves of the 48 problems with at most 30,000 regions (5,000 samples each, 1,995 feasible on pop_019):
+  0 lexico-infeasible regions, 0 overlaps, 0 gaps in all of them. (`pop_028` and `pop_061` have more regions and were not sampled.)
+* Time (one run each, serial): total over the 50 small problems 69.4 s against 65.5 s (-5.6%); `pop_076` 4.13 s to 2.73 s,
+  `pop_019` 2.36 s to 2.15 s, `pop_008` 1.96 s to 1.86 s, most others 2% to 5%; `pop_002` 96.9 s to 88.8 s (-8%), `pop_033`
+  313.3 s to 292.0 s (-7%). The earlier "1.9x on `pop_019`" was the artefact above. Where it helps, the twins removed the
+  rank-1 enumeration: `pop_019` has 5,072 rank-1 fallbacks to the walk (14,436 walk calls) with the duplicates and 0
+  (0 walk calls) without; `pop_040` has 305 fallbacks and 1,020 walk calls against 7 and 21.
+
+### No region is skipped silently; comment fix
+
+A region whose tableau cannot be factored (`resolve` returns `None`) used to be skipped by the neighbour search, and
+only the `lp_census` build counted it. It now takes `across_fallback`: for each facet, the lexicographic Lemke basis at
+the facet point nearest the region's centre moved by 1e-6 across it. This does not guarantee every neighbour is found, so
+the use is counted by an always-on counter, `mplcp::resolve_fallbacks()`, which the new test `no_region_is_skipped_without_trace`
+asserts to be 0 (it solves three bench problems and pop_001). Neither the serial nor the parallel solver skips silently any more. On the
+benchmark the counter stays 0 (`ResolveNone` is 0 in the census above). The comment at `tableau_for` now says what the
+retry guarantees: a basis is accepted when the given order or the greedy order stays above the floors; Lean's 3-pair
+counterexample (both orders refuse a basis that the order 1, 3, 2 accepts) means a refusal is "not found with these two
+orders", not "singular".
+
+## 7. Duplicated constraints are removed inside mplcp
+
+`mplcp::solve` (`Method::Pivot` and `PivotParallel`) now solves the program without its duplicated inequality rows and maps
+the regions back; `mplcp::set_dedupe(false)` or `MPLCP_NO_DEDUPE=1` in `region_hash`, `mplcp_bench`, `lp_census` and
+`pair_check` turn it off, `mplcp::solve_with_dedupe(program, seed, method, dedupe)` chooses explicitly, `mplcp::duplicate_rows`
+exposes the groups. `MpProgram` and the other solvers are untouched. `A_t` (parametric domain) rows are not deduplicated.
+
+**Duplicates.** Inequality rows of `[A | F | b]` that are a positive multiple of an earlier inequality row (to 1e-11 of the row
+norm; equality rows never). The kept row is the lowest index of its group. The reduced program is assembled with
+`MpProgram::from_raw_parts` (`MpProgram::new(.., false)` would scale the rows again).
+
+**Output.** Only the internal solve is reduced. Every index of `active_set`, `lambda_set` and `regular_set.1` is the
+lowest-index row of its group (where the solver used to report whichever twin it landed on; for example pop_001 reports row 4,
+not 23); `regular_set.0` is recomputed as the position in the sorted list of all inactive constraints of the full program;
+`omega_set` is unchanged. `c` and `d` have one row per active inequality, as before (the multiplier of the kept row is the
+total of its group; a removed twin is never in an active set and has no row), so `lagrange_multipliers(theta)` keeps its length
+and the shapes of `a`, `b`, `c`, `d`, `e`, `f` do not change. The number of rows of `e` can: a twin that was a non-redundant
+facet row is no longer there twice (pop_001 35,961 facet rows against 36,232 in total).
+
+### Gate (tree `z1` = e0cae49 on main a3ebf60 with the snap change; Negishi, 1-CPU tasks)
+
+* **Tests:** 149 tests as a 1-CPU array, 146 passed and 3 ignored. New `dedupe_keeps_the_regions_and_the_output_shape` (pop_011, 019,
+  031, 039, 052, 071, 081: same regions, only lowest-index rows reported, `c`/`d` shape, `regular_set.0` positions, primal law)
+  and an extended `mplcp_pop_001_twin_rows_lex_feasible` (the lexicographic-twin assertions now run on the solve with the
+  duplicates, `solve_with_dedupe(.., false)`; the default solve reports row 4 and no row 23). `dependent_start.rs` (pop_019,
+  pop_031, pop_052, pop_071, pop_001) passes unchanged.
+* **Sorted active sets, all 150 mpQP problems of `bench/problems`, `problems_large`, `problems_highdim`, dedupe on against
+  off** (twins mapped to the lowest-index row on both sides, `RPOPT_CANON=1`): 144 identical, 1 different (`pop_076`),
+  5 not compared (`masses4_N5`, `pop_036`, `pop_051`, `pop_095` exceed the 20 minutes / 3.9 GB of the task; `pop_033` ran as two
+  separate tasks and is identical: 860,655 regions, canonical hash `1adc7e3c8d0b4eb3` both). The 98 problems without
+  duplicates are unchanged by construction.
+* **`pop_076` (dedupe on: 15,007 regions, off: 15,006)**, checked with `pair_check` (mplcp-case2-cost, 5879688): the extra
+  region `[6, 15, 21, 23, 25]` has Chebyshev radius 1.53e-6, tightness residual 1.7e-8, the QP at its centre **confirms** it
+  (its active set `[6, 15, 21, 23, 25, 31]` contains the set, `qp agrees` true), and the solve with the duplicates leaves that
+  centre **uncovered** (no region contains it strictly), while the deduplicated solve covers it. So it fills a hole of the
+  full solve; it is not a spurious region.
+* **Stress budget (1 MB, every queued child rebuilt) and a REFACTOR-heavy build (`REFACTOR = 1`, every Case-1 child
+  rebuilt)** on the 49 twin problems other than `pop_002` and `pop_033`: dedupe on against off identical on 48 of 49
+  in both runs (again only `pop_076`). Against the default dedupe-on solve, 48 of 49 are identical; `pop_028` gains one region
+  under the 1 MB budget (`[1, 16, 22, 29, 48]`) and two under `REFACTOR = 1` (that one and `[14, 16, 19, 22, 48]`). `pair_check`: the
+  first cannot be built as a full-dimensional region from its active set, the second has radius 3.9e-8, the QP at its centre
+  gives another active set (`[14, 16, 19, 22, 28]`, `qp agrees` false) and the default solve leaves the centre uncovered. They
+  appear with dedupe off as well (`s_off` equals `s_on`), so they come from the rebuild numerics, not from the removal.
+* **The snap no longer fires.** `SnapEntries` at the 1 MB budget with dedupe on is 0 on `pop_001`, `pop_007`, `pop_008`,
+  `pop_011`, `pop_017`, `pop_019`; with dedupe off it is 22,803, 239,502, 1,094,552, 60, 13,023 and 651,563. The snap stays as a
+  safeguard (the Lean check found that tableaux built by `candidate_law` carry the same noise and are not snapped).
+* **Timing, serial, 51 twin problems, 3 to 5 alternations, one task per (problem, alternation) with `mn4` = main a3ebf60,
+  `z1`, `z1` with `MPLCP_NO_DEDUPE=1` and a second copy of `z1` for A/A in shuffled order.** Geometric means of the per-problem
+  medians:
+
+| problems | dedupe against main | no dedupe against main | dedupe against no dedupe (same binary) | A/A |
+|---|---:|---:|---:|---:|
+| solve >= 1 s (9) | 0.932 | 1.007 | 0.926 | 1.001 |
+| solve >= 10 ms (21) | 0.948 | 1.004 | 0.945 | 1.001 |
+| solve >= 1 ms (30) | 0.921 | 1.005 | 0.917 | 1.000 |
+| all (51, incl. 0.002 ms solves) | 0.813 | 1.051 | 0.773 | 0.999 |
+
+  A/A per problem at 10 ms and above: 0.994 to 1.006. Largest gains: `pop_052` 0.4 ms to 0.008 ms (50x), `pop_071` 29x, `pop_031`
+  16x (the dependent-start problems: the start no longer has to resolve the twins), `pop_046` 2.3x, `pop_081` 2.1x, `pop_076`
+  1.47x (0.68), `pop_029` 1.27x, `pop_002` 0.918 against the same binary without dedupe and 0.994 against main (without
+  dedupe the binary is 8% slower than main on `pop_002`, presumably because the snap's second factorization runs on the rebuilds past the
+  budget; with the twins gone it does not run). The solves below 0.05 ms show ratios up to 1.3 that are the timer resolution
+  (1 us) and the fixed cost of assembling the reduced program (a few us). No problem above 1 ms is slower than 1.02.
