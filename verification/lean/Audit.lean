@@ -138,3 +138,9 @@ import RpoptProofs
 #print axioms Rpopt.slack_column_zero_of_pivot_zero
 #print axioms Rpopt.tableau_diag_le
 #print axioms Rpopt.column_le_pivot
+-- Round 11: tableau budget and checked DAQP emptiness filter (a8d003f)
+#print axioms Rpopt.rebuilt_eq_pivoted
+#print axioms Rpopt.dot_le_l1_mul_bound
+#print axioms Rpopt.farkas_box
+#print axioms Rpopt.farkas_box_signed
+#print axioms Rpopt.facet_coord_le

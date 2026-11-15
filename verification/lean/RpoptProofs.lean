@@ -3,6 +3,7 @@
 import RpoptProofs.Foundations.QP
 import RpoptProofs.Foundations.LCP
 import RpoptProofs.Foundations.Chebyshev
+import RpoptProofs.Foundations.Farkas
 import RpoptProofs.Tableau
 import RpoptProofs.Pivot
 import RpoptProofs.Lex
