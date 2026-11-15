@@ -404,16 +404,15 @@ time of `graph` (119 problems solved).
 - **Scale-free pivot test (Case 1 fast path).** `adjacent` and `rank1_case2` decide "nonzero pivot" and "zero pivot" with
   one scale-free measure (thresholds 1e-6 and 1e-9, the measured gap), where an absolute `PTOL` had sent Case-1 facets of badly
   scaled problems to the Case-2 walk; a toggle taken through the relative test hands over its basis only, and a fast-path call
-  with `tve` above `PTOL` but a measure at most 1e-9 goes to rank-1. Paired serial time against main c345cdc (fix 04d4ca9):
-  masses from 6 parameters geometric mean 0.667 (masses5_N3 0.38, masses4_N4 0.55, masses8_N2 0.74; masses5_N4 492 s against
-  1800 s before the change and the rank-1 enumeration, and 153 s for `graph`); masses of 2 to 5 parameters 1.033 and 13 other
-  problems of 2 to 16 parameters 1.010 (A/A 0.99 to 1.01). The fix has 0 gaps, 0 overlaps and 0 lexico-infeasible regions on all 111
-  problems and the same region hash as main on 94 of them (the others differ by slivers). Details in
-  `bench/results/mplcp_scale_free_pivot.md`. **Known defect, fix in progress:** a child handed over by the relative test
-  is rebuilt with `tableau_for`, whose absolute 1e-11 pivot check refuses many of these rebuilds, and the region's
-  neighbour search is then skipped. On masses4_N2 to masses8_N2, masses4_N3, masses4_N4 and masses5_N3 this affects 13%
-  to 26% of the regions, and on pop_001 6 regions. Sampled coverage on these problems still shows no gaps or overlaps,
-  but the partition is not guaranteed complete, and the masses timings above may overstate the gain.
+  with `tve` above `PTOL` but a measure at most 1e-9 goes to rank-1. **Correction:** the first timings of this work (masses from 6
+  parameters at 0.667 and 0.622 of c345cdc, masses8_N2 0.74, masses5_N4 492 s) were taken while `tableau_for` refused pivots below an
+  absolute 1e-11, so 12% to 26% of the regions of masses4 to masses8 (masses5_N3: 1340 of 5067) were popped without a tableau and their
+  neighbour search was skipped silently. With a pivot floor relative to M_ii (and a largest-pivot-first retry) `ResolveNone` is 0 on
+  all 114 census runs and the masses regions grow by 0.5% to 4% (masses5_N3 5067 to 5268; 0 gaps, 0 overlaps, 0 lexico-infeasible
+  at 3000 and 20000 samples). Paired serial time against c345cdc after the fix: masses from 6 parameters geometric mean 0.797
+  (masses3_N5 0.54, masses4_N4 0.73, masses5_N3 0.83, masses8_N2 1.40), masses of 2 to 5 parameters 1.010, 13 other problems of 2 to
+  16 parameters 0.995 (A/A 0.99 to 1.01). masses5_N4 and masses4_N5 were not re-timed after the fix. Details in
+  `bench/results/mplcp_scale_free_pivot.md`.
 - **Exploration order (measured, rejected).** A canonical neighbour order (candidates sorted by active set) made every
   build 0% to 14% slower on the masses problems and did not explain the masses8_N2 swing, which came from the pivot rule
   fixed above. After that fix, walks that return only known regions are 2% to 5% of the solve, and walks that find no
