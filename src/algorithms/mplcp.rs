@@ -1415,7 +1415,10 @@ thread_local! {
 /// nonempty, the minimum-norm point is the witness). In between, or when DAQP gives up, the answer is `Undecided`.
 fn daqp_nonempty(e: &Mat, f: &[f64], d1: usize) -> DqOut {
     use crate::algorithms::pdaqp::daqp::{Rows, Status};
-    if d1 == 0 || e.rows == 0 || !DAQP_ON.load(std::sync::atomic::Ordering::Relaxed) {
+    // EXPERIMENT: MPLCP_DAQP=0 off, 1 only the unshifted infeasibility (empty) answer, 2 (default) also the shifted one
+    static MODE: std::sync::OnceLock<u8> = std::sync::OnceLock::new();
+    let mode = *MODE.get_or_init(|| std::env::var("MPLCP_DAQP").ok().and_then(|v| v.parse().ok()).unwrap_or(2));
+    if d1 == 0 || e.rows == 0 || mode == 0 || !DAQP_ON.load(std::sync::atomic::Ordering::Relaxed) {
         return DqOut::Undecided;
     }
     #[cfg(feature = "lp_census")]
@@ -1444,6 +1447,9 @@ fn daqp_nonempty(e: &Mat, f: &[f64], d1: usize) -> DqOut {
             Status::Infeasible => return DqOut::Empty,
             Status::Unknown => return DqOut::Undecided,
             Status::Feasible => {}
+        }
+        if mode == 1 {
+            return DqOut::Undecided;
         }
         for v in rhs.iter_mut() {
             *v -= DAQP_SHIFT;
