@@ -16,10 +16,13 @@
 //! its right-hand sides relaxed by at most the slack margin. The multipliers y and the product R are
 //! carried through the rank-one updates and rebuilt from the basis every 50 pivots; the checks above
 //! rely on them only through y (and the residual check of c = sum y_i a_{T_i} uses the rows, not R).
-//! The returned bound c.x can be below the true maximum c.x' only by sum_i y_i (b_{T_i} - a_{T_i}.x),
-//! at most 1e-8 sum_i y_i (1 + |b_{T_i}|); the caller's screening margin is 1e-7 (1 + |f|), which
-//! covers it when the multipliers are of order one (a large box has large multipliers, and then
-//! the margin would have to scale with the box). Any failure (no blocking row, singular
+//! The returned bound c.x can be below the true maximum c.x' only by
+//! sum_i y_i (b_{T_i} - a_{T_i}.x) + r.(x' - x), where r = c - sum_i y_i a_{T_i} is the certificate
+//! residual (every coordinate at most 1e-8 after the check): the first term is at most
+//! 1e-8 sum_i y_i (1 + |b_{T_i}|), the second at most 1e-8 ||x' - x||_1. The caller's screening
+//! margin of 1e-7 (1 + |f|) covers both when the multipliers are of order one and the box is not
+//! large (a large box has large multipliers and a large ||x' - x||_1, and then the margin would
+//! have to scale with the box). Any failure (no blocking row, singular
 //! pivot, iteration guard, a failed check) sends that objective, and a restart of the chain, to the
 //! engine. Degeneracy:
 //! pivots with a zero step count towards a switch to Bland's rule (smallest row index leaves,
