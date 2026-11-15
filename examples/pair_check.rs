@@ -74,6 +74,43 @@ fn main() {
             "{aset:?}: rows {} radius {:.3e} lex (feasible, rows with zero theta part, min signed first entry, min abs first entry) = {:?} tight residual {:.2e} qp agrees {} qp active set {:?} centre inside {:?}",
             cr.e.rows, s.x[nt], lex, tight, qp_agrees, qp, inside
         );
+        // the QP at points inside the region (centre plus half the radius in 16 directions, kept only if every row of the region holds with margin)
+        {
+            let mut want = aset.clone();
+            want.sort_unstable();
+            let r = s.x[nt];
+            let (mut inside_pts, mut feasible, mut same) = (0, 0, 0);
+            let mut state = 0x9e3779b97f4a7c15u64;
+            for _ in 0..16 {
+                let mut u: Vec<f64> = (0..nt)
+                    .map(|_| {
+                        state ^= state << 13;
+                        state ^= state >> 7;
+                        state ^= state << 17;
+                        (state >> 11) as f64 / (1u64 << 53) as f64 - 0.5
+                    })
+                    .collect();
+                let nrm = u.iter().map(|x| x * x).sum::<f64>().sqrt();
+                for x in u.iter_mut() {
+                    *x *= 0.5 * r / nrm;
+                }
+                let pt: Vec<f64> = centre.iter().zip(&u).map(|(c, d)| c + d).collect();
+                let ok = (0..cr.e.rows).all(|k| cr.f[k] - cr.e.row(k).iter().zip(&pt).map(|(x, y)| x * y).sum::<f64>() > 0.0);
+                if !ok {
+                    continue;
+                }
+                inside_pts += 1;
+                if let Some(o) = prog.solve_theta(&pt) {
+                    feasible += 1;
+                    let mut v = o.active_set.clone();
+                    v.sort_unstable();
+                    if v == want {
+                        same += 1;
+                    }
+                }
+            }
+            println!("   QP at half-radius points inside the region: {inside_pts} inside, {feasible} with a QP solution, {same} with exactly this active set");
+        }
         built.push((aset.clone(), cr.clone(), centre));
     }
     for i in 0..built.len() {
