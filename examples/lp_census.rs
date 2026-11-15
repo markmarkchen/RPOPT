@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 
 #[cfg(feature = "mimalloc")]
 #[global_allocator]
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+static GLOBAL: census::CountingAlloc<mimalloc::MiMalloc> = census::CountingAlloc(mimalloc::MiMalloc);
 
 const QP_ALGOS: [&str; 6] = ["geometric", "graph", "graph_exp", "combinatorial_graph", "mplcp", "combinatorial"];
 
@@ -32,8 +32,11 @@ fn child(path: &str, alg: &str) {
         rpopt::algorithms::mplcp::set_certificate(m.parse().unwrap());
     }
     let mut runs: Vec<(f64, usize, Stats)> = vec![];
+    let lap_ns = census::calibrate();
     loop {
         census::reset();
+        rpopt::algorithms::mplcp::census_reset_local();
+        census::set_calib(lap_ns);
         let t0 = Instant::now();
         let sol = solve_mpqp_with(&prog, algo, &opts);
         let dt = t0.elapsed().as_secs_f64();
@@ -501,6 +504,128 @@ fn highdim_tables(rows: &[Row], skipped: &[(String, String)]) {
         println!(
             "| {} | {} | {:.0} | {:.2} | {:.2} | {:.0}% | {:.2} | {:.1} |",
             r.problem, r.regions, r.solve_s * 1e3, b / n, d / n, 100.0 * b / (b + d), c(r, Counter::DqNanos) / (b + d) / 1e3, c(r, Counter::PfCheb) / n
+        );
+    }
+    println!("\n### High-dimension 3l: mplcp Case-2 cost by component (rank-1 = case 2, walk = case 3)\n");
+    println!("Per `adjacent` call that ended in the case. `us` is microseconds per call, `al` allocations per call. The census overhead (basis_seen, rank-1 probe, tested map, hint check) is taken out of the total and of the rest. Timer cost per lap is in the last column; every lap costs two clock reads and counter updates, so components with many laps are inflated by about that much per lap.\n");
+    for r in rows.iter().filter(|r| r.alg == "mplcp") {
+        let mut any = false;
+        for ci in 0..2usize {
+            let g = |comp: usize, f: usize| r.s.counters[census::c2_slot(comp, ci, f)] as f64;
+            let calls = g(0, 1);
+            if calls == 0.0 {
+                continue;
+            }
+            if !any {
+                println!("**{}** ({} regions, solve {:.0} ms, {} Case-2 calls/region, lap cost {:.0} ns)\n", r.problem, r.regions, r.solve_s * 1e3, per(calls / r.regions.max(1) as f64, 1.0), r.s.counters[census::CALIB] as f64 / 1000.0);
+                println!("| case | component | us/call | al/call | KB/call | laps/call | share of solve |");
+                println!("|---|---|---:|---:|---:|---:|---:|");
+                any = true;
+            }
+            let cname = if ci == 0 { "rank-1 (2)" } else { "walk (3)" };
+            let cen = g(census::Comp::Census as usize, 0) + g(census::Comp::HintCensus as usize, 0);
+            let cen_al = g(census::Comp::Census as usize, 2) + g(census::Comp::HintCensus as usize, 2);
+            let tot = g(0, 0) - cen;
+            let solve_ns = r.solve_s * 1e9;
+            let mut sum = 0.0;
+            let mut sum_al = 0.0;
+            let mut sum_by = 0.0;
+            let mut laps = 0.0;
+            println!("| {cname} | **total** ({} calls, census removed) | {:.2} | {:.1} | {:.1} | - | {} |", calls, tot / calls / 1e3, (g(0, 2) - cen_al) / calls, g(0, 3) / calls / 1024.0, pct(tot, solve_ns));
+            for comp in 1..census::NCOMP {
+                if comp == census::Comp::Census as usize || comp == census::Comp::HintCensus as usize {
+                    continue;
+                }
+                let (mut ns, mut al, mut by, lp) = (g(comp, 0), g(comp, 2), g(comp, 3), g(comp, 1));
+                if comp == census::Comp::Leaf as usize {
+                    ns -= g(census::Comp::HintCensus as usize, 0);
+                    al -= g(census::Comp::HintCensus as usize, 2);
+                    by -= g(census::Comp::HintCensus as usize, 3);
+                }
+                if lp == 0.0 {
+                    continue;
+                }
+                sum += ns;
+                sum_al += al;
+                sum_by += by;
+                laps += lp;
+                println!("| {cname} | {} | {:.2} | {:.1} | {:.1} | {:.1} | {} |", census::COMP_NAMES[comp], ns / calls / 1e3, al / calls, by / calls / 1024.0, lp / calls, pct(ns, solve_ns));
+            }
+            println!("| {cname} | rest (untimed code, timer cost) | {:.2} | {:.1} | {:.1} | - | {} |", (tot - sum) / calls / 1e3, (g(0, 2) - cen_al - sum_al) / calls, (g(0, 3) - sum_by) / calls / 1024.0, pct(tot - sum, solve_ns));
+            let _ = laps;
+        }
+        if any {
+            println!();
+        }
+    }
+    println!("\n### High-dimension 3m: mplcp walk Chebyshev LPs against the parent piece (warm-start potential)\n");
+    println!("| problem | walk LPs | polytope rows (child) | rows added: 0 / 1 / 2 / 3+ | cold pivots/LP | with a parent point | child rows the point violates (all / added) | point inside child | cold pivots on those | shifted-start pivots/LP | shifted us/LP | cold us/LP | same decision and radius |");
+    println!("|---|---:|---:|---|---:|---:|---|---:|---:|---:|---:|---:|---:|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::ChebRows) > 0.0) {
+        let n = c(r, Counter::PfCheb);
+        let hp = c(r, Counter::ChebHasPt).max(1.0);
+        let lpn = r.s.counters[census::c2_slot(census::Comp::Lp as usize, 1, 0)] as f64;
+        println!(
+            "| {} | {} | {:.1} (d1 {:.1}) | {} / {} / {} / {} | {:.1} | {} | {:.2} / {:.2} | {} | {:.1} | {:.1} | {:.1} | {:.1} | {} |",
+            r.problem, n, c(r, Counter::ChebRows) / n, c(r, Counter::ChebDims) / n, c(r, Counter::ChebAdd0), c(r, Counter::ChebAdd1), c(r, Counter::ChebAdd2), c(r, Counter::ChebAdd3p),
+            c(r, Counter::ChebPivots) / n, pct(c(r, Counter::ChebHasPt), n), c(r, Counter::ChebViolAll) / hp, c(r, Counter::ChebViolNew) / hp, pct(c(r, Counter::ChebPtInside), c(r, Counter::ChebHasPt)),
+            c(r, Counter::ChebPivotsPt) / hp, c(r, Counter::ChebShiftPivots) / c(r, Counter::ChebShiftCalls).max(1.0), c(r, Counter::ChebShiftNs) / c(r, Counter::ChebShiftCalls).max(1.0) / 1e3, lpn / n / 1e3,
+            pct(c(r, Counter::ChebShiftSame), c(r, Counter::ChebShiftCalls))
+        );
+    }
+    println!("\n### High-dimension 3n: mplcp walk calls by class of vanishing rows (time without census work)\n");
+    println!("| problem | class | walk calls | share of calls | us/call | share of solve | LP share of class time | DAQP share | Gamma share |");
+    println!("|---|---|---:|---:|---:|---:|---:|---:|---:|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::ChebRows) > 0.0) {
+        let tot: f64 = (0..census::NWK).map(|k| r.s.counters[census::WK_BASE + k * 5] as f64).sum();
+        for k in 0..census::NWK {
+            let g = |f: usize| r.s.counters[census::WK_BASE + k * 5 + f] as f64;
+            if g(0) == 0.0 {
+                continue;
+            }
+            println!("| {} | {} | {} | {} | {:.0} | {} | {} | {} | {} |", r.problem, census::WK_NAMES[k], g(0), pct(g(0), tot), g(1) / g(0) / 1e3, pct(g(1), r.solve_s * 1e9), pct(g(2), g(1)), pct(g(3), g(1)), pct(g(4), g(1)));
+        }
+    }
+    println!("\n### High-dimension 3o: walk Chebyshev LPs, leaf against non-leaf, and the phase-1 feasibility LP for non-leaf branches\n");
+    println!("| problem | leaf LPs | leaf us/LP | leaf pivots/LP | non-leaf LPs | non-leaf us/LP | non-leaf pivots/LP | non-leaf share of LP time | phase-1 pivots/LP | phase-1 us/LP | phase-1 same verdict |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::ChebRows) > 0.0) {
+        let (lc, nc) = (c(r, Counter::LpLeafCalls), c(r, Counter::LpNlCalls));
+        println!(
+            "| {} | {} | {:.1} | {:.1} | {} | {:.1} | {:.1} | {} | {:.1} | {:.1} | {} |",
+            r.problem, lc, c(r, Counter::LpLeafNs) / lc.max(1.0) / 1e3, c(r, Counter::LpLeafPiv) / lc.max(1.0), nc, c(r, Counter::LpNlNs) / nc.max(1.0) / 1e3, c(r, Counter::LpNlPiv) / nc.max(1.0),
+            pct(c(r, Counter::LpNlNs), c(r, Counter::LpNlNs) + c(r, Counter::LpLeafNs)), c(r, Counter::P1Pivots) / c(r, Counter::P1Calls).max(1.0), c(r, Counter::P1Ns) / c(r, Counter::P1Calls).max(1.0) / 1e3,
+            pct(c(r, Counter::P1Same), c(r, Counter::P1Calls))
+        );
+    }
+    println!("\n### High-dimension 3q: walk Chebyshev LPs by outcome, cold against shifted start from the parent point and against the phase-1 feasibility LP\n");
+    println!("| problem | outcome | LPs | share of LPs | share of LP time | cold pivots/LP | cold us/LP | shifted pivots/LP | shifted us/LP | phase-1 pivots/LP | phase-1 us/LP |");
+    println!("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::ChebRows) > 0.0) {
+        let g = |o: usize, f: usize| r.s.counters[census::EO_BASE + o * 8 + f] as f64;
+        let (tc, tt) = (g(0, 0) + g(1, 0), g(0, 2) + g(1, 2));
+        for (o, nm) in [(0usize, "empty"), (1, "nonempty")] {
+            let n = g(o, 0).max(1.0);
+            let sn = g(o, 3).max(1.0);
+            println!(
+                "| {} | {} | {} | {} | {} | {:.1} | {:.1} | {:.1} | {:.1} | {:.1} | {:.1} |",
+                r.problem, nm, g(o, 0), pct(g(o, 0), tc), pct(g(o, 2), tt), g(o, 1) / n, g(o, 2) / n / 1e3, g(o, 4) / sn, g(o, 5) / sn / 1e3, g(o, 6) / n, g(o, 7) / n / 1e3
+            );
+        }
+    }
+    println!("\n### High-dimension 3p: region-box prefilter on the pieces that reach the DAQP / LP stage, exact row redundancy, repeated hyperplanes, DAQP cost split\n");
+    println!("| problem | tests | box proves empty | of those: DAQP empty / LP empty / LP nonempty (must be 0) | rows/piece | rows redundant over the box | cut rows/piece | redundant cut rows | non-redundant rows (exact, sample of walk LPs) | walks | walks on a hyperplane walked before | from the other side | share of walk time in repeats | DAQP tests | build us | solve us | certificate us |");
+    println!("|---|---:|---:|---|---:|---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::ChebRows) > 0.0) {
+        let t = c(r, Counter::BoxTests).max(1.0);
+        let dq = c(r, Counter::DqTests).max(1.0);
+        println!(
+            "| {} | {} | {} | {} / {} / {} | {:.1} | {:.1} | {:.2} | {:.2} | {:.1} of {:.1} | {} | {} | {} | {} | {} | {:.2} | {:.2} | {:.2} |",
+            r.problem, c(r, Counter::BoxTests), pct(c(r, Counter::BoxEmpty), t), c(r, Counter::BoxEmptyDaqp), c(r, Counter::BoxEmptyLp), c(r, Counter::BoxEmptyNonempty),
+            c(r, Counter::BoxRows) / t, c(r, Counter::BoxRedRows) / t, c(r, Counter::BoxCutRows) / t, c(r, Counter::BoxRedCut) / t,
+            c(r, Counter::RedNonRed) / c(r, Counter::RedSamples).max(1.0), c(r, Counter::RedRows) / c(r, Counter::RedSamples).max(1.0),
+            c(r, Counter::HyperWalks), pct(c(r, Counter::HyperRepeat), c(r, Counter::HyperWalks)), pct(c(r, Counter::HyperOther), c(r, Counter::HyperWalks)), pct(c(r, Counter::HyperRepeatNs), c(r, Counter::HyperNs)),
+            c(r, Counter::DqTests), c(r, Counter::DqBuildNs) / dq / 1e3, c(r, Counter::DqSolveNs) / dq / 1e3, c(r, Counter::DqCertNs) / dq / 1e3
         );
     }
     println!("\n### High-dimension 4: vertex clipping (`clip_flags`) outcomes per call\n");

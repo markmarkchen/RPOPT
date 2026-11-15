@@ -56,6 +56,8 @@ fn main() {
         let name = std::path::Path::new(f).file_stem().unwrap().to_string_lossy().to_string();
         let (peak_parents, tab_bytes) = rpopt::algorithms::mplcp::tab_stats();
         let hwm_mb = std::fs::read_to_string("/proc/self/status").ok().and_then(|t| t.lines().find(|l| l.starts_with("VmHWM")).and_then(|l| l.split_whitespace().nth(1).and_then(|v| v.parse::<f64>().ok()))).map_or(0.0, |kb| kb / 1024.0);
+        let (seen_len, seen_bytes, qlen, qbytes) = rpopt::algorithms::mplcp::search_stats();
+        println!("{name} seen_entries {seen_len} seen_mb {:.0} peak_queue {qlen} peak_queue_mb {:.0}", seen_bytes as f64 / 1048576.0, qbytes as f64 / 1048576.0);
         println!("{name} {} regions {} facet_rows {rows} hash {:016x} sets {:016x} solve_s {dt:.3} peak_parents {peak_parents} tab_bytes {tab_bytes} peak_parent_mb {:.0} rss_peak_mb {hwm_mb:.0}", args[1], recs.len(), h.finish(), hs.finish(), (peak_parents * tab_bytes) as f64 / 1048576.0);
     }
 }
