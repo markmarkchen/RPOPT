@@ -1242,7 +1242,8 @@ fn facet_polytope(nb: &[Vec<f64>], g: &[f64], b: f64, e_all: &Mat, f_all: &[f64]
 /// lambda_k / mu_k, k in P-} of the facet is nonempty (a witness, or the Chebyshev LP); P- empty means no
 /// neighbour (boundary of the feasible set). A known set is dropped. A multiplier is zero, nonzero or undecided in the scale of the
 /// dependency (`MU_ZERO`, `MU_NONZERO`, as the pivot measure); the undecided ones go to the walk (on the benchmark problems the band holds a few hundred to a few thousand multipliers per solve;
-/// a gap-band multiplier is recomputed from the original data first, see `refined_multipliers`). Returns None when the case does not apply
+/// with the refined rule on (the default; `set_refine_multipliers(false)`, `MPLCP_REFINE=0` in the examples) a gap-band multiplier is recomputed from the original data first, see
+/// `refined_multipliers`, and only the entries that stay between go to the walk). Returns None when the case does not apply
 /// (several vanishing rows, a multiplier row, a nonzero pivot or slack column, ties between two ratios as
 /// affine functions on F, nt = 1), and the walk runs instead.
 #[allow(clippy::too_many_arguments)]
