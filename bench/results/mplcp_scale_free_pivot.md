@@ -307,6 +307,17 @@ to 51d9c62 on 99. The masses2 to masses5 problems of 2 to 5 parameters cost 1.9 
 measurable at these sizes. The 13 control problems are unchanged within the A/A range (geometric mean 1.010, di_N10 at 0.15 ms is the
 largest, 1.034).
 
+### Short-circuit of the measure (78a0f07)
+
+The O(n) column loop of `pivot_measure` is skipped when the O(1) pivot part alone fixes the decision (pivot part above 1e-9 for a
+call with `tve > PTOL`, above 1e-6 for `tve <= PTOL`; `rank1_case2` tests the pivot part first; the census build always computes
+the full measure so `PivotGap` stays exact). Paired against the unchanged fix (job 45900820, short-circuit, fix and a copy of the fix
+per task, 3 to 7 alternations): the 7 masses problems of 2 to 5 parameters 0.996 (A/A 1.005), all 11 problems 0.995
+(masses8_N2 1.004, di_N10 0.987, pop_043 0.992, rand_t8_x5_m20_s0 0.994; the A/A of single problems ranges from 0.970 to 1.060,
+the largest on masses2_N8 and masses2_N12). The hash is identical on all 11 and the coverage is 0 gaps, 0 overlaps, 0 lexico-infeasible
+regions. So the loop accounts for at most about 0.5 percent of the 1.9 to 4.3 percent that the 2 to 5 parameter masses problems
+cost against main; the rest is not explained by it (code layout of `adjacent` is the likely remainder, not measured).
+
 ## masses5_N4 and masses4_N5 against graph
 
 Candidate `mplcp` and `graph`, one solve each, then 2000 coverage samples (`lexcheck`):
