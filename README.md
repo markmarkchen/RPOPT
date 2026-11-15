@@ -401,6 +401,9 @@ time of `graph` (119 problems solved).
   measurement against every exact solver on 111 problems of 2 to 16 parameters (main f234e64, with the rank-1
   enumeration) is in `bench/results/mplcp_goal_status.md`: `mplcp` is fastest on 38. The best other solver is
   `parametric_daqp` on 37 of the other 73, `graph` on 17, `combinatorial_graph` on 14 and `combinatorial` on 5.
+  Second measurement on main 59b2afb (`mplcp` re-run only, against the stored best-other times, so ratios carry cross-run noise):
+  `mplcp` is at or below the best other on 42 of 111 (47 within 1.07), 0.88x the time of the first measurement, 6 to 16
+  parameters 1.19 to 1.49 geometric mean against 1.58 to 1.92 before, `bench/results/mplcp_goal_status_2.md`.
 - **Scale-free pivot test (Case 1 fast path).** `adjacent` and `rank1_case2` decide "nonzero pivot" and "zero pivot" with
   one scale-free measure (thresholds 1e-6 and 1e-9, the measured gap), where an absolute `PTOL` had sent Case-1 facets of badly
   scaled problems to the Case-2 walk; a toggle taken through the relative test hands over its basis only, and a fast-path call
