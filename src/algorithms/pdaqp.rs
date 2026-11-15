@@ -136,6 +136,13 @@ pub mod daqp {
             }
         }
 
+        /// After `Status::Infeasible`: the working set and the non-negative multipliers `p` over it of the
+        /// infeasibility certificate (`sum p_i a_i` is zero and `sum p_i b_i` is negative in exact arithmetic;
+        /// the caller can check both in floating point).
+        pub fn certificate(&self) -> (&[usize], &[f64]) {
+            (&self.w, &self.p)
+        }
+
         /// Dual active-set method (Algorithm 1 of the DAQP paper) for the feasibility of
         /// `a x <= b`, started from W = {equality rows}, λ = 0.
         pub fn solve(&mut self, a: &Rows, n_eq: usize) -> Status {

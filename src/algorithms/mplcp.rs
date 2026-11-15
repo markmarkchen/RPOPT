@@ -575,16 +575,9 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
                     bcentre = centre.map(|c| c.to_vec());
                     bwit = witness.map(|w| w.to_vec());
                 }
-                if bwit.is_none() && bcentre.is_none() && leaf_z.is_none() {
-                    // a non-leaf branch only needs to be known nonempty: DAQP before the LP
-                    match daqp_nonempty(&ef, &ff, d1) {
-                        DqOut::Inside(pt) => bwit = Some(pt),
-                        DqOut::Empty => {
-                            crate::census_bump!(PfChebEmpty, 1);
-                            continue;
-                        }
-                        DqOut::Undecided => {}
-                    }
+                if bwit.is_none() && bcentre.is_none() && daqp_certainly_empty(&ef, &ff, d1) {
+                    crate::census_bump!(PfChebEmpty, 1);
+                    continue;
                 }
                 if bwit.is_none() && bcentre.is_none() {
                     crate::census_bump!(PfCheb, 1);
@@ -984,23 +977,12 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
             out.push(Nbr::Z(z, Some(to_theta(&pt))));
             continue;
         }
-        match daqp_nonempty(&e2, &f2, d1) {
-            DqOut::Inside(pt) => {
-                crate::census_bump!(R1Emitted, 1);
-                #[cfg(feature = "lp_census")]
-                crate::census::tested(&z, false);
-                out.push(Nbr::Z(z, Some(to_theta(&pt))));
-                witnesses.push(pt);
-                continue;
-            }
-            DqOut::Empty => {
-                crate::census_bump!(R1EmptyMember, 1);
-                crate::census_bump!(PfChebEmpty, 1);
-                #[cfg(feature = "lp_census")]
-                crate::census::tested(&z, true);
-                continue;
-            }
-            DqOut::Undecided => {}
+        if daqp_certainly_empty(&e2, &f2, d1) {
+            crate::census_bump!(R1EmptyMember, 1);
+            crate::census_bump!(PfChebEmpty, 1);
+            #[cfg(feature = "lp_census")]
+            crate::census::tested(&z, true);
+            continue;
         }
         crate::census_bump!(R1LpRun, 1);
         crate::census_bump!(PfCheb, 1);
@@ -1382,26 +1364,12 @@ pub fn regions(program: &MpProgram, seed: u64, method: Method) -> Vec<CriticalRe
 /// 0 to 7), so the period only trades a rebuild (about |z| pivots) against nothing. 8 -> 32.
 const REFACTOR: usize = 32;
 
-/// A point this far inside every row of a sub-facet polytope (rows are unit vectors, so it is a distance)
-/// certifies a Chebyshev radius above the LP's 1e-9 acceptance threshold.
-/// Outcome of the DAQP nonemptiness test of a polytope `{x : e x <= f}`.
-enum DqOut {
-    /// a point at least `DAQP_SHIFT - 1e-7` inside every row (so the Chebyshev radius is at least that)
-    Inside(Vec<f64>),
-    /// no point satisfies the rows
-    Empty,
-    /// the radius is in the thin band (between 0 and about 2e-7), or DAQP broke down: ask the LP
-    Undecided,
-}
-
-/// Shift of the rows (unit norm) for the DAQP test; larger than DAQP's primal tolerance (1e-7), so that a
-/// feasible answer certifies an interior ball of radius at least `DAQP_SHIFT - 1e-7`, which the LP's acceptance
-/// (radius > 1e-9) would also grant.
-const DAQP_SHIFT: f64 = 2e-7;
+/// Bound on the coordinates of a sub-facet polytope, used to check an infeasibility certificate of DAQP.
+const DAQP_COORD_BOUND: f64 = 1e6;
 
 static DAQP_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
-/// Switches the DAQP nonemptiness tests of the sub-facets (default on); off sends every test to the LP.
+/// Switches the DAQP emptiness filter of the sub-facet tests (default on); off sends every test to the LP.
 pub fn set_daqp_tests(on: bool) {
     DAQP_ON.store(on, std::sync::atomic::Ordering::Relaxed);
 }
@@ -1410,21 +1378,21 @@ thread_local! {
     static DQ_WS: std::cell::RefCell<(crate::algorithms::pdaqp::daqp::Daqp, Vec<f64>, Vec<f64>)> = std::cell::RefCell::new(Default::default());
 }
 
-/// Decides with the DAQP kernel whether `{x in R^d1 : e x <= f}` is nonempty with room to spare: first on the
-/// rows as they are (infeasible: empty), then, if feasible, on the rows shifted inward by `DAQP_SHIFT` (feasible:
-/// nonempty, the minimum-norm point is the witness). In between, or when DAQP gives up, the answer is `Undecided`.
-fn daqp_nonempty(e: &Mat, f: &[f64], d1: usize) -> DqOut {
+/// True when `{x in R^d1 : e x <= f}` is certainly empty: DAQP reports it infeasible and its certificate checks.
+/// DAQP's infeasibility answer alone is not enough, because on nearly parallel rows its null-vector step can claim
+/// infeasibility for a polytope with a ball of radius 1e-6 inside (seen on masses4_N3). A certificate `p >= 0` with
+/// residual `r = sum p_i a_i` and gap `g = sum p_i b_i` proves emptiness when `g + |r|_1 R < 0` for coordinates
+/// bounded by `R`, so only certificates that pass this check are used. Most sub-facet tests of the neighbour search
+/// are empty, and one DAQP solve costs a fraction of the LP; everything not certified goes to the LP unchanged.
+fn daqp_certainly_empty(e: &Mat, f: &[f64], d1: usize) -> bool {
     use crate::algorithms::pdaqp::daqp::{Rows, Status};
-    // EXPERIMENT: MPLCP_DAQP=0 off, 1 only the unshifted infeasibility (empty) answer, 2 (default) also the shifted one
-    static MODE: std::sync::OnceLock<u8> = std::sync::OnceLock::new();
-    let mode = *MODE.get_or_init(|| std::env::var("MPLCP_DAQP").ok().and_then(|v| v.parse().ok()).unwrap_or(2));
-    if d1 == 0 || e.rows == 0 || mode == 0 || !DAQP_ON.load(std::sync::atomic::Ordering::Relaxed) {
-        return DqOut::Undecided;
+    if d1 == 0 || e.rows == 0 || !DAQP_ON.load(std::sync::atomic::Ordering::Relaxed) {
+        return false;
     }
     #[cfg(feature = "lp_census")]
     let t0 = std::time::Instant::now();
     let n = e.rows;
-    let out = DQ_WS.with(|ws| {
+    let empty = DQ_WS.with(|ws| {
         let (dq, cols, rhs) = &mut *ws.borrow_mut();
         cols.clear();
         cols.resize(n * d1, 0.0);
@@ -1434,46 +1402,36 @@ fn daqp_nonempty(e: &Mat, f: &[f64], d1: usize) -> DqOut {
             let row = e.row(i);
             let nrm = row.iter().map(|v| v * v).sum::<f64>().sqrt();
             if !(nrm > 1e-12) {
-                return DqOut::Undecided;
+                return false;
             }
             for t in 0..d1 {
                 cols[t * n + i] = row[t] / nrm;
             }
             rhs[i] = f[i] / nrm;
         }
-        // most tests find an empty polytope, which the rows as they are decide in one solve
         let rows = Rows { cols: &cols[..], stride: n, b: &rhs[..], n, dim: d1 };
-        match dq.solve(&rows, 0) {
-            Status::Infeasible => return DqOut::Empty,
-            Status::Unknown => return DqOut::Undecided,
-            Status::Feasible => {}
+        if dq.solve(&rows, 0) != Status::Infeasible {
+            return false;
         }
-        if mode == 1 {
-            return DqOut::Undecided;
+        let (w, p) = dq.certificate();
+        let sp: f64 = p.iter().sum();
+        if !(sp > 0.0) || p.iter().any(|v| !v.is_finite()) {
+            return false;
         }
-        for v in rhs.iter_mut() {
-            *v -= DAQP_SHIFT;
-        }
-        let rows = Rows { cols: &cols[..], stride: n, b: &rhs[..], n, dim: d1 };
-        match dq.solve(&rows, 0) {
-            Status::Feasible => DqOut::Inside(dq.x.clone()),
-            _ => DqOut::Undecided,
-        }
+        // a multiplier that came out slightly negative is charged to the residual below
+        let neg: f64 = p.iter().map(|&v| (-v).max(0.0)).sum();
+        let gap: f64 = w.iter().zip(p).map(|(&i, &v)| v * rhs[i]).sum();
+        let res: f64 = (0..d1).map(|t| w.iter().zip(p).map(|(&i, &v)| v * cols[t * n + i]).sum::<f64>().abs()).sum();
+        gap + (res + neg) * DAQP_COORD_BOUND < -1e-10 * sp
     });
     #[cfg(feature = "lp_census")]
     crate::census::bump(crate::census::Counter::DqNanos, t0.elapsed().as_nanos() as u64);
-    match &out {
-        DqOut::Inside(_) => {
-            crate::census_bump!(DqNonempty, 1);
-        }
-        DqOut::Empty => {
-            crate::census_bump!(DqEmpty, 1);
-        }
-        DqOut::Undecided => {
-            crate::census_bump!(DqFallback, 1);
-        }
+    if empty {
+        crate::census_bump!(DqEmpty, 1);
+    } else {
+        crate::census_bump!(DqFallback, 1);
     }
-    out
+    empty
 }
 
 const WITNESS_MARGIN: f64 = 1e-8;
