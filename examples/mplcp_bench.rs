@@ -25,6 +25,10 @@ fn main() {
     if let Ok(m) = std::env::var("RPOPT_CERT") {
         rpopt::algorithms::mplcp::set_certificate(m.parse().unwrap());
     }
+    // MPLCP_NO_DEDUPE=1: solve with the duplicated constraints
+    if std::env::var("MPLCP_NO_DEDUPE").is_ok() {
+        rpopt::algorithms::mplcp::set_dedupe(false);
+    }
     for path in &args[3..] {
         let p = std::path::Path::new(path);
         let name = p.file_stem().unwrap().to_string_lossy().to_string();

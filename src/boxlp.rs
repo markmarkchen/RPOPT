@@ -8,10 +8,20 @@
 //! multipliers y = W' c, the product R = A W (so the ratio test needs no dot product: a_j.d =
 //! -R[j][leaving]) and the slacks s = b - A x. One pivot is a rank-one update of W, R, y and s.
 //!
-//! Exactness: every optimum is verified (all rows feasible within 1e-8 at the recomputed vertex,
-//! and c a nonnegative combination of the basis rows, so the point is optimal by LP duality)
-//! before it is accepted. Any failure (no blocking row, singular pivot, iteration guard,
-//! verification) sends that objective, and a restart of the chain, to the engine. Degeneracy:
+//! What is checked at every accepted optimum, from the data and not from the updated state: the
+//! vertex is recomputed as x = W b_T; every slack b_j - a_j.x is recomputed (O(m n)) and must be at
+//! least -1e-8 (1 + |b_j|), so x is feasible up to that margin; the n basis rows must be tight at x
+//! within 1e-8 (1 + |b_j|); and c = s e_k must equal sum y_i a_{T_i} with every y_i >= -1e-10 (the
+//! residual of the sum is checked to 1e-8 per coordinate), so x is optimal for the polytope with
+//! its right-hand sides relaxed by at most the slack margin. The multipliers y and the product R are
+//! carried through the rank-one updates and rebuilt from the basis every 50 pivots; the checks above
+//! rely on them only through y (and the residual check of c = sum y_i a_{T_i} uses the rows, not R).
+//! The returned bound c.x can be below the true maximum c.x' only by sum_i y_i (b_{T_i} - a_{T_i}.x),
+//! at most 1e-8 sum_i y_i (1 + |b_{T_i}|); the caller's screening margin is 1e-7 (1 + |f|), which
+//! covers it when the multipliers are of order one (a large box has large multipliers, and then
+//! the margin would have to scale with the box). Any failure (no blocking row, singular
+//! pivot, iteration guard, a failed check) sends that objective, and a restart of the chain, to the
+//! engine. Degeneracy:
 //! pivots with a zero step count towards a switch to Bland's rule (smallest row index leaves,
 //! smallest index among tied ratios enters), which cannot cycle. The box only screens rows in the
 //! caller, whose later stages are exact, so a fallback or a looser value costs LPs, not
@@ -43,7 +53,6 @@ struct Scr {
     valid: bool,
     s_stale: bool,
     since_refresh: usize,
-    lps: usize,
 }
 
 thread_local! {
@@ -149,7 +158,7 @@ fn init_state(e: &Mat, f: &[f64], x: &[f64], sc: &mut Scr) -> bool {
 }
 
 /// Primal simplex for max s.e_k from the current vertex of `sc`; false on failure (state invalid).
-fn optimise(e: &Mat, f: &[f64], sc: &mut Scr, k: usize, sg: f64, steps: &mut u64, exact_final: bool) -> bool {
+fn optimise(e: &Mat, f: &[f64], sc: &mut Scr, k: usize, sg: f64, steps: &mut u64) -> bool {
     let (m, n) = (e.rows, e.cols);
     if sc.since_refresh > 50 {
         // rebuild W and R from the basis rows
@@ -192,20 +201,17 @@ fn optimise(e: &Mat, f: &[f64], sc: &mut Scr, k: usize, sg: f64, steps: &mut u64
                     sc.x[q] += bi * sc.w[q * n + i];
                 }
             }
-            sc.lps += 1;
-            if sc.lps % 4 == 0 || exact_final {
-                for j in 0..m {
-                    let sj = f[j] - dot(e.row(j), &sc.x);
-                    if sj < -1e-8 * (1.0 + f[j].abs()) {
-                        return false;
-                    }
-                    sc.s[j] = sj;
+            for j in 0..m {
+                let sj = f[j] - dot(e.row(j), &sc.x);
+                if sj < -1e-8 * (1.0 + f[j].abs()) {
+                    return false;
                 }
-            } else {
-                for j in 0..m {
-                    if sc.s[j] < -1e-8 * (1.0 + f[j].abs()) {
-                        return false;
-                    }
+                sc.s[j] = sj;
+            }
+            for i in 0..n {
+                let j = sc.t[i];
+                if sc.s[j].abs() > 1e-8 * (1.0 + f[j].abs()) {
+                    return false;
                 }
             }
             for q in 0..n {
@@ -329,7 +335,7 @@ pub fn box_chain(e: &Mat, f: &[f64], center: &[f64], start: Option<&[f64]>, stat
             let (k, sg) = (j / 2, if j % 2 == 1 { 1.0 } else { -1.0 });
             let mut done = false;
             if sc.valid {
-                if optimise(e, f, sc, k, sg, &mut stats.steps, j == *order.last().unwrap()) {
+                if optimise(e, f, sc, k, sg, &mut stats.steps) {
                     pts[j] = sc.x.clone();
                     done = true;
                 } else {

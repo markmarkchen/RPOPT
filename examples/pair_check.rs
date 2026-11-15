@@ -12,6 +12,9 @@ use std::sync::Arc;
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
+    if std::env::var("MPLCP_NO_DEDUPE").is_ok() {
+        rpopt::algorithms::mplcp::set_dedupe(false);
+    }
     if std::env::var("MPLCP_REFINE").is_ok() {
         rpopt::algorithms::mplcp::set_refine_multipliers(true);
     }

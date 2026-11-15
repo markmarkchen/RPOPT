@@ -157,3 +157,6 @@ import RpoptProofs
 #print axioms Rpopt.Case1.reverse_neighbour
 #print axioms Rpopt.Case1.reverse_neighbour_single
 #print axioms Rpopt.reach_skip_reverse
+-- Round 18: chained box LPs of the region builder (685c144)
+#print axioms Rpopt.box_lp_optimal
+#print axioms Rpopt.Case1.shared_point
