@@ -133,9 +133,9 @@ fastest on 14 of 15
 | dione_N3 | 0.87 | geometric | 7.16 | 0.12 |
 | dione_N4 | 1.93 | geometric | 14.45 | 0.13 |
 | dione_N5 | 3.82 | geometric | 36.82 | 0.10 |
-| dione_N6 | 6.82 | graph | 4.39 | 1.55 |
-| dione_N8 | 16.45 | graph | 31.15 | 0.53 |
-| dione_N10 | 31.45 | graph | 43.12 | 0.73 |
+| dione_N6 | 6.82 | geometric | 118.43 | 0.06 |
+| dione_N8 | 16.45 | geometric | 501.28 | 0.03 |
+| dione_N10 | 31.45 | geometric | 1175.71 | 0.03 |
 | masses2inf_N2 | 14.47 | combinatorial | 55.35 | 0.26 |
 | masses2inf_N3 | 96.56 | graph | 1091.19 | 0.09 |
 | masses2inf_N4 | 368.72 | graph | 8567.50 | 0.04 |
@@ -153,8 +153,8 @@ fastest on 14 of 15
 | sys3x2one_N4 | 262.86 | geometric | 3265.68 | 0.08 |
 | sys3x2one_N5 | 773.47 | geometric | 15949.72 | 0.05 |
 
-`mplp_lex` is fastest on 29 of 30. The exception is dione_N6, where `graph` is 1.5x faster (6.8 against 4.4 ms; `graph` returns overlapping or
-duplicate regions on degenerate mpLPs, `mplp_lex` the unique partition); `mplp_lex` is faster on dione_N5 and N8.
+`mplp_lex` is fastest on 30 of 30. (A first version of this table counted `graph` on dione_N6, N8 and N10 as faster; those runs return 0 regions
+with 1,337 uncovered sample points, so they are failures and are excluded; see the round-5 section below.)
 
 ## Limits of the rule
 
@@ -167,3 +167,41 @@ count in advance, which is what the walk computes. On the 46 mpLPs the rule neve
 ## Not done
 
 Option (3), marking which kept rows have a full-dimensional facet, was not attempted.
+
+## Round 5: the two non-wins
+
+### dione_N6: `graph` was a failed run, not a win
+
+`lp_census` on dione_N6 shows `mplp_lex` with 73 regions (3.4 ms) and `graph` with 0 regions. `mplp_bench` confirms: `graph` returns 0 regions and
+leaves 1,337 of 2,000 sampled parameters uncovered; the same happens on dione_N8 and dione_N10 (`bench/results/` earlier work on zero-region runs). Excluding
+runs with 0 regions, gaps or errors, the best valid other solver on dione_N6 is `geometric` at 118 ms against `mplp_lex` 6.8 ms (0.06x), on N8 501 ms
+against 16.5 ms, on N10 1,176 ms against 31 ms. `mplp_lex` is fastest on all 30 `bench/problems_lp` problems. The earlier claim of a loss is withdrawn.
+No code change.
+
+### randlp_t10_x6_m50_s0: a real loss of 6% to `combinatorial_graph`
+
+Paired comparison (array 45885374): one 1-CPU task per alternation, both solvers run once in shuffled order on the same node (a243, load 65), 5 alternations.
+`mplp_lex` 8,542 / 8,566 / 8,516 / 8,533 / 8,531 ms, `combinatorial_graph` 8,026 / 8,045 / 8,071 / 8,046 / 8,013 ms: ratios 1.064, 1.065, 1.055, 1.060, 1.065
+(median 1.064, spread 1.055 to 1.065). So it is a loss, not noise.
+
+Census, once each (laptop-independent, Negishi, `lp_census`, build 45885630, array 45885631; both 12,105 regions):
+
+| LP purpose | `mplp_lex` calls | ms | `combinatorial_graph` calls | ms |
+|---|---:|---:|---:|---:|
+| redundancy | 234,873 | 2,055 | 234,875 | 2,050 |
+| bounding box | 242,125 | 2,822 | 242,125 | 2,846 |
+| neighbour (facet centers) | 202,733 | 1,974 | 0 | 0 |
+| feasibility (candidate sets) | 12,110 | 3 | 1,088,792 | 468 |
+| Chebyshev | 24,220 | 286 | 12,110 | 192 |
+| all LPs | | 7,141 | | 5,556 |
+| solve time with census | | 8,686 | | 8,386 |
+
+The region build (redundancy and box LPs, 4.9 s) is identical. `mplp_lex` pays 2.0 s for facet LPs where `combinatorial_graph` pays 0.5 s for
+feasibility LPs; outside LPs `mplp_lex` is cheaper (1.5 s against 2.8 s). Facet counters of the walk: 246k facets tried (134k more skipped because the
+neighbour already crossed them), 55k settled by the region-center foot, 190k by a facet LP, and only 4 of those were empty. So these are real facets:
+each of the 12,105 regions has about 35 facet rows, every interior facet is crossed once, about 20 per region.
+
+An attempt to raise the foot hit rate with up to 8 alternating projections inside the facet plane onto violated rows settled 68k instead of 55k facets
+but was not faster (4.68 against 4.46 s on the laptop) and was reverted. The gap (0.3 s of 8.4 s) would close if the facet LPs cost 15% less; no exact
+change in `mplp_lex` alone does that. The remaining options are the ones named before: a facet interior point from the builder (which
+already finds one for many rows while testing redundancy), or a warm-started facet LP.
