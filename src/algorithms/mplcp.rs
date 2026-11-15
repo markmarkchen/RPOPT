@@ -1440,6 +1440,8 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
             nu = mi.abs() / ujj;
             if nu > REFINED_ZERO && nu < MU_NONZERO {
                 crate::census_bump!(MuRefinedBand, 1);
+                #[cfg(feature = "lp_census")]
+                crate::census::bump_slot(crate::census::PG_BASE + 64 + ((-nu.log10()).floor().max(0.0) as usize).min(15), 1);
                 { crate::census_reason!(6); return None; }
             }
         } else if nu > MU_ZERO && nu <= MU_NONZERO {
@@ -1453,6 +1455,8 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
             nu = mi.abs() / ujj;
             if nu > REFINED_ZERO && nu < MU_NONZERO {
                 crate::census_bump!(MuRefinedBand, 1);
+                #[cfg(feature = "lp_census")]
+                crate::census::bump_slot(crate::census::PG_BASE + 64 + ((-nu.log10()).floor().max(0.0) as usize).min(15), 1);
                 { crate::census_reason!(6); return None; }
             }
             if nu <= REFINED_ZERO {
@@ -1933,10 +1937,11 @@ fn dependent_set(p: &Plcp, aset: &[usize]) -> bool {
 /// zero there, and a member basis with such a pivot would not pass the relative pivot floor of `tableau_for` anyway, so the empty-P- safeguard ignores it.
 const ZERO_GUARD_MIN: f64 = 1e-12;
 const REFINE_STEPS: usize = 2;
-/// The pivot of a gap-band exchange is zero when the dependency residual rho (`refined_dependency`) is at most this: rho = 1e-20 is a relative residual of 1e-10.
-const RHO_ZERO: f64 = 1e-20;
-/// A pivot in the undecided band is nonzero when rho is at least this (a relative residual of 1e-6; nonzero pivots measured 1.7e-5 and above).
-const RHO_NONZERO: f64 = 1e-12;
+/// The pivot of a gap-band exchange is zero when the dependency residual rho (`refined_dependency`) is at most this (a relative residual of 3e-10).
+const RHO_ZERO: f64 = 1e-19;
+/// A pivot in the undecided band is nonzero when rho is at least this. Measured on the masses problems: the gap-band calls fall in two clusters,
+/// rho <= 1e-20 (structural zeros, the square of the rounding of the rows) and rho in 1e-18 .. 1e-12 (small but real pivots), with nothing between.
+const RHO_NONZERO: f64 = 1e-18;
 static PIVDD_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 /// Switch for the exact decision of pivots in the undecided band (`MPLCP_PIVDD=0` in the examples turns it off).
 pub fn set_pivot_dd(on: bool) {

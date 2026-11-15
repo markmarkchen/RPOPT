@@ -746,6 +746,13 @@ fn highdim_tables(rows: &[Row], skipped: &[(String, String)]) {
         let g = |k: usize| r.s.counters[census::PG_BASE + 48 + k];
         println!("| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |", r.problem, c(r, Counter::R1Fallback), g(0), g(1), g(2), g(3), g(4), g(5), g(6), g(9));
     }
+    println!("\n### High-dimension 3x: refined multipliers left in the band (nu between 1e-12 and 1e-6), by decade of nu\n");
+    println!("| problem | 6 | 7 | 8 | 9 | 10 | 11 | 12 | below |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::MuRefinedBand) > 0.0) {
+        let g = |k: usize| r.s.counters[census::PG_BASE + 64 + k];
+        println!("| {} | {} | {} | {} | {} | {} | {} | {} | {} |", r.problem, g(6), g(7), g(8), g(9), g(10), g(11), g(12), (13..16).map(g).sum::<u64>());
+    }
     println!("\n### High-dimension 4: vertex clipping (`clip_flags`) outcomes per call\n");
     println!("| problem | algorithm | clip calls/region | ok | nt outside 2..=6 | more than 128 hyperplanes | infinite box | more than 600 vertices | too few vertices | vertex violates a row | redundancy LPs/region |");
     println!("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|");

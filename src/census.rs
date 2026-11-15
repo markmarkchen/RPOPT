@@ -578,7 +578,8 @@ mod imp {
     /// pivot-in-gap calls (exact dependency residual): [0] calls, [1] decided zero, [2] decided nonzero (left to the walk), [3..44) decade histogram of rho = squared relative residual
     pub const PG_BASE: usize = MD_BASE + 340;
     /// [48 + r] calls the rank-1 enumeration refused with reason r (1 shape, 2 slack row, 3 pivot, 4 z column of row c, 5 symmetry, 6 band multiplier, 9 empty P-)
-    pub const NC: usize = PG_BASE + 64;
+    /// [64 + d] refined multipliers left in the band (nu between REFINED_ZERO and MU_NONZERO) by decade d = floor(-log10 nu), capped at 15
+    pub const NC: usize = PG_BASE + 96;
     pub fn bump_slot(i: usize, n: u64) {
         MINE.with(|m| m.lock().unwrap().counters[i] += n);
     }
