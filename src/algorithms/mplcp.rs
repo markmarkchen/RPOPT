@@ -360,6 +360,33 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
     let d1 = p.nt - 1;
     let alpha = 2 * n;
     let mut e = e;
+    crate::census_bump!(PfCalls, 1);
+    match depth {
+        0 => {
+            crate::census_bump!(PfDepth0, 1);
+        }
+        1 => {
+            crate::census_bump!(PfDepth1, 1);
+        }
+        2 => {
+            crate::census_bump!(PfDepth2, 1);
+        }
+        3 => {
+            crate::census_bump!(PfDepth3, 1);
+        }
+        4 => {
+            crate::census_bump!(PfDepth4, 1);
+        }
+        5 => {
+            crate::census_bump!(PfDepth5, 1);
+        }
+        6 => {
+            crate::census_bump!(PfDepth6, 1);
+        }
+        _ => {
+            crate::census_bump!(PfDepth7, 1);
+        }
+    }
     for _ in 0..(8 * n + 50) {
         // P: rows decreasing in the entering variable
         let a: Vec<f64> = (0..n).map(|i| -tab.tv(i, e)).collect();
@@ -411,6 +438,7 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
         }
         if !pz.is_empty() {
             // Case 1: leaving variable independent of θ_f
+            crate::census_bump!(PfCase1, 1);
             let beta = |i: usize| -> Vec<f64> { (w..w + n).map(|k| rfull(i, k)).collect() };
             let mut l = pz[0];
             for &i in &pz[1..] {
@@ -430,10 +458,13 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
             continue;
         }
         // Case 2: the leaving variable depends on θ_f
+        crate::census_bump!(PfCase2, 1);
         if depth > 6 {
+            crate::census_bump!(PfDepthLimit, 1);
             return;
         }
         for &l in &pset {
+            crate::census_bump!(PfBranches, 1);
             let leaving = tab.row_var[l];
             // lexico-inequalities (16): Γ_j = a_l row_j - a_j row_l  ⪰ 0 for all j in P
             let mut ok = true;
@@ -461,13 +492,21 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
                 }
             }
             if !ok {
+                crate::census_bump!(PfLexCut, 1);
                 continue;
             }
             if d1 > 0 {
-                match chebyshev_ball(&ef, &ff, &[]) {
-                    Some(s) if s.x[d1] > 1e-9 => {
+                crate::census_bump!(PfCheb, 1);
+                let ball = {
+                    crate::census_purpose!(Neighbour);
+                    chebyshev_ball(&ef, &ff, &[])
+                };
+                match ball {
+                    Some(s) if s.x[d1] > 1e-9 => {}
+                    _ => {
+                        crate::census_bump!(PfChebEmpty, 1);
+                        continue;
                     }
-                    _ => continue,
                 }
             }
             if leaving == alpha {
@@ -478,10 +517,19 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
             next.flush();
             next.defer_pivot(l, e);
             let ne = next.col_of(comp(leaving, n));
+            #[cfg(feature = "lp_census")]
+            {
+                let mut key = next.row_var.clone();
+                key.sort_unstable();
+                if crate::census::basis_seen(key) {
+                    crate::census_bump!(PfRepeatBasis, 1);
+                }
+            }
             pivot_facet(p, &mut next, ne, Facet { ef: &ef, ff: &ff }, depth + 1, out);
         }
         return;
     }
+    crate::census_bump!(PfIterLimit, 1);
 }
 
 /// z rows of the basis `tab` with the pair of row v toggled.
@@ -551,6 +599,9 @@ enum Nbr {
 
 /// Neighbouring z-row sets across the facet {e_k θ = f_k} of the region with tableau `tab`.
 fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[f64], ws: &mut Option<Tab>) -> Vec<Nbr> {
+    #[cfg(feature = "lp_census")]
+    let _cen_t = std::time::Instant::now();
+    crate::census_bump!(AdjCalls, 1);
     let (n, nt) = (p.n, p.nt);
     let nrm = erow.iter().map(|v| v * v).sum::<f64>().sqrt();
     let g: Vec<f64> = erow.iter().map(|v| v / nrm).collect();
@@ -571,6 +622,8 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         }
     }
     if zrows.is_empty() {
+        crate::census_bump!(AdjNone, 1);
+        crate::census_bump!(AdjNoneNanos, _cen_t.elapsed().as_nanos());
         return vec![];
     }
     // Fast path of Algorithm 2: a single leaving candidate v in P ∩ Z (Case 1 without ties), after
@@ -586,6 +639,8 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         if tve > PTOL {
             let blocked = zrows.iter().any(|&i| i != v && -(tab.t[i * n + kk] + gam[i] * tve) > PTOL);
             if !blocked {
+                crate::census_bump!(AdjFast, 1);
+                crate::census_bump!(AdjFastNanos, _cen_t.elapsed().as_nanos());
                 return vec![Nbr::Toggle(v, kk)];
             }
         }
@@ -626,8 +681,12 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
         }
     }
     let mut out = vec![];
+    #[cfg(feature = "lp_census")]
+    crate::census::basis_reset();
     pivot_facet(p, &mut work, n, Facet { ef: &ef, ff: &ff }, 0, &mut out);
     *ws = Some(work);
+    crate::census_bump!(AdjCase2, 1);
+    crate::census_bump!(AdjCase2Nanos, _cen_t.elapsed().as_nanos());
     out.into_iter().map(Nbr::Z).collect()
 }
 
@@ -743,6 +802,8 @@ fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>
             nrm > 0.0 && r.iter().zip(g).all(|(x, y)| (x / nrm + y).abs() <= 1e-9) && (cur.f[k] / nrm + b).abs() <= 1e-9 * (1.0 + b.abs())
         })
     });
+    #[cfg(feature = "lp_census")]
+    let mut cens: Vec<(u32, bool)> = vec![];
     for k in 0..cur.e.rows {
         if skip == Some(k) {
             continue;
@@ -750,6 +811,18 @@ fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>
         let nbrs = adjacent(plcp, tab, cur.e.row(k), cur.f[k], &cur.e, &cur.f, ws);
         if nbrs.is_empty() {
             continue;
+        }
+        #[cfg(feature = "lp_census")]
+        {
+            let gid = crate::census::next_group();
+            cens.extend(nbrs.iter().map(|nb| (gid, matches!(nb, Nbr::Toggle(..)))));
+            for nb in &nbrs {
+                if matches!(nb, Nbr::Toggle(..)) {
+                    crate::census_bump!(NbrFastRet, 1);
+                } else {
+                    crate::census_bump!(NbrSlowRet, 1);
+                }
+            }
         }
         // a point on the facet: the region's Chebyshev center projected onto the row
         let hint: Option<Vec<f64>> = center.map(|c| {
@@ -777,6 +850,8 @@ fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>
             cands.push(Cand { aset: plcp.active_set(z.into_iter()), hint: hint.clone(), piv, entry });
         }
     }
+    #[cfg(feature = "lp_census")]
+    crate::census::batch(&cens);
     cands
 }
 
@@ -927,17 +1002,21 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
         let tab = match tab {
             Some(t) => t,
             None => {
-                let Some(t) = tableau_of(plcp, cur) else { continue };
+                let Some(t) = crate::census_timed!(MplcpTabNanos, tableau_of(plcp, cur)) else { continue };
                 t
             }
         };
-        let cands = expand_candidates(plcp, cur, center.as_ref(), &tab, depth, entry.as_ref(), &mut ws);
+        let cands = crate::census_timed!(MplcpNbrNanos, expand_candidates(plcp, cur, center.as_ref(), &tab, depth, entry.as_ref(), &mut ws));
         for c in cands {
             let fresh = seen.insert(c.aset.clone());
+            #[cfg(feature = "lp_census")]
+            crate::census::seen(fresh);
             if !fresh {
+                crate::census_bump!(Dup, 1);
                 continue;
             }
-            let built = build_cand(program, plcp, &tab, &c);
+            crate::census_bump!(CandGen, 1);
+            let built = crate::census_timed!(MplcpBuildNanos, build_cand(program, plcp, &tab, &c));
             if let Some((cr, ce, own)) = built {
                 pending.push((cr, ce, c.piv, own, c.entry));
             }
@@ -947,7 +1026,7 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
         let np = pending.len();
         let mut tab = Some(tab);
         for (i, (cr, ce, piv, own, ent)) in pending.drain(..).enumerate() {
-            let (ntab, nd) = match piv {
+            let (ntab, nd) = crate::census_timed!(MplcpTabNanos, match piv {
                 Some((v, kk)) => {
                     let t = if i + 1 == np {
                         let mut t = tab.take().unwrap();
@@ -959,7 +1038,7 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
                     (Some(t), depth + 1)
                 }
                 None => (own, 0),
-            };
+            });
             regions.push(cr);
             queue.push_back(Item { idx: regions.len() - 1, center: ce, tab: ntab, depth: nd, entry: ent });
         }
@@ -1124,6 +1203,7 @@ impl<'a> Enumerator<'a> {
     /// θ in Θ, nonnegative w and z, z_k = 0 for k < i with w_k basic, and w_k = 0 for k < i with
     /// z_k basic? (The undecided pairs are only required to be nonnegative.) Returns a point (z, θ).
     fn feasible(&mut self, i: usize) -> Option<(Vec<f64>, Vec<f64>)> {
+        crate::census_purpose!(Feasibility);
         let p = self.p;
         let (n, nt) = (p.n, p.nt);
         self.zsel.clear();

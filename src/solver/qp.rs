@@ -324,17 +324,21 @@ pub fn solve_qp(q: &Mat, c: Option<&[f64]>, a: &Mat, b: &[f64], eq: &[usize]) ->
 
 /// `solve_qp` with a precomputed factorization of Q.
 pub fn solve_qp_factored(fac: &QpFactor, q: &Mat, c: Option<&[f64]>, a: &Mat, b: &[f64], eq: &[usize]) -> Option<QpSolution> {
-    QP_WORK.with(|w| {
-        let mut guard = w.borrow_mut();
-        solve_qp_ws(&mut guard, fac, q, c, a, b, eq, false)
+    crate::census_call!(Qp, {
+        QP_WORK.with(|w| {
+            let mut guard = w.borrow_mut();
+            solve_qp_ws(&mut guard, fac, q, c, a, b, eq, false)
+        })
     })
 }
 
 /// Only x and the PPOPT active set (no multipliers, slacks or objective).
 pub fn solve_qp_active_set(fac: &QpFactor, q: &Mat, c: Option<&[f64]>, a: &Mat, b: &[f64], eq: &[usize]) -> Option<QpSolution> {
-    QP_WORK.with(|w| {
-        let mut guard = w.borrow_mut();
-        solve_qp_ws(&mut guard, fac, q, c, a, b, eq, true)
+    crate::census_call!(Qp, {
+        QP_WORK.with(|w| {
+            let mut guard = w.borrow_mut();
+            solve_qp_ws(&mut guard, fac, q, c, a, b, eq, true)
+        })
     })
 }
 

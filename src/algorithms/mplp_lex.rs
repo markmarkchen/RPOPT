@@ -535,7 +535,10 @@ pub fn solve(program: &MpProgram, seed: u64) -> Result<Vec<CriticalRegion>, Stri
                 rhs.push(*fi);
             }
             let kk = rows.iter().position(|r| r == nk).unwrap_or(0);
-            let ball = chebyshev_ball(&Mat::from_rows(&rows), &rhs, &[kk]);
+            let ball = {
+                crate::census_purpose!(Neighbour);
+                chebyshev_ball(&Mat::from_rows(&rows), &rhs, &[kk])
+            };
             let Some(ball) = ball else { continue };
             if ball.x[nt] <= 1e-9 {
                 continue;

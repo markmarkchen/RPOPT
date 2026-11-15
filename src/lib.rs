@@ -15,6 +15,7 @@
 //! | YANN | Braniff & Tian (2026), Computers & Chemical Engineering |
 
 pub mod algorithms;
+pub mod census;
 pub mod critical_region;
 pub mod fxhash;
 pub mod io;

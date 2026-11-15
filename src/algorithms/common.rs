@@ -143,6 +143,7 @@ pub fn generate_children_sets(active_set: &[usize], num_constraints: usize, murd
     let mut out = vec![];
     let mut child = active_set.to_vec();
     child.push(0);
+    crate::census_bump!(CombGen, num_constraints.saturating_sub(start));
     if let Some(m) = murder.filter(|m| m.is_small()) {
         let key = active_set.iter().fold(0u64, |k, &i| k | (1u64 << i));
         for i in start..num_constraints {
@@ -151,6 +152,7 @@ pub fn generate_children_sets(active_set: &[usize], num_constraints: usize, murd
                 out.push(child.clone());
             }
         }
+        crate::census_bump!(CombPruned, num_constraints.saturating_sub(start) - out.len());
         return out;
     }
     let mut bits = BitSet::from_indices(active_set, num_constraints);
@@ -169,6 +171,7 @@ pub fn generate_children_sets(active_set: &[usize], num_constraints: usize, murd
             out.push(child.clone());
         }
     }
+    crate::census_bump!(CombPruned, num_constraints.saturating_sub(start) - out.len());
     out
 }
 
@@ -342,6 +345,7 @@ pub fn known_neighbour_facets<'a>(region: &CriticalRegion, lookup: &dyn Fn(&[usi
 }
 
 pub fn get_facet_centers_skip(a: &Mat, b: &[f64], degen: Option<&std::sync::atomic::AtomicBool>, skip: &[bool]) -> Vec<(Vec<f64>, Vec<f64>, f64)> {
+    crate::census_purpose!(Neighbour);
     let mut out = vec![];
     for k in 0..a.rows {
         if skip.get(k).copied().unwrap_or(false) {
@@ -580,6 +584,7 @@ pub fn fathem_facet_degen(
     cand_sol: Option<&Solution>,
     degen: Option<&std::sync::atomic::AtomicBool>,
 ) -> Option<CriticalRegion> {
+    crate::census_purpose!(Neighbour);
     let mut dist = radius * 1e-6;
     while dist < radius {
         dist *= 2.0;
@@ -610,6 +615,7 @@ pub fn fathem_facet_degen(
             continue;
         }
         if indexed.contains(&projected) {
+            crate::census_bump!(Dup, 1);
             return None;
         }
         crate::stats::rank();
@@ -624,6 +630,7 @@ pub fn fathem_facet_degen(
             match canonical_basis(program, &active, &test) {
                 Some(b) if b != current_active_set => {
                     if indexed.contains(&b) {
+                        crate::census_bump!(Dup, 1);
                         return None;
                     }
                     projected = b;
@@ -639,6 +646,7 @@ pub fn fathem_facet_degen(
         count();
         if let Some(c) = claimed {
             if !c.lock().unwrap().insert(projected.clone()) {
+                crate::census_bump!(Dup, 1);
                 return None; // another facet of this wave is building it
             }
         }

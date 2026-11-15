@@ -67,6 +67,7 @@ impl CriticalRegion {
     }
 
     pub fn is_full_dimension(&self) -> bool {
+        crate::census_purpose!(Chebyshev);
         crate::stats::lp(1);
         if let Some(r) = self.cheb_radius {
             return r > 1e-8;

@@ -295,8 +295,10 @@ fn check_group_mask(program: &MpProgram, s: u64, w: &Witnesses, murder: &Combina
     let mut out = GroupOut::default();
     let mut ok: Vec<usize> = vec![];
     for i in start..m {
+        crate::census_bump!(CombGen, 1);
         // PPOPT: children surviving the pruning list; for mpLPs, sets that can still reach n_x
         if !murder.check_child64(s, i) || (is_lp && i >= set.len() + m - nx) {
+            crate::census_bump!(CombPruned, 1);
             continue;
         }
         *set.last_mut().unwrap() = i;
@@ -376,6 +378,7 @@ impl<'a> GroupCtx<'a> {
     /// region if any.
     fn check(&mut self, c: &[usize]) -> Option<Option<CriticalRegion>> {
         let program = self.program;
+        crate::census_purpose!(Feasibility);
         crate::stats::rank();
         let (law, certified) = match self.law_first && c.len() <= self.nx {
             true => match program.optimal_control_law_dual_rank(c, true) {
@@ -385,11 +388,13 @@ impl<'a> GroupCtx<'a> {
             false => (None, false),
         };
         if !certified && !crate::linalg::is_full_rank_rows(&program.a, c) {
+            crate::census_bump!(CombRankFail, 1);
             return None;
         }
         crate::stats::lp(1);
         let k = c[c.len() - 1];
         if !self.w.iter().chain(self.found.iter()).any(|z| self.tight(z, k)) {
+            crate::census_bump!(CombLp, 1);
             let z = match self.w.first() {
                 Some(x0) => {
                     if self.shifted.is_empty() {
@@ -399,8 +404,14 @@ impl<'a> GroupCtx<'a> {
                     crate::solver::lp::lp_feasible_point_shifted(self.pa, &self.shifted, c, x0)
                 }
                 None => crate::solver::lp::lp_feasible_point(self.pa, self.pb, c, None),
-            }?;
+            };
+            let Some(z) = z else {
+                crate::census_bump!(CombInfeasible, 1);
+                return None;
+            };
             self.found.push(Arc::new(z));
+        } else {
+            crate::census_bump!(CombWitness, 1);
         }
         if self.is_lp && c.len() != self.nx {
             return Some(None);
@@ -462,9 +473,11 @@ fn graph(program: &Arc<MpProgram>, opts: &SolveOptions, use_pruning: bool) -> Ve
     }
     while let Some(Queued { set: candidate, .. }) = heap.pop() {
         if attempted.contains(&candidate) {
+            crate::census_bump!(Dup, 1);
             continue;
         }
         attempted.insert(candidate.clone());
+        crate::census_bump!(CandGen, 1);
         let mref = if use_pruning { Some(&murder) } else { None };
         // mpLP: only vertex-defining sets (size n_x) can be regions; smaller sets lead nowhere
         if is_lp && candidate.len() < nx {
@@ -679,6 +692,7 @@ fn combinatorial_graph_bits(program: &MpProgram, opts: &SolveOptions, parallel: 
     let mut regions = vec![];
     // returns (region, explore_subsets, explore_supersets, data for the supersets)
     let process = |k: u128, hint: Option<bool>, parent: Option<&incremental::ParentInfo>| -> (Option<CriticalRegion>, bool, bool, Option<std::sync::Arc<incremental::ParentInfo>>) {
+        crate::census_bump!(CandGen, 1);
         crate::stats::rank(); // PPOPT is_full_rank, answered here from the hint when available
         let a = from_bits(k);
         if hint == Some(false) {
@@ -797,6 +811,8 @@ fn combinatorial_graph_bits(program: &MpProgram, opts: &SolveOptions, parallel: 
             for e in nb.drain(..) {
                 if excluded.insert(e.0) {
                     queue.push_back(e);
+                } else {
+                    crate::census_bump!(Dup, 1);
                 }
             }
         }
@@ -819,6 +835,8 @@ fn combinatorial_graph_bits(program: &MpProgram, opts: &SolveOptions, parallel: 
                 for e in nb {
                     if excluded.insert(e.0) {
                         stack.push(e);
+                    } else {
+                        crate::census_bump!(Dup, 1);
                     }
                 }
             }
@@ -912,6 +930,7 @@ fn combinatorial_graph_vec(program: &MpProgram, opts: &SolveOptions, parallel: b
 
     // returns (region, explore_subsets, explore_supersets)
     let process = |a: &Vec<usize>| -> (Option<CriticalRegion>, bool, bool) {
+        crate::census_bump!(CandGen, 1);
         crate::stats::rank();
         if !program.check_active_set_rank(a) {
             return (None, true, false);
@@ -1012,6 +1031,7 @@ fn gen_cr_from_active_set_kkt(program: &MpProgram, cand: &[usize], kkt: crate::m
 
 /// The unreduced critical region of an active set is nonempty (Arnström et al. feasibility check).
 pub fn kkt_region_nonempty(program: &MpProgram, active_set: &[usize]) -> bool {
+    crate::census_purpose!(Feasibility);
     crate::stats::lp(1);
     let Some(law) = program.optimal_control_law(active_set) else { return false };
     if !crate::mpqp_utils::lambda_rows_feasible_raw(program, &law.a_l, &law.b_l) {
