@@ -101,3 +101,25 @@ fn mplcp_no_overlap_dependent_rows() {
 fn mplcp_no_overlap_pop_001() {
     no_overlap("pop_001");
 }
+
+/// pop_081 (one variable, parallel duplicate bounds): the Case-2 walk returned before it tested whether
+/// the entering variable replaces α when no row decreases, so two of the four regions were never found
+/// and three quarters of the feasible parameters lay in no region.
+#[test]
+fn mplcp_no_gap_pop_081() {
+    no_overlap("pop_081");
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("bench/problems_large/pop_081.json");
+    let prog = Arc::new(MpProgram::from_json_file(&path).unwrap());
+    assert_eq!(solve_mpqp(&prog, MpqpAlgorithm::Mplcp).critical_regions.len(), 4);
+}
+
+/// pop_011 (parallel rows 11 and 18): a basis with both of them active is singular, its tableau law
+/// is garbage (multipliers of 1e13) and its region overlapped the true ones (13 stray regions, 3% of the
+/// feasible parameters inside two regions). The tightness check on the candidate's law rejects it.
+#[test]
+fn mplcp_no_overlap_pop_011() {
+    no_overlap("pop_011");
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("bench/problems_large/pop_011.json");
+    let prog = Arc::new(MpProgram::from_json_file(&path).unwrap());
+    assert_eq!(solve_mpqp(&prog, MpqpAlgorithm::Mplcp).critical_regions.len(), 397);
+}

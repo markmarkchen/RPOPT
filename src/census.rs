@@ -232,8 +232,10 @@ mod imp {
         CertExtra,
         AdjCertSkip,
         AdjCertSkipNanos,
+        /// candidate regions rejected because their active constraints are not tight under their law
+        TightReject,
     }
-    pub const NC: usize = 69;
+    pub const NC: usize = 70;
 
     #[derive(Clone, Debug)]
     pub struct Stats {

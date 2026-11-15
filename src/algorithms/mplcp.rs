@@ -315,11 +315,6 @@ fn tableau_for(p: &Plcp, z: &[usize]) -> Option<Tab> {
 
 const ZTOL: f64 = 1e-9;
 const PTOL: f64 = 1e-10;
-/// Pivot tolerance relative to the largest entry of the entering column (see `pivot_facet`).
-fn prel() -> f64 {
-    static V: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
-    *V.get_or_init(|| std::env::var("PREL").ok().and_then(|v| v.parse().ok()).unwrap_or(0.0))
-}
 
 fn comp(var: usize, n: usize) -> usize {
     if var < n {
@@ -437,11 +432,7 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
             }
         };
         let rowmax = |i: usize| (0..1 + d1).fold(0.0f64, |m, k| m.max(tab.rv(i, k).abs()));
-        // a candidate leaving row must decrease by more than the rounding noise of its own row: a
-        // row of magnitude 4e3 carries noise of 1e-10 or more in its entering-column entry, above the
-        // absolute PTOL, and pivoting on it (pop_011: a = 1.6e-10 in a row of 3.8e3) gave bases with
-        // multipliers of 1e13 whose regions overlapped the true ones
-        let pset: Vec<usize> = (0..n).filter(|&i| a[i] > PTOL.max(prel() * rowmax(i))).collect();
+        let pset: Vec<usize> = (0..n).filter(|&i| a[i] > PTOL).collect();
         let in_z = |i: usize| rowmax(i) <= ZTOL * fpoly.sc[tab.row_var[i]];
         let pz: Vec<usize> = pset.iter().cloned().filter(|&i| in_z(i)).collect();
         let alpha_row = tab.row_var.iter().position(|&v| v == alpha);
@@ -1253,6 +1244,29 @@ fn candidate_law(plcp: &Plcp, parent: &Tab, c: &Cand) -> Option<(crate::program:
 
 /// Region of a candidate (`None` when it is empty or lower dimensional), plus the candidate's own
 /// tableau when it had to be formed from scratch for the law.
+/// Largest relative residual of the active constraints under a region's law, above which the
+/// candidate basis is rejected (see `build_cand`).
+const TIGHT_TOL: f64 = 1e-3;
+
+/// Largest relative violation, at the region's centre, of "the active constraints are tight under
+/// the region's primal law". A basis that is singular in exact arithmetic (two parallel rows both
+/// active) gets a garbage law that cannot satisfy both, whatever size its coefficients have.
+fn tight_residual(program: &MpProgram, cr: &CriticalRegion, centre: &[f64]) -> f64 {
+    let x = cr.evaluate(centre);
+    let nx = program.num_x();
+    let nt = program.num_t();
+    let mut worst = 0.0f64;
+    for &i in &cr.active_set {
+        let ai = program.a.row(i);
+        let ax: f64 = (0..nx).map(|j| ai[j] * x[j]).sum();
+        let rhs: f64 = program.b[i] + (0..nt).map(|t| program.f[(i, t)] * centre[t]).sum::<f64>();
+        let sc = 1.0 + rhs.abs() + (0..nx).map(|j| (ai[j] * x[j]).abs()).sum::<f64>();
+        worst = worst.max((ax - rhs).abs() / sc);
+    }
+    worst
+}
+
+
 fn build_cand(program: &MpProgram, plcp: &Plcp, parent: &Tab, c: &Cand, want_verts: bool) -> Option<(CriticalRegion, Option<Vec<f64>>, Option<Tab>, Option<Vec<f64>>)> {
     if program.num_t() > 1 {
         let (law, own) = if TABLEAU_LAW.load(std::sync::atomic::Ordering::Relaxed) {
@@ -1264,6 +1278,13 @@ fn build_cand(program: &MpProgram, plcp: &Plcp, parent: &Tab, c: &Cand, want_ver
             (None, None)
         };
         let (cr, ce, verts) = build::build_region(program, &c.aset, c.hint.as_deref(), law, want_verts)?;
+        // a basis that is singular in exact arithmetic (parallel rows both active) can pass every
+        // other test with a garbage law; its region then overlaps the true ones (pop_005, pop_007,
+        // pop_011). Legitimate regions have residuals up to 1e-5 (masses5_N3), garbage ones 1e-1.
+        if tight_residual(program, &cr, &ce) > TIGHT_TOL {
+            crate::census_bump!(TightReject, 1);
+            return None;
+        }
         Some((cr, Some(ce), own, verts))
     } else {
         Some((gen_cr_from_active_set_lambda_first(program, &c.aset, true)?, None, None, None))
