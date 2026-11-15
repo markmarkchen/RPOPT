@@ -14,7 +14,7 @@ takes, not its floating point execution. Every result listed as proved has no `s
 assumptions are explicit hypotheses,
 never axioms.
 
-Rust line numbers refer to main at commit `ddf0aa8`.
+Rust line numbers refer to main at commit `107aa72`.
 
 ## Build
 
@@ -172,26 +172,26 @@ rather than returns.
 
 ## Correspondence with the Rust code
 
-`mplcp.rs` at `ddf0aa8` unless noted; `build` is `mplcp_build.rs`.
+`mplcp.rs` at `107aa72` unless noted; `build` is `mplcp_build.rs`.
 
 | Lean theorem | Rust function or step | What it justifies |
 |:-------------|:----------------------|:------------------|
 | `lcpM`, `lcpq`, `lcpQ`, `slack_primalOf` | `Plcp::new` (52-123) | the pLCP data `M, q, R` from the KKT cache |
-| `lcp_unique_optimizer`, `region_law_optimal` | `tableau_law` (2476), `complete_primal_law` | `x(θ) = -H⁻¹(c + Hθ + Aᵀλ(θ))` is the optimizer on the region |
-| `law_eq_kkt` | `TABLEAU_LAW` switch (2450), `tableau_law` vs `optimal_control_law_dual` | the tableau law equals the KKT-solve law |
-| `tableau_unique`, `pivotSeq_eq_of_isTableau` | `REFACTOR` (1863), `TabSrc::Lazy` and `resolve` (2039-2073), `candidate_law` (2513), `pivot_solve` (2708-2732) | a tableau reached by a chain of pivots, applied when the child is popped, equals the one rebuilt from scratch, for any period |
-| `rebuilt_eq_pivoted` | tableau budget `TAB_BUDGET` (2001, `set_tab_budget` 2032): over budget (2713) a child is queued as `TabSrc::None` and rebuilt by `tableau_of` (2127-2131) in `resolve` (2064-2070), a failed rebuild counted as `ResolveNone` (2067, census builds only) | the rebuilt tableau equals the pivoted one, so the explored set is unchanged |
-| `rebuilt_eq_pivoted`, `reach_congr` | relative-toggle hand-over: a toggle accepted through `nonzero_rel` returns `Nbr::Z(z_toggle(tab, n, v), None)` (1505), the basis of `Nbr::Toggle(v, kk)` without its pivot or entry hyperplane (2415-2436); `candidate_law` rebuilds the tableau with `tableau_for` (2547-2561), queued as `TabSrc::Ready` with depth 0 (2723) | the child's tableau and law equal those of the toggle pivot, so the neighbour and the explored set are unchanged (finding 16) |
+| `lcp_unique_optimizer`, `region_law_optimal` | `tableau_law` (2481), `complete_primal_law` | `x(θ) = -H⁻¹(c + Hθ + Aᵀλ(θ))` is the optimizer on the region |
+| `law_eq_kkt` | `TABLEAU_LAW` switch (2455), `tableau_law` vs `optimal_control_law_dual` | the tableau law equals the KKT-solve law |
+| `tableau_unique`, `pivotSeq_eq_of_isTableau` | `REFACTOR` (1863), `TabSrc::Lazy` and `resolve` (2044-2078), `candidate_law` (2518), `pivot_solve` (2718-2749) | a tableau reached by a chain of pivots, applied when the child is popped, equals the one rebuilt from scratch, for any period |
+| `rebuilt_eq_pivoted`, `pivotSeq_perm`, `tableau_unique` | tableau budget `TAB_BUDGET` (2001, 512 MiB, `set_tab_budget` 2037), shared by live parents and owned queued tableaux (`ready_bytes` 2679-2685, `tab_len_bytes` 2016-2018): over budget a toggle child is queued as `TabSrc::None` (2723, 2732) and an owned tableau that does not fit is dropped (2733-2740); both are rebuilt by `tableau_of` (2132-2136) in `resolve` (2069-2075), a failed rebuild counted as `ResolveNone` (2072, census builds only) | the rebuilt tableau equals the pivoted or dropped one, so the explored set is unchanged (finding 18) |
+| `rebuilt_eq_pivoted`, `reach_congr` | relative-toggle hand-over: a toggle accepted through `nonzero_rel` returns `Nbr::Z(z_toggle(tab, n, v), None)` (1505), the basis of `Nbr::Toggle(v, kk)` without its pivot or entry hyperplane (2420-2441); `candidate_law` rebuilds the tableau with `tableau_for` (2552-2566), kept as `TabSrc::Ready` with depth 0 while it fits the budget, else rebuilt at pop (2733-2740) | the child's tableau and law equal those of the toggle pivot, so the neighbour and the explored set are unchanged (finding 16) |
 | `isTableau_empty`, `tableauFor_isTableau`, `pivotSeq_perm` | `tableau_for` (312-358): pivots in the order of `z`, each checked against `pivot_floor` `1e-11 min(M_ii, 1)` (304-306, check at 327); after a failure one retry with the largest remaining relative pivot first (336-355, check at 347, `TabRescued` 356) | the region tableau rebuilt from an active set, the same in either order |
 | `exchange_iff`, `pivVec`, `pivT` | `Tab::defer_pivot` (208), `Tab::flush` (269), `Tab::pivoted` (232), `Tab::tv`/`rv` (163-199) | the pivot formulas |
-| `pivot_isTableau`, `toggle` | `Nbr::Toggle` (1507, used at 2434), `z_toggle` (1082) | the neighbour's tableau is one principal pivot away |
+| `pivot_isTableau`, `toggle` | `Nbr::Toggle` (1507, used at 2439), `z_toggle` (1082) | the neighbour's tableau is one principal pivot away |
 | `Case1` (fields), `Case1.facet_eq` | `adjacent` (1419): `zrows` (1432-1451), `pv` (1458), `tve` (1464), `single` and the measure (1469-1483), absolute (`tve > PTOL` and not `demoted`, 1488) or scale-free (`nonzero_rel`, 1487) acceptance (1495), `blocked` (1496) | the exact conditions of the fast path |
 | `Case1.across`, `Case1.lex_cover` | fast path return: `Nbr::Toggle` (1507), or the basis only, `Nbr::Z`, for `nonzero_rel` (1505) | the toggled basis is the region across the facet |
 | `pivot_nonneg`, `column_le_pivot`, `slack_column_zero_of_pivot_zero` | `pivot_measure` (1387-1399) and its O(1) pivot part `pivot_part` (1403-1407), `MEASURE_ZERO` 1e-9 and `MEASURE_NONZERO` 1e-6 (1411-1412), evaluated in `adjacent` for a single vanishing slack row (1473-1488, the column loop skipped when the pivot part decides) and in `rank1_case2` (1201, pivot part first) | the pivot of a vanishing slack row is `≥ 0`; the slack-column part of the measure squared is at most the pivot part; a zero pivot forces a zero slack column; the short-circuits are exact because the measure is a maximum (finding 18) |
-| `entry_facet_unique_neighbour` | entry-facet skip in `expand_candidates` (2334-2357), `Item::entry` (2730) | the skipped search could only return the parent |
+| `entry_facet_unique_neighbour` | entry-facet skip in `expand_candidates` (2339-2362), `Item::entry` (2747) | the skipped search could only return the parent |
 | `LexPos`, `LexNonneg` | `lex_nonneg` (385-392), `lex_nonneg_rel` (397-400), `lex_cmp` (371-382) | lexicographic sign, without tolerance |
 | `LexPos.eventually_pos` | header (7-9): `ε = (ε0, ε0², …)` | symbolic `ε` is sound |
-| `lexRows`, `isLexTableau_of_isTableau` | `rfull` (474-487), `rowmax` (488); `lex_feasible` (3115) | the β block is `-T[:, c]` for nonbasic `w_j`, a unit vector for basic `w_j` |
+| `lexRows`, `isLexTableau_of_isTableau` | `rfull` (474-487), `rowmax` (488); `lex_feasible` (3132) | the β block is `-T[:, c]` for nonbasic `w_j`, a unit vector for basic `w_j` |
 | `lex_ratio_pivot_on`, `zero_row_beats_positive_row`, `lexmin_zero_row` | `in_z` (490, relative through `Facet::sc`, 1437-1444), Case 1 (513-550): lexmin over `P ∩ Z` on β | the Case-1 pivot keeps the non-α rows lexico-positive |
 | `WalkState`, `WalkStep` | `walk_one` (419): `Tab` with `row_var`, `col_var`, entering column `e`; `e = col_of(comp(leaving))` (536, 725); `WalkKey` (767-775) | the walk of `pivot_facet` |
 | `first_step_rows`, `first_step_nonAlpha` | first call of `walk_one`, `e` = the α column of the work tableau (1550-1563) | the first pivot establishes the walk invariant |
@@ -210,13 +210,13 @@ rather than returns.
 | `known_region_skip`, `reach_skip` | members already in `Seen` dropped first (1244) | same explored set as returning them |
 | `on_facet`, `pieces_cover`, `argmin_only_on_facet` | pieces `F ∩ {μ_k λ_j - μ_j λ_k ≤ 0}` (1295-1326), `facet_polytope` (1157-1174); tie of two ratios as affine functions returns `None` to the walk (1270-1277, 1313) | each member borders `F` on its piece; the pieces cover `F`; at a strict-argmin point only that member is valid |
 | `across`, `unique_across`, `returned_mem_S` | piece nonempty by a witness with margin `WITNESS_MARGIN` (1328-1339), then the DAQP filter (1341) or a Chebyshev radius `> 1e-9` (1353-1373); call site in `adjacent` (1520-1528), `RANK1` (1150) | the member of a full-dimensional piece is the unique neighbour just across it |
-| `known_region_unique_neighbour`, `known_region_skip`, `vertices_subset_polyhedron` | facet certificate `certify` (2262-2331), asked in `adjacent` after the fast path (1511-1516); `CERT` mode (2154, default 1 at 3 to 5 parameters) | skipping a Case-2 facet contained in a known region |
+| `known_region_unique_neighbour`, `known_region_skip`, `vertices_subset_polyhedron` | facet certificate `certify` (2267-2336), asked in `adjacent` after the fast path (1511-1516); `CERT` mode (2159, default 1 at 3 to 5 parameters) | skipping a Case-2 facet contained in a known region |
 | `cr_interiors_disjoint` | stray overlapping regions (pop_005, pop_007, pop_011) | which hypothesis an overlap breaks |
-| `basic_solves`, `slack_primalOf`, `lcp_unique_optimizer` | tightness guard: `TIGHT_TOL` (2570), `qp_agrees` (2587), `tight_residual` (2603), used in `build_cand` (2635-2645) | an exact tableau makes its active rows tight under its law (residual 0); the QP optimizer at a point is unique |
+| `basic_solves`, `slack_primalOf`, `lcp_unique_optimizer` | tightness guard: `TIGHT_TOL` (2575), `qp_agrees` (2592), `tight_residual` (2608), used in `build_cand` (2640-2650) | an exact tableau makes its active rows tight under its law (residual 0); the QP optimizer at a point is unique |
 | `relint_of_strict` | mplp_lex.rs facet point: foot of the region's Chebyshev centre (628-648), else the facet's Chebyshev LP (649-678) | the point used for the lexicographic neighbour is in the facet's relative interior |
 | `chebyshev_ball_feasible` | program.rs `ball_points` (1227), `feasible_space_chebychev_ball` (1075) with the Clarabel fallback (1242); used by `gen_optimal_active_set` and `degenerate_start` | sampled start parameters are feasible (inequality rows) |
-| `reach_least` | `pivot_solve` (2652), `pivot_solve_par` (2759), `seen` (2655, 2688, 2725, 2768, 2806, 2831) | the explored set does not depend on the visiting order |
-| `reach_skip` | `seen_claim` before `build_cand` (2088, 2688); mplp_lex `crossed` (mplp_lex.rs 517, 529, 560-562, 695) | skipping known neighbours is safe |
+| `reach_least` | `pivot_solve` (2657), `pivot_solve_par` (2776), `seen` (2660, 2698, 2742, 2785, 2823, 2848) | the explored set does not depend on the visiting order |
+| `reach_skip` | `seen_claim` before `build_cand` (2093, 2698); mplp_lex `crossed` (mplp_lex.rs 517, 529, 560-562, 695) | skipping known neighbours is safe |
 | `lp_certificate`, `basis_certificate` | mplp_lex.rs header (13-16), `Lex::solve` (273-386), `Ok(())` at 367 | a basis with no lexico-negative slack or multiplier row is optimal |
 | `rank1_inverse`, `rank1_tableau` | mplp_lex.rs `Lex::pivot` (168-190) | the rank-1 update of `binv` and `t` |
 | `dual_pivot`, `ratio_test` | mplp_lex.rs phase 1 (319-351), ratio `l / y` with `y > 1e-9` (333-347) | phase 1 keeps dual feasibility |
@@ -266,7 +266,7 @@ All of these appear as explicit hypotheses of the theorems that need them.
   through the facets that get searched.
 - Tableau refactoring and drift (`REFACTOR`, `mplp_lex` `REFRESH`), beyond the exact statement
   `tableau_unique`.
-- Start-region selection (`initial_region` 2112, `degenerate_start`, `lex_feasible_start` 3257,
+- Start-region selection (`initial_region` 2117, `degenerate_start`, `lex_feasible_start` 3274,
   `mplp_lex` initial basis; `drop_lex_infeasible` was removed in 52f3103). Only the feasibility of the sampled points is
   covered (`chebyshev_ball_feasible`). Past bugs of this kind, such as the zero-region
   start from dependent active rows fixed in `668403e`, live at this level.
@@ -613,8 +613,9 @@ All of these appear as explicit hypotheses of the theorems that need them.
         margin is a factor of about 2, and `TabRescued` was 0 on every census run, so this matters only
         for the comment.
 17. **Tableau budget and DAQP emptiness filter (a8d003f; filter fixed in 0215a64, closed at ddf0aa8).**
-    - *Tableau budget.* Over 256 MiB of live parent tableaux, a child is queued as `TabSrc::None`
-      (2196-2207 at a8d003f) and `resolve` rebuilds it with `tableau_of` (1565 at a8d003f).
+    - *Tableau budget* (since a40c3ea 512 MiB, shared with owned tableaux: finding 18). Over 256 MiB of
+      live parent tableaux, a child is queued as `TabSrc::None` (2196-2207 at a8d003f) and `resolve`
+      rebuilds it with `tableau_of` (1565 at a8d003f).
       `rebuilt_eq_pivoted`, via `tableauFor_isTableau`, `pivot_isTableau` and `tableau_unique`, shows that the
       rebuilt tableau equals the pivoted one. So the candidates, and by `reach_congr` the explored set, are
       unchanged in exact arithmetic. The rebuild's pivots are nonzero because the child's basis has
@@ -650,7 +651,7 @@ All of these appear as explicit hypotheses of the theorems that need them.
       When both boxes are unbounded, no certificate is accepted and every test goes to the LP.
     - *Status:* the filter now meets `farkas_box` exactly, and `R` is justified, so this finding is
       closed. The bounding-box LPs and the DAQP solve are floating point, outside the model.
-18. **Two exact refactors (a0ea326 and 81c9572, lines at ddf0aa8).**
+18. **Changes that are exact in the model (a0ea326, 81c9572, a40c3ea; lines at 107aa72).**
     - *Case-2 tests on precomputed rows* (`walk_one`, 556-612). The rows of `P` divided by `a_j` are now
       computed once per iteration (`rs`, and `rmax`, their largest entry over the first `1 + d1`
       positions), and each pair takes their differences. These are the same floating-point divisions and
@@ -669,6 +670,35 @@ All of these appear as explicit hypotheses of the theorems that need them.
       always compute the full measure, so `PivotGap` stays exact. `rank1_case2` returns `None` when
       `pivot_part > MEASURE_ZERO`, exactly when the full measure would. A NaN pivot part decides nothing
       and takes the full loop, as before.
+    - *Shared tableau budget* (503468f and a40c3ea, lines at 107aa72). One budget, `TAB_BUDGET` (2001,
+      default 512 MiB), now covers the live parent tableaux and the tableaux owned by queued items
+      (`ready_bytes`, 2679-2685; `tab_len_bytes`, 2016-2018). Over it, a toggle child is queued as
+      `TabSrc::None` (2723, 2732). An owned tableau (a Case-2 or hand-over child) that does not fit is dropped
+      to `TabSrc::None` (2733-2740). Both are rebuilt at pop by `tableau_of` (2132-2136).
+      - *Exact in the model.* A rebuilt toggle child equals its pivoted tableau (`rebuilt_eq_pivoted`), in
+        either order of `tableau_for` (`pivotSeq_perm`). A dropped owned tableau is rebuilt from the same
+        active set, and `tableau_unique` makes it the same tableau. So the candidates, and by `reach_congr`
+        the explored set, are unchanged. The budget only decides where a tableau comes from.
+      - *Exact in floating point for owned tableaux.* The region stores the candidate's active set as given
+        (`active_set.to_vec()`, mplcp_build.rs 132), and `candidate_law` and `tableau_of` map it to the
+        same pair list. `tableau_for` is deterministic, so the rebuild at pop gives the dropped tableau bit
+        for bit. This matches the bisection: dropping only the owned tableaux leaves pop_001 at 3,529
+        regions.
+      - *Floating-point departure for toggle children (twin rows).* A pivoted tableau keeps the exact
+        zeros that cancel in the pivot formula. The rebuild leaves noise of about `1e-20` relative there,
+        and on pop_001's twin rows the tie between the twins flips on the sign of that noise. Under a 1 MB
+        stress budget (every child rebuilt), pop_001 grows from 3,529 to 4,710 regions, with overlaps. The
+        model has no such entries: both tableaux are the same exact tableau. At the 512 MiB default the 58
+        gated problems give the same hashes as with no budget, and pop_002 and pop_033, which do exceed the
+        budget, give the same region sets as the unbudgeted run. mplcp-build's snap of entries below `1e-17`
+        times the largest on this path is the next item.
+      - *A point to check with the snap.* The bisection reports 3,529 regions for three variants that
+        explore with the same rebuilt tableau as the failing one: `REFACTOR = 1`, `TabSrc::Ready(tableau_of(...))`
+        at queue time, and the rebuilt tableau substituted inside `resolve`. All three rebuild from the
+        same active set with the deterministic `tableau_for`. If those runs are right, the rebuilt values
+        alone do not explain the 4,710, and something else on the `TabSrc::None` path matters. A bitwise
+        comparison of the queue-time and pop-time tableaux of one child would settle it, as would two
+        repeated stress runs with equal hashes.
 
 The measurements in findings 3 to 5 come from an uncommitted debug build run on the laptop (runs of 4
 to 30 s). They are diagnostics, not timings.
