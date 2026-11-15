@@ -298,3 +298,17 @@ fn dedupe_keeps_the_regions_and_the_output_shape() {
     }
     assert!(with_twins >= 4, "the test needs twin-bearing problems");
 }
+
+/// pop_001 has twin rows; its regions are reported at the lowest index of each group, which the full program's
+/// lexicographic test would flag. With the dedupe on the diagnostic tests against the reduced program: 0 regions.
+#[test]
+fn dedupe_lex_count_is_zero_on_twin_problem() {
+    use rpopt::algorithms::mplcp::{count_lex_infeasible, duplicate_rows, solve_with_dedupe, Method};
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("bench/problems_large");
+    let p = Arc::new(MpProgram::from_json_file(&dir.join("pop_001.json")).unwrap());
+    let rep = duplicate_rows(&p);
+    assert!((0..p.a.rows).any(|i| rep[i] != i), "pop_001 must have twins");
+    let red = solve_with_dedupe(&p, 0, Method::Pivot, true).unwrap();
+    assert!(!red.is_empty());
+    assert_eq!(count_lex_infeasible(&p, &red), 0);
+}

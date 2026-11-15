@@ -4116,7 +4116,30 @@ pub fn lex_diagnostic(program: &MpProgram, cr: &CriticalRegion) -> Option<(bool,
 }
 
 /// Diagnostic: number of `regions` whose basis is lexico-infeasible (0 for the output of `solve`).
+/// With the dedupe on (`set_dedupe`) and twins in `program`, the test runs on the reduced program `solve` works on: the
+/// full program's perturbation puts a twin group at its highest index, the reduced one at its lowest, and the regions
+/// report the lowest, so testing them against the full program would flag correct regions.
 pub fn count_lex_infeasible(program: &MpProgram, regions: &[CriticalRegion]) -> usize {
+    if DEDUPE.load(std::sync::atomic::Ordering::Relaxed) {
+        if let Some((reduced, kept)) = dedupe_program(program) {
+            let mut new_idx = vec![usize::MAX; program.a.rows];
+            for (k, &i) in kept.iter().enumerate() {
+                new_idx[i] = k;
+            }
+            let rep = duplicate_rows(program);
+            return match Plcp::new(&reduced) {
+                Some(plcp) => regions
+                    .iter()
+                    .filter(|cr| {
+                        let mut r = (*cr).clone();
+                        r.active_set.iter_mut().for_each(|v| *v = new_idx[rep[*v]]);
+                        tableau_of(&plcp, &r).map_or(false, |t| !lex_feasible(&t))
+                    })
+                    .count(),
+                None => 0,
+            };
+        }
+    }
     match Plcp::new(program) {
         Some(plcp) => regions.iter().filter(|cr| tableau_of(&plcp, cr).map_or(false, |t| !lex_feasible(&t))).count(),
         None => 0,
