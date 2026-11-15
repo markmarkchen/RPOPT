@@ -8,12 +8,38 @@ use rpopt::algorithms::{solve_mpqp, MpqpAlgorithm};
 use rpopt::program::MpProgram;
 use std::sync::Arc;
 
+/// Same hash as `region_hash` (active sets and facet rows rounded to 1e-9), so one solve gives hash and coverage.
+fn region_hash(regs: &[rpopt::critical_region::CriticalRegion]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let scale = 1e9;
+    let mut recs: Vec<(Vec<usize>, Vec<i64>)> = regs
+        .iter()
+        .map(|r| {
+            let mut a = r.active_set.clone();
+            a.sort_unstable();
+            let mut v = vec![r.e.rows as i64];
+            for k in 0..r.e.rows {
+                v.extend(r.e.row(k).iter().map(|x| (x * scale).round() as i64));
+                v.push((r.f[k] * scale).round() as i64);
+            }
+            (a, v)
+        })
+        .collect();
+    recs.sort();
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    recs.hash(&mut h);
+    h.finish()
+}
+
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let ns: usize = a[1].parse().unwrap();
     for f in &a[2..] {
         let prog = Arc::new(MpProgram::from_json_file(std::path::Path::new(f)).unwrap());
+        let t0 = std::time::Instant::now();
         let sol = solve_mpqp(&prog, MpqpAlgorithm::Mplcp);
+        let dt = t0.elapsed().as_secs_f64();
+        let hash = region_hash(&sol.critical_regions);
         let lexbad = rpopt::algorithms::mplcp::count_lex_infeasible(&prog, &sol.critical_regions);
         let nt = prog.num_t();
         let (mut lo, mut hi) = (vec![-1.0; nt], vec![1.0; nt]);
@@ -44,6 +70,6 @@ fn main() {
             }
         }
         let name = std::path::Path::new(f).file_stem().unwrap().to_string_lossy().to_string();
-        println!("{name} regions {} lex_infeasible {lexbad} feasible_samples {feas} overlaps {ov} gaps {gaps}", sol.critical_regions.len());
+        println!("{name} regions {} lex_infeasible {lexbad} feasible_samples {feas} overlaps {ov} gaps {gaps} hash {hash:016x} solve_s {dt:.3}", sol.critical_regions.len());
     }
 }
