@@ -231,9 +231,12 @@ pop_002 totals 2,649 B per region by capacity.
 Dropping a tableau and rebuilding it from the active set is exact only in exact arithmetic. With `MPLCP_TAB_BUDGET=1000000`
 (every child rebuilt) the sorted active sets differ from the unbudgeted run on `masses4_N4` and `masses5_N3` (1 to 3
 sliver regions) and on **`pop_001`: 3,529 regions become 4,710, with 9,009 of 13,497 sampled points inside two regions**
-(2,354 regions share their law with another). The same problem is fine when every child is rebuilt by the REFACTOR path
-(`REFACTOR = 1`: 3,529), so the fault is in rebuilding a child whose region was built from the pivoted tableau; I did not
-find the cause (the entry-facet skip is not it). The budget only triggers beyond 512 MiB of tableaux, which no problem
+(2,354 regions share their law with another). Still present after merging the `tableau_for` fix (ddf0aa8). Bisection on
+pop_001 with `MPLCP_TAB_BUDGET=1000000`: dropping only the owned (Case-2) tableaux gives 3,529 regions; dropping only the
+lazily pivoted children gives 4,710. Rebuilding those children with `tableau_of` when they are popped (`TabSrc::None`)
+gives 4,710, but rebuilding the same tableau when they are queued (`TabSrc::Ready(tableau_of(...))`) gives 3,529, as does
+replacing the pivoted tableau by the rebuilt one inside `resolve` (rows and columns of the two tableaux are in the same order
+in all 2,389 pairs compared), and `REFACTOR = 1` (3,529). It is not the entry-facet skip and not the depth counter, and I did not find the cause. The budget only triggers beyond 512 MiB of tableaux, which no problem
 below pop_001 size reaches, and on pop_002 and pop_033 (past the budget) the sets equal the unbudgeted run, but a large
 twin-row problem could be affected.
 
