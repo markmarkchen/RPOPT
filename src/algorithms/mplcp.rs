@@ -1286,12 +1286,14 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
             }
         }
     }
-    let zrows_all: Vec<usize> = (0..n).filter(|&i| tab.row_var[i] >= n && tab.row_var[i] < 2 * n).collect();
+    let zrows_all = || (0..n).filter(|&i| tab.row_var[i] >= n && tab.row_var[i] < 2 * n);
     #[cfg(feature = "lp_census")]
-    let mu_max = zrows_all.iter().fold(0.0f64, |m, &i| m.max(tab.t[i * n + kk].abs()));
+    let mu_max = zrows_all().fold(0.0f64, |m, i| m.max(tab.t[i * n + kk].abs()));
     let mcc = p.m[var * n + var].max(1e-300);
-    let mut pm: Vec<usize> = vec![];
-    for &i in &zrows_all {
+    let mut bufs = R1Hold(R1_BUFS.with(|c| std::mem::take(&mut *c.borrow_mut())));
+    let R1Bufs { bits, nbf, lam, pm, mu } = &mut bufs.0;
+    pm.clear();
+    for i in zrows_all() {
         let mi = -tab.t[i * n + kk];
         let colw = tab.col_of(tab.row_var[i] - n);
         let j = tab.row_var[i] - n;
@@ -1332,7 +1334,8 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
             pm.push(i);
         }
     }
-    let mu: Vec<f64> = pm.iter().map(|&i| -tab.t[i * n + kk]).collect();
+    mu.clear();
+    mu.extend(pm.iter().map(|&i| -tab.t[i * n + kk]));
     if pm.is_empty() {
         crate::census_bump!(R1Handled, 1);
         return Some(vec![]);
@@ -1340,8 +1343,6 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
     // the members A + {c} - {j}, minus the known ones. A member's Seen key is built in a pooled buffer from the
     // sorted constraint indices of A + {c} with one index removed, so a known member costs no allocation; the
     // member's z rows are built only when it is not known.
-    let mut bufs = R1Hold(R1_BUFS.with(|c| std::mem::take(&mut *c.borrow_mut())));
-    let R1Bufs { bits, nbf, lam } = &mut bufs.0;
     // Seen key of A + {c} - {j}: the key of A XOR the words of c and j, no vector is built; a hit is verified
     // against the stored set (it must lie inside A + {c}, without j; its length is |A|)
     let ic = p.ineq[var];
@@ -1416,7 +1417,6 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
     if members.is_empty() {
         return Some(vec![]);
     }
-    drop(bufs);
     let nb = null_basis(g);
     let lam: Vec<Vec<f64>> = pm
         .iter()
@@ -1599,6 +1599,8 @@ struct R1Bufs {
     bits: Vec<u64>,
     nbf: Vec<f64>,
     lam: Vec<f64>,
+    pm: Vec<usize>,
+    mu: Vec<f64>,
 }
 
 /// Neighbouring z-row sets across the facet {e_k θ = f_k} of the region with tableau `tab`.
