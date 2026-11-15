@@ -1366,23 +1366,20 @@ const WALK_BUDGET_PER_ROW: usize = 2;
 const WALK_BUDGET_MIN: usize = 64;
 
 /// Memory statistics and knobs of the serial exploration: parents whose tableau is shared by queued lazy children,
-/// the peak of that count, and the size of one tableau; `LIFO` pops the newest queued region first; `TAB_BUDGET` (bytes,
-/// 0 = no limit) is the limit on the tableaux of live parents beyond which a parent's children are queued without a
+/// the peak of that count, and the size of one tableau; `TAB_BUDGET` (bytes, 0 = no limit, default 256 MiB) is the limit on the tableaux of live parents beyond which a parent's children are queued without a
 /// tableau and rebuild it from their active set when popped.
 static LIVE_PARENTS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static PEAK_PARENTS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static TAB_BYTES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-static LIFO: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-static TAB_BUDGET: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static TAB_BUDGET: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(256 << 20);
 
 /// (peak number of live parent tableaux, bytes of one tableau) of the last serial exploration.
 pub fn tab_stats() -> (usize, usize) {
     (PEAK_PARENTS.load(std::sync::atomic::Ordering::Relaxed), TAB_BYTES.load(std::sync::atomic::Ordering::Relaxed))
 }
 
-/// Pop order (`lifo`) and the byte budget for live parent tableaux (0 = none) of the serial exploration.
-pub fn set_memory_mode(lifo: bool, tab_budget: usize) {
-    LIFO.store(lifo, std::sync::atomic::Ordering::Relaxed);
+/// The byte budget for live parent tableaux (0 = none) of the serial exploration.
+pub fn set_tab_budget(tab_budget: usize) {
     TAB_BUDGET.store(tab_budget, std::sync::atomic::Ordering::Relaxed);
 }
 
@@ -2006,10 +2003,9 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
     let mut wave_limit = 1usize;
     LIVE_PARENTS.store(0, std::sync::atomic::Ordering::Relaxed);
     PEAK_PARENTS.store(0, std::sync::atomic::Ordering::Relaxed);
-    let lifo = LIFO.load(std::sync::atomic::Ordering::Relaxed);
     let budget = TAB_BUDGET.load(std::sync::atomic::Ordering::Relaxed);
     loop {
-        let Some(Item { idx, center, tab, depth, entry, verts }) = (if lifo { queue.pop_back() } else { queue.pop_front() }) else { break };
+        let Some(Item { idx, center, tab, depth, entry, verts }) = queue.pop_front() else { break };
         if idx >= wave_limit {
             wave_limit = regions.len();
         }
