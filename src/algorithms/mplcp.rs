@@ -1534,12 +1534,12 @@ const WALK_BUDGET_PER_ROW: usize = 2;
 const WALK_BUDGET_MIN: usize = 64;
 
 /// Memory statistics and knobs of the serial exploration: parents whose tableau is shared by queued lazy children,
-/// the peak of that count, and the size of one tableau; `TAB_BUDGET` (bytes, 0 = no limit, default 256 MiB) is the limit on the tableaux of live parents beyond which a parent's children are queued without a
+/// the peak of that count, and the size of one tableau; `TAB_BUDGET` (bytes, 0 = no limit, default 512 MiB, shared by the live parents and the tableaux owned by queued items) is the limit on the tableaux of live parents beyond which a parent's children are queued without a
 /// tableau and rebuild it from their active set when popped.
 static LIVE_PARENTS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static PEAK_PARENTS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static TAB_BYTES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-static TAB_BUDGET: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(256 << 20);
+static TAB_BUDGET: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(512 << 20);
 
 static SEEN_LEN: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static SEEN_BYTES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
