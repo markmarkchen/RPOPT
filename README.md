@@ -181,9 +181,11 @@ function. Every exact method returns the same set of critical regions as PPOPT o
 
 ### Which one to use
 
-- **Strictly convex mpQP:** `mplcp`. It is the fastest serial method on 8 of the 9 benchmark problems (1.2x to
-  1.8x faster than `geometric`) and the reference for degenerate mpQPs. `mplcp_parallel`
+- **Strictly convex mpQP with up to about 4 parameters:** `mplcp`. It is the fastest serial method on 8 of the 9
+  benchmark problems (1.2x to 1.8x faster than `geometric`) and the reference for degenerate mpQPs. `mplcp_parallel`
   scales to 4.7x on 8 threads on the larger problems and falls back to serial on small ones.
+- **Strictly convex mpQP with 5 or more parameters:** `graph`, which is 1.3x to 1.9x faster than `mplcp` there
+  on the large suite. `combinatorial` is worth trying when the constraints are few.
 - **mpLP:** `mplp_lex`. It is the fastest on every mpLP in the benchmark and gives a unique gap-free partition
   even when the problem is primal and dual degenerate.
 - **General fallback:** `geometric`, which handles every program class and is robust on degenerate problems.
@@ -370,8 +372,13 @@ thin but real: direct QP solves confirm them, and its default `lowdim_tol` disca
 | masses2_N6 | 901 | 27.5 ms (`mplcp`) |
 
 **Larger problems** (`bench/problems_large`, 131 MPC, POP and random problems with up to 428,841 regions and 10
-parameters; `bench/results/large.md`): `mplcp` is the fastest exact solver overall, at a geometric mean of 0.76x the
-time of `graph`. Those runs come from a shared, busy machine.
+parameters; `bench/results/large.md`): `mplcp` is the fastest exact solver overall, at a geometric mean of 0.92x the
+time of `graph` (119 problems solved).
+- The advantage holds at few parameters: 0.17x to 0.57x of `graph` at 1 to 3 parameters and 0.91x at 4.
+- From 5 parameters on, `graph` is faster: `mplcp` takes 1.29x at 5 and 1.4x to 1.9x at 6 to 10.
+- Five `mplcp` and five `geometric` runs returned no regions, because of a start-region bug since fixed. An earlier
+  summary counted them as solves and reported 0.76x.
+- Those runs come from a shared, busy machine; a rerun on Negishi is pending.
 
 ## Correctness
 

@@ -145,14 +145,35 @@ def main():
         w('\nTimed-out solves: ' + ', '.join(f'{n}/{a}' for n, a in to))
     # summary
     w('\n## Summary by algorithm\n')
-    w('| algorithm | solved | timed out | geometric-mean time vs graph (common problems) |')
-    w('|---|---|---|---|')
+    # A run that returns no regions is a failure, not a solve (it finishes fast and would flatter the means).
+    def solved(n, a):
+        r = data.get(f'{n}/{a}')
+        return r is not None and not r.get('timed_out') and (r.get('regions') or 0) > 0
+
+    w('| algorithm | solved | timed out | returned no regions | geometric-mean time vs graph (common problems) |')
+    w('|---|---|---|---|---|')
     for a in ALGOS:
-        done = [n for n in names if f'{n}/{a}' in data and not data[f'{n}/{a}'].get('timed_out')]
+        done = [n for n in names if solved(n, a)]
         tos = [n for n in names if data.get(f'{n}/{a}', {}).get('timed_out')]
-        common = [n for n in done if f'{n}/graph' in data and not data[f'{n}/graph'].get('timed_out')]
+        empty = [n for n in names if f'{n}/{a}' in data and not data[f'{n}/{a}'].get('timed_out') and not solved(n, a)]
+        common = [n for n in done if solved(n, 'graph')]
         ratio = gmean([data[f'{n}/{a}']['solve_s'] / data[f'{n}/graph']['solve_s'] for n in common])
-        w(f'| {a} | {len(done)} | {len(tos)} | {ratio:.2f} |')
+        w(f'| {a} | {len(done)} | {len(tos)} | {len(empty)} | {ratio:.2f} |')
+    if any(f'{n}/{a}' in data and not data[f'{n}/{a}'].get('timed_out') and not solved(n, a) for n in names for a in ALGOS):
+        w('\nRuns that returned no regions: ' + ', '.join(f'{n}/{a}' for n in names for a in ALGOS
+                                                        if f'{n}/{a}' in data and not data[f'{n}/{a}'].get('timed_out') and not solved(n, a)) + '.')
+    # geometric-mean time vs graph by parameter count, over problems both solved
+    ts = sorted({info[n].get('t') for n in names if info[n].get('t') is not None})
+    w('\n## Time vs graph by parameter count\n')
+    w('Geometric mean of solve time relative to `graph`, over the problems both solved (problem count in brackets).\n')
+    w('| parameters | ' + ' | '.join(ALGOS) + ' |')
+    w('|---:|' + '---:|' * len(ALGOS))
+    for t in ts:
+        row = []
+        for a in ALGOS:
+            common = [n for n in names if info[n].get('t') == t and solved(n, a) and solved(n, 'graph')]
+            row.append(f'{gmean([data[f"{n}/{a}"]["solve_s"] / data[f"{n}/graph"]["solve_s"] for n in common]):.2f} ({len(common)})' if common else '-')
+        w(f'| {t} | ' + ' | '.join(row) + ' |')
     open(sys.argv[2], 'w').write('\n'.join(out) + '\n')
 
 

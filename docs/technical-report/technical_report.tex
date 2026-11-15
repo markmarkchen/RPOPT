@@ -775,7 +775,8 @@ Every other solver grows slowly. \code{mplcp} is the fastest at every point list
 \subsection{Large suite\busy{}}
 
 The large suite (131 problems, 1 to 10 parameters, busy machine) tests scale and robustness. Table~\ref{tab:large} summarizes the exact
-solvers. \code{mplcp} is the fastest, at a geometric mean of 0.76 of \code{graph}'s time; it solves 124 problems and times out on 7. The timeout is a per-solve cap, so timed-out problems are not in the means.
+solvers. \code{mplcp} is the fastest overall, at a geometric mean of 0.92 of \code{graph}'s time; it solves 119 problems and times out on 7. The timeout is a per-solve cap, so timed-out problems are not in the means. Five runs each of \code{mplcp} and \code{geometric} (\code{pop\_001}, \code{pop\_019}, \code{pop\_031}, \code{pop\_052}, \code{pop\_071}) returned no regions, because of a start-region bug since fixed. They count as failures, not solves; an earlier summary counted them as solves and reported 0.76.
+The advantage depends on the parameter count. Relative to \code{graph}, \code{mplcp} takes 0.17 to 0.57 of the time at 1 to 3 parameters and 0.91 at 4, but 1.29 at 5 and 1.4 to 1.9 at 6 to 10 parameters (\code{large.md}, ``Time vs graph by parameter count''); \code{lp\_census\_highdim.md} measures why.
 \code{combinatorial} was run only on 79 problems (the others appear as ``-'' in \code{large.md}) and never timed out.
 
 \begin{table}[!htbp]
