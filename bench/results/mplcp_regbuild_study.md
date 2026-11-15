@@ -73,3 +73,5 @@ Row classes in the present LP path: propagated parameter box (free), exact box (
 | pop_017 | 29.8 | 17.7 | 79.6 | 69.5 | 32.5 | 17.9 | 530 |
 | rand_t12_x5_m20_s0 | 38.6 | 39.3 | 111.8 | 414.2 | 83.5 | 41.6 | 0 |
 | masses4_N3 | 64.1 | 31.2 | 154.4 | 369.3 | 103.4 | 33.4 | 301 |
+
+Open item (not investigated): in study 5, 26% to 49% of the KKT rows found no counterpart among the rows read from the parent tableau by one pivot, while the rows that did match agree exactly. Suspicion: children whose active set is more than one toggle from the parent (candidates of the Case-2 walk carry a piv of the last pivot only), so the one-pivot rows describe a different basis. Not checked.

@@ -764,5 +764,20 @@ fn build_study(rows: &[Row]) {
         let cc = d::SIM_C;
         println!("| {} | {:.1} | {:.1} | {:.1} | {:.1} | {:.1} | {:.1} | {} |", r.problem, g(r, cc + d::O_LPS) / n, g(r, cc + d::O_LPROWS) / g(r, cc + d::O_LPS).max(1.0), g(r, cc + d::O_RAYS) / n, g(r, cc + d::O_LP_NS) / 1e3 / n, g(r, cc + d::O_RAY_NS) / 1e3 / n, g(r, cc + d::O_SFINAL) / n, g(r, cc + d::O_MISMATCH));
     }
+    println!("\n### Build study 8: pivots and time of the 2n box LPs, cold (engine, from the centre) against a warm chain (own primal simplex, one shared vertex)\n");
+    println!("| problem | n | engine pivots/LP | engine us/LP | own cold steps/LP | own cold us/LP | warm order 1 steps/LP | us/LP | warm order 2 steps/LP | us/LP | bounds differing from engine: own cold | warm 1 | warm 2 | rows tight at a box point | tight-set differences: warm 1 | warm 2 | failures/region |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+    for r in &rs {
+        let lp = g(r, d::ENG_LPS).max(1.0);
+        let bb = g(r, d::BOX_BOUNDS).max(1.0);
+        let reg = g(r, d::BOX_REGIONS).max(1.0);
+        println!(
+            "| {} | {:.0} | {:.2} | {:.2} | {:.2} | {:.2} | {:.2} | {:.2} | {:.2} | {:.2} | {} | {} | {} | {:.1} | {:.2} | {:.2} | {:.3} |",
+            r.problem, bb / reg / 2.0, g(r, d::ENG_PIV) / lp, g(r, d::ENG_NS) / 1e3 / lp, g(r, d::COLD_STEPS) / bb, g(r, d::COLD_NS) / 1e3 / bb,
+            g(r, d::WARM1_STEPS) / bb, g(r, d::WARM1_NS) / 1e3 / bb, g(r, d::WARM2_STEPS) / bb, g(r, d::WARM2_NS) / 1e3 / bb,
+            pc(g(r, d::COLD_VALDIFF), bb), pc(g(r, d::WARM1_VALDIFF), bb), pc(g(r, d::WARM2_VALDIFF), bb),
+            g(r, d::TIGHT_ROWS_COLD) / reg, g(r, d::TIGHT_DIFF_W1) / reg, g(r, d::TIGHT_DIFF_W2) / reg, g(r, d::WARM_FAIL) / reg
+        );
+    }
     }
 }

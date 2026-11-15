@@ -578,11 +578,19 @@ fn region_bbox_pts(e: &Mat, f: &[f64], c: &[f64]) -> Option<(Vec<f64>, Vec<f64>,
     let mut obj = vec![0.0; n];
     for k in 0..n {
         obj[k] = 1.0;
+        #[cfg(feature = "lp_census")]
+        let _m = crate::census_diag::eng_begin();
         let x = crate::solver::lp::lp_point_from(Some(&obj), e, f, &[], c)?;
+        #[cfg(feature = "lp_census")]
+        crate::census_diag::eng_end(_m);
         lo[k] = x[k];
         pts.push(x);
         obj[k] = -1.0;
+        #[cfg(feature = "lp_census")]
+        let _m = crate::census_diag::eng_begin();
         let x = crate::solver::lp::lp_point_from(Some(&obj), e, f, &[], c)?;
+        #[cfg(feature = "lp_census")]
+        crate::census_diag::eng_end(_m);
         hi[k] = x[k];
         pts.push(x);
         obj[k] = 0.0;

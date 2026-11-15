@@ -67,6 +67,24 @@ pub mod s {
     pub const TABC_MISSING: usize = 83;
     pub const TAB_ROWS_NS: usize = 84;
     pub const TAB_NOPIV: usize = 85;
+    pub const ENG_LPS: usize = 104;
+    pub const ENG_PIV: usize = 105;
+    pub const ENG_NS: usize = 106;
+    pub const COLD_STEPS: usize = 107;
+    pub const COLD_NS: usize = 108;
+    pub const WARM1_STEPS: usize = 109; // pairs order: min t1, max t1, min t2, ...
+    pub const WARM1_NS: usize = 110;
+    pub const WARM2_STEPS: usize = 111; // all +e_k then all -e_k reversed
+    pub const WARM2_NS: usize = 112;
+    pub const WARM_FAIL: usize = 113;
+    pub const COLD_VALDIFF: usize = 114; // bounds where my cold optimum differs from the engine's
+    pub const WARM1_VALDIFF: usize = 115;
+    pub const WARM2_VALDIFF: usize = 116;
+    pub const BOX_BOUNDS: usize = 117;
+    pub const TIGHT_ROWS_COLD: usize = 118; // rows tight at some engine box point
+    pub const TIGHT_DIFF_W1: usize = 119; // symmetric difference of the tight-row sets, warm order 1 against engine
+    pub const TIGHT_DIFF_W2: usize = 120;
+    pub const BOX_REGIONS: usize = 121;
     // Clarkson simulation, variant A (seed: parameter-set rows) at SIM_A, variant B (A + entry + parent's kept rows) at SIM_B
     pub const SIM_A: usize = 50;
     pub const SIM_B: usize = 62;
@@ -99,6 +117,161 @@ pub fn t0() -> Instant {
 }
 pub fn lap(i: usize, t: Instant) {
     add(i, t.elapsed().as_nanos() as u64);
+}
+
+pub fn eng_begin() -> (u64, Instant) {
+    (crate::census::piv_get(), Instant::now())
+}
+pub fn eng_end(m: (u64, Instant)) {
+    if !on() {
+        return;
+    }
+    add(s::ENG_LPS, 1);
+    add(s::ENG_PIV, crate::census::piv_get() - m.0);
+    add(s::ENG_NS, m.1.elapsed().as_nanos() as u64);
+}
+
+/// Primal simplex from a point `x` of the polytope with tight rows `t` (independent), maximizing
+/// c'x; returns the number of ratio-test steps, or None on failure (unbounded or singular).
+fn opt(e: &Mat, f: &[f64], x: &mut Vec<f64>, t: &mut Vec<usize>, c: &[f64]) -> Option<u64> {
+    let (m, n) = (e.rows, e.cols);
+    let mut steps = 0u64;
+    for _ in 0..(10 * (n + m) + 50) {
+        let k = t.len();
+        let mut d = c.to_vec();
+        let mut y = vec![];
+        if k > 0 {
+            let mut g = Mat::zeros(k, k);
+            let mut rhs = vec![0.0; k];
+            for i in 0..k {
+                rhs[i] = dot(e.row(t[i]), c);
+                for j in 0..k {
+                    g[(i, j)] = dot(e.row(t[i]), e.row(t[j]));
+                }
+            }
+            let lu = crate::linalg::Lu::new(&g)?;
+            y = lu.solve(&rhs);
+            for i in 0..k {
+                for q in 0..n {
+                    d[q] -= y[i] * e[(t[i], q)];
+                }
+            }
+        }
+        let dn = crate::linalg::norm(&d);
+        let cn = crate::linalg::norm(c);
+        if dn > 1e-9 * cn {
+            // move along d until a row blocks
+            let mut best = (usize::MAX, f64::INFINITY);
+            for j in 0..m {
+                if t.contains(&j) {
+                    continue;
+                }
+                let ad = dot(e.row(j), &d);
+                if ad > 1e-12 * dn {
+                    let tt = (f[j] - dot(e.row(j), x)).max(0.0) / ad;
+                    if tt < best.1 {
+                        best = (j, tt);
+                    }
+                }
+            }
+            if best.0 == usize::MAX {
+                return None;
+            }
+            for q in 0..n {
+                x[q] += best.1 * d[q];
+            }
+            t.push(best.0);
+            steps += 1;
+        } else {
+            // c in the span of the tight rows: optimal if all multipliers are nonnegative
+            let (mut wi, mut wv) = (usize::MAX, -1e-9 * cn);
+            for i in 0..k {
+                if y[i] < wv {
+                    wv = y[i];
+                    wi = i;
+                }
+            }
+            if wi == usize::MAX {
+                return Some(steps);
+            }
+            t.remove(wi);
+        }
+    }
+    None
+}
+
+fn box_study(e: &Mat, f: &[f64], center: &[f64], bx: &(Vec<f64>, Vec<f64>, Vec<Vec<f64>>)) {
+    let n = e.cols;
+    let (lo, hi, pts) = bx;
+    // objective j = 2k (min theta_k = max -e_k), 2k+1 (max theta_k = max +e_k), in the engine's order
+    let obj = |j: usize| -> Vec<f64> {
+        let mut c = vec![0.0; n];
+        c[j / 2] = if j % 2 == 0 { -1.0 } else { 1.0 };
+        c
+    };
+    let target = |j: usize| -> f64 { if j % 2 == 0 { lo[j / 2] } else { hi[j / 2] } };
+    let order1: Vec<usize> = (0..2 * n).collect();
+    let mut order2: Vec<usize> = (0..n).map(|k| 2 * k + 1).collect();
+    order2.extend((0..n).rev().map(|k| 2 * k));
+    add(s::BOX_REGIONS, 1);
+    add(s::BOX_BOUNDS, 2 * n as u64);
+    // cold: every LP from the centre
+    let t = Instant::now();
+    let mut diff = 0u64;
+    let mut steps = 0u64;
+    let mut fail = false;
+    for j in 0..2 * n {
+        let (mut x, mut tt) = (center.to_vec(), vec![]);
+        match opt(e, f, &mut x, &mut tt, &obj(j)) {
+            Some(st) => {
+                steps += st;
+                if (x[j / 2] - target(j)).abs() > 1e-9 * (1.0 + target(j).abs()) {
+                    diff += 1;
+                }
+            }
+            None => fail = true,
+        }
+    }
+    add(s::COLD_NS, t.elapsed().as_nanos() as u64);
+    add(s::COLD_STEPS, steps);
+    add(s::COLD_VALDIFF, diff);
+    if fail {
+        add(s::WARM_FAIL, 1);
+    }
+    // rows tight at some engine point
+    let tight_set = |ps: &[Vec<f64>]| -> Vec<bool> { (0..e.rows).map(|i| ps.iter().any(|x| (dot(e.row(i), x) - f[i]).abs() <= 1e-9 * (1.0 + f[i].abs()))).collect() };
+    let cold_t = tight_set(pts);
+    add(s::TIGHT_ROWS_COLD, cold_t.iter().filter(|&&v| v).count() as u64);
+    for (ord, st_slot, ns_slot, vd_slot, td_slot) in [(&order1, s::WARM1_STEPS, s::WARM1_NS, s::WARM1_VALDIFF, s::TIGHT_DIFF_W1), (&order2, s::WARM2_STEPS, s::WARM2_NS, s::WARM2_VALDIFF, s::TIGHT_DIFF_W2)] {
+        let t = Instant::now();
+        let (mut x, mut tt) = (center.to_vec(), vec![]);
+        let (mut steps, mut diff, mut fail) = (0u64, 0u64, false);
+        let mut wp: Vec<Vec<f64>> = vec![];
+        for &j in ord.iter() {
+            match opt(e, f, &mut x, &mut tt, &obj(j)) {
+                Some(st) => {
+                    steps += st;
+                    if (x[j / 2] - target(j)).abs() > 1e-9 * (1.0 + target(j).abs()) {
+                        diff += 1;
+                    }
+                    wp.push(x.clone());
+                }
+                None => {
+                    fail = true;
+                    break;
+                }
+            }
+        }
+        add(ns_slot, t.elapsed().as_nanos() as u64);
+        add(st_slot, steps);
+        add(vd_slot, diff);
+        if fail {
+            add(s::WARM_FAIL, 1);
+        } else {
+            let wt = tight_set(&wp);
+            add(td_slot, wt.iter().zip(&cold_t).filter(|(a, b)| a != b).count() as u64);
+        }
+    }
 }
 
 struct Rec {
@@ -325,6 +498,9 @@ pub fn on_built(program: &crate::program::MpProgram, active_set: &[usize], e: &M
     add(s::FACETS, flags.iter().filter(|&&v| v).count() as u64);
     let classes = CLASSES.with(|c| std::mem::take(&mut *c.borrow_mut()));
     let bx = BOX.with(|c| c.borrow_mut().take());
+    if let Some(b) = &bx {
+        box_study(e, f, center, b);
+    }
     let have_classes = classes.len() == m;
     // row p -> (kind, id)
     let mut key: Vec<(u8, usize)> = vec![(9, 0); m];
