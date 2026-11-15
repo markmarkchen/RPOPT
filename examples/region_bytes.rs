@@ -7,6 +7,11 @@ use rpopt::linalg::Mat;
 use rpopt::program::MpProgram;
 use std::sync::Arc;
 
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    fn malloc_trim(pad: usize) -> i32;
+}
+
 fn status_mb(key: &str) -> f64 {
     std::fs::read_to_string("/proc/self/status")
         .ok()
@@ -22,12 +27,24 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let alg = MpqpAlgorithm::from_name(&args[1]).expect("algorithm");
     let p = Arc::new(MpProgram::from_json_file(std::path::Path::new(&args[2])).unwrap());
+    if let Some(b) = std::env::var("MPLCP_TAB_BUDGET").ok().and_then(|v| v.parse().ok()) {
+        rpopt::algorithms::mplcp::set_tab_budget(b);
+    }
     let hwm0 = status_mb("VmHWM");
     let rss0 = status_mb("VmRSS");
     let sol = solve_mpqp(&p, alg);
     let regs = &sol.critical_regions;
     let n = regs.len().max(1) as f64;
     let (hwm, rss) = (status_mb("VmHWM"), status_mb("VmRSS"));
+    // resident size after handing every free page of the allocator back to the system: the difference is memory that was
+    // free but held (fragmentation between the long-lived regions and the transient search data)
+    #[cfg(target_os = "linux")]
+    let rss_trim = {
+        unsafe { malloc_trim(0) };
+        status_mb("VmRSS")
+    };
+    #[cfg(not(target_os = "linux"))]
+    let rss_trim = 0.0;
     // (name, capacity bytes, length bytes)
     let mut rows: Vec<(&str, usize, usize)> = Vec::new();
     let mut add = |name: &'static str, cap: usize, len: usize| rows.push((name, cap, len));
@@ -70,6 +87,6 @@ fn main() {
     }
     println!("| struct shell (Vec of regions, {} B each) | {:.0} | {:.0} |", std::mem::size_of::<rpopt::critical_region::CriticalRegion>(), shell as f64 / n, (shell as f64) / n);
     println!("| total | {:.0} | {:.0} |", total_cap as f64 / n, total_len as f64 / n);
-    println!("rss_before_mb {rss0:.0} hwm_before_mb {hwm0:.0} rss_after_mb {rss:.0} hwm_after_mb {hwm:.0}");
+    println!("rss_before_mb {rss0:.0} hwm_before_mb {hwm0:.0} rss_after_mb {rss:.0} rss_after_trim_mb {rss_trim:.0} hwm_after_mb {hwm:.0}");
     println!("regions_cap_mb {:.0} rss_growth_per_region_B {:.0} hwm_growth_per_region_B {:.0}", total_cap as f64 / 1048576.0, (rss - rss0) * 1048576.0 / n, (hwm - hwm0) * 1048576.0 / n);
 }
