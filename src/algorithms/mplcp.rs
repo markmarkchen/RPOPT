@@ -298,24 +298,62 @@ impl Tab {
     }
 }
 
+/// Smallest pivot of row `i` that `tableau_for` accepts. Relative to the diagonal of M = A Q^-1 A' when that is below 1, so
+/// that a constraint of small scale (the diagonal of M runs from 5e-13 to 5e2 on the masses family) is not refused for
+/// having a pivot below an absolute 1e-11; unchanged (1e-11) for rows of scale 1 and above.
+fn pivot_floor(p: &Plcp, i: usize) -> f64 {
+    (1e-11 * p.m[i * p.n + i].abs().min(1.0)).max(1e-300)
+}
+
 /// Persistent tableau of the basis with z-basic rows `z`: rows [q | R | I], T = M, then one
-/// principal pivot per z row (nonsingular when M_zz is positive definite).
+/// principal pivot per z row (nonsingular when M_zz is positive definite). The pivots go in the order of `z`; if one falls
+/// below its floor the basis is tried again with the largest remaining pivot (relative to the diagonal of M) first, which
+/// accepts every basis that has a pivot order above the floors; only then is it refused.
 fn tableau_for(p: &Plcp, z: &[usize]) -> Option<Tab> {
     let (n, nt) = (p.n, p.nt);
     let w = 1 + nt;
-    let mut rho = vec![0.0; n * w];
-    for i in 0..n {
-        rho[i * w] = p.q[i];
-        rho[i * w + 1..i * w + 1 + nt].copy_from_slice(&p.r[i * nt..(i + 1) * nt]);
-    }
-    let mut tab = Tab { n, nc: n, w, t: p.m.clone(), rho, row_var: (0..n).collect(), col_var: (n..2 * n).collect(), pend: None };
+    let fresh = || {
+        let mut rho = vec![0.0; n * w];
+        for i in 0..n {
+            rho[i * w] = p.q[i];
+            rho[i * w + 1..i * w + 1 + nt].copy_from_slice(&p.r[i * nt..(i + 1) * nt]);
+        }
+        Tab { n, nc: n, w, t: p.m.clone(), rho, row_var: (0..n).collect(), col_var: (n..2 * n).collect(), pend: None }
+    };
+    let mut tab = fresh();
+    let mut ok = true;
     for &i in z {
         let piv = tab.t[i * n + i];
-        if piv.abs() < 1e-11 {
+        if !(piv.abs() >= pivot_floor(p, i)) {
+            ok = false;
+            break;
+        }
+        tab.pivot(i, i);
+    }
+    if ok {
+        return Some(tab);
+    }
+    // second attempt: largest relative pivot first
+    let mut tab = fresh();
+    let mut left: Vec<usize> = z.to_vec();
+    while !left.is_empty() {
+        let (k, best) = left
+            .iter()
+            .enumerate()
+            .map(|(k, &i)| (k, tab.t[i * n + i].abs() / p.m[i * n + i].abs().max(1e-300)))
+            .fold((0, -1.0f64), |a, b| if b.1 > a.1 { b } else { a });
+        let i = left.swap_remove(k);
+        let piv = tab.t[i * n + i];
+        if !(piv.abs() >= pivot_floor(p, i)) || !best.is_finite() {
+            crate::census_bump!(TabRefuse, 1);
+            if piv.abs() > 1e-6 * p.m[i * n + i].abs() {
+                crate::census_bump!(TabRefuseRel, 1);
+            }
             return None;
         }
         tab.pivot(i, i);
     }
+    crate::census_bump!(TabRescued, 1);
     Some(tab)
 }
 
@@ -2028,7 +2066,13 @@ impl TabSrc {
                 }
                 Err(a) => a.pivoted(v, kk),
             }),
-            TabSrc::None => tableau_of(plcp, cr),
+            TabSrc::None => {
+                let t = tableau_of(plcp, cr);
+                if t.is_none() {
+                    crate::census_bump!(ResolveNone, 1);
+                }
+                t
+            }
         }
     }
 }
@@ -2477,7 +2521,11 @@ fn candidate_law(plcp: &Plcp, parent: &Tab, c: &Cand) -> Option<(crate::program:
     match c.piv {
         Some((r, col)) => {
             let p = parent.tv(r, col);
-            if !(p.abs() > 1e-9) {
+            // the step is refused only when the pivot is small against the scale of its row (M_vv below 1), as in `tableau_for`
+            let vr = parent.row_var[r];
+            let floor = if vr < n { 1e-9 * plcp.m[vr * n + vr].abs().min(1.0) } else { 1e-9 };
+            if !(p.abs() > floor.max(1e-300)) {
+                crate::census_bump!(CandLawSmallPiv, 1);
                 return None;
             }
             let inv = 1.0 / p;
@@ -2504,7 +2552,10 @@ fn candidate_law(plcp: &Plcp, parent: &Tab, c: &Cand) -> Option<(crate::program:
         None => {
             let neq = plcp.eq.len();
             let z: Vec<usize> = c.aset[neq..].iter().map(|&o| plcp.pos[o]).collect();
-            let tab = tableau_for(plcp, &z)?;
+            let Some(tab) = tableau_for(plcp, &z) else {
+                crate::census_bump!(CandLawNoTab, 1);
+                return None;
+            };
             let law = tableau_law(plcp, &c.aset, |k, out| {
                 let Some(i) = tab.row_var.iter().position(|&v| v == n + k) else { return false };
                 for (j, o) in out.iter_mut().enumerate() {

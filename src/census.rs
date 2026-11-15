@@ -435,6 +435,16 @@ mod imp {
         DqBuildNs,
         DqSolveNs,
         DqCertNs,
+        /// `tableau_for` refusals (an absolute pivot below 1e-11), and those whose pivot is not small against the
+        /// diagonal of M (pivot / M_ii above 1e-6); `resolve` returning no tableau for a region; refusals inside
+        /// `candidate_law` (fresh tableau refused, or the one-pivot step below 1e-9)
+        TabRefuse,
+        TabRefuseRel,
+        ResolveNone,
+        CandLawNoTab,
+        CandLawSmallPiv,
+        /// bases that `tableau_for` accepted only in the second, largest-pivot-first order
+        TabRescued,
         /// end marker: the Case-2 component block starts here
         CounterEnd,
     }

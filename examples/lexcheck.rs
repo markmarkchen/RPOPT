@@ -34,6 +34,10 @@ fn region_hash(regs: &[rpopt::critical_region::CriticalRegion]) -> u64 {
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let ns: usize = a[1].parse().unwrap();
+    // MPLCP_TAB_BUDGET=<bytes>: limit on live parent tableaux (default 256 MiB, 0 = none)
+    if let Some(b) = std::env::var("MPLCP_TAB_BUDGET").ok().and_then(|v| v.parse().ok()) {
+        rpopt::algorithms::mplcp::set_tab_budget(b);
+    }
     // LEX_ALG: algorithm to solve with (default mplcp)
     let alg = MpqpAlgorithm::from_name(&std::env::var("LEX_ALG").unwrap_or_else(|_| "mplcp".into())).expect("algorithm");
     for f in &a[2..] {
