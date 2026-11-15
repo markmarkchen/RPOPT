@@ -48,7 +48,8 @@ struct Plcp {
     coord_bound: f64,
     /// constraint rows that have a positive multiple among the other rows of [M | q | R] (twin and duplicate constraints):
     /// exactly the places where a tableau has structural zeros that a fresh factorization fills with rounding noise
-    twin: Vec<bool>,
+    /// computed on first use (only the tableau rebuild path needs it)
+    twin: std::sync::OnceLock<Vec<bool>>,
 }
 
 /// Rows of [M | q | R] that are a positive multiple of another row (within 1e-9 of the row's largest entry).
@@ -150,8 +151,7 @@ impl Plcp {
             Some((lo, hi)) if lo.iter().chain(hi.iter()).all(|v| v.is_finite()) => lo.iter().zip(hi).map(|(l, h)| (l * l).max(h * h)).sum::<f64>().sqrt(),
             _ => -1.0,
         };
-        let twin = twin_rows(n, nt, &m, &q, &r);
-        Some(Plcp { n, nt, m, q, r, ineq, eq, pos, xe, coord_bound, twin })
+        Some(Plcp { n, nt, m, q, r, ineq, eq, pos, xe, coord_bound, twin: Default::default() })
     }
 
     /// Full active set (equalities first) of the z-basic rows.
@@ -2254,15 +2254,19 @@ fn snap_noise(plcp: &Plcp, t: &mut Tab, z: &[usize]) -> usize {
         return 0;
     }
     let (n, nc, w) = (t.n, t.nc, t.w);
+    let twin = plcp.twin.get_or_init(|| twin_rows(plcp.n, plcp.nt, &plcp.m, &plcp.q, &plcp.r));
+    if !twin.iter().any(|&b| b) {
+        return 0;
+    }
     let mut count = 0;
     for i in 0..n {
         let iu = row_of_u[i];
         let rmax = t.t[i * nc..(i + 1) * nc].iter().chain(t.rho[i * w..(i + 1) * w].iter()).fold(0.0f64, |a, v| a.max(v.abs()));
         let small = SNAP_REL * rmax;
-        let row_twin = plcp.twin[t.row_var[i] % plcp.n];
+        let row_twin = twin[t.row_var[i] % plcp.n];
         for j in 0..nc {
             let (a, b) = (t.t[i * nc + j], u.t[iu * nc + col_of_u[j]]);
-            if (row_twin || plcp.twin[t.col_var[j] % plcp.n]) && a != 0.0 && a.abs() <= small && b.abs() <= small && unrelated(a, b) {
+            if (row_twin || twin[t.col_var[j] % plcp.n]) && a != 0.0 && a.abs() <= small && b.abs() <= small && unrelated(a, b) {
                 t.t[i * nc + j] = 0.0;
                 count += 1;
             }
@@ -3059,7 +3063,7 @@ fn lp_plcp(program: &MpProgram) -> Plcp {
             r[(2 * nx + j) * nt + t] = program.f[(j, t)];
         }
     }
-    Plcp { n, nt, m, q, r, ineq: vec![], eq: vec![], pos: vec![], xe: Mat::zeros(0, 0), coord_bound: -1.0, twin: vec![false; n] }
+    Plcp { n, nt, m, q, r, ineq: vec![], eq: vec![], pos: vec![], xe: Mat::zeros(0, 0), coord_bound: -1.0, twin: Default::default() }
 }
 
 /// State of the depth-first form of Algorithm 1 (pairs are decided one by one; `choice[j]` is
@@ -3238,7 +3242,7 @@ fn permuted(p: &Plcp, perm: &[usize]) -> Plcp {
             m[a * n + b] = p.m[i * n + j];
         }
     }
-    Plcp { n, nt, m, q, r, ineq: p.ineq.clone(), eq: p.eq.clone(), pos: p.pos.clone(), xe: p.xe.clone(), coord_bound: p.coord_bound, twin: p.twin.clone() }
+    Plcp { n, nt, m, q, r, ineq: p.ineq.clone(), eq: p.eq.clone(), pos: p.pos.clone(), xe: p.xe.clone(), coord_bound: p.coord_bound, twin: Default::default() }
 }
 
 /// Herceg et al. (2015) Algorithm 1: enumerates the feasible complementary bases of the pLCP and
