@@ -3506,6 +3506,11 @@ pub fn set_clip_budget(budget: u64) {
     build::set_clip_budget(budget);
 }
 
+/// Whether the box chain's fallback guard counts the chains that could not be started at a vertex (default true).
+pub fn set_guard_count_init(on: bool) {
+    build::set_guard_count_init(on);
+}
+
 /// Switches the chained bounding-box LPs of the LP-path region builder (6 or more parameters; default on).
 /// Off sends every region to the shared builder, the previous behaviour; for comparisons.
 pub fn set_box_chain(on: bool) {

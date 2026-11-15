@@ -30,7 +30,7 @@ fn main() {
             a
         };
         let map: HashMap<Vec<usize>, &CriticalRegion> = on.critical_regions.iter().map(|r| (key(r), r)).collect();
-        let (mut both, mut only_off_regions, mut dropped, mut extra) = (0usize, 0usize, 0usize, 0usize);
+        let (mut both, mut only_off_regions, mut dropped, mut extra, mut real) = (0usize, 0usize, 0usize, 0usize, 0usize);
         for r in off.critical_regions.iter() {
             match map.get(&key(r)) {
                 None => only_off_regions += 1,
@@ -39,6 +39,13 @@ fn main() {
                     for k in 0..r.e.rows {
                         if !has(c, r.e.row(k), r.f[k]) {
                             dropped += 1;
+                            // how far does the chain's region reach beyond the dropped row? max of the row over the region, minus its offset
+                            let neg: Vec<f64> = r.e.row(k).iter().map(|v| -v).collect();
+                            if let Some(sol) = rpopt::solver::lp::solve_lp(Some(&neg), &c.e, &c.f, &[]) {
+                                let over = -sol.obj - r.f[k];
+                                real += (over > 1e-9) as usize;
+                                eprintln!("dropped row: region {:?} row {k} reaches {over:.3e} beyond the row inside the chain's region", key(r));
+                            }
                         }
                     }
                     for k in 0..c.e.rows {
@@ -51,7 +58,7 @@ fn main() {
         }
         let name = std::path::Path::new(f).file_stem().unwrap().to_string_lossy().to_string();
         println!(
-            "{name} regions on {} off {} compared {both} only_in_off_run {only_off_regions} rows_dropped_by_chain {dropped} rows_only_in_chain {extra}",
+            "{name} regions on {} off {} compared {both} only_in_off_run {only_off_regions} rows_dropped_by_chain {dropped} rows_only_in_chain {extra} dropped_rows_cutting_the_chain_region_by_over_1e-9 {real}",
             on.critical_regions.len(),
             off.critical_regions.len()
         );

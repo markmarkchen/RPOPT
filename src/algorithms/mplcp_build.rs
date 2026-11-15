@@ -199,11 +199,20 @@ pub(super) fn set_chain(on: bool) {
     CHAIN.store(on, AO::Relaxed);
 }
 
+/// Whether the fallback guard counts a chain that could not be started at a vertex (the engine optimum was not a vertex) as a fallback. Read once at
+/// the start of a solve. On (default): every objective that went to the engine for any reason counts towards the 20%.
+static GUARD_INIT: AtomicBool = AtomicBool::new(true);
+
+pub(super) fn set_guard_count_init(on: bool) {
+    GUARD_INIT.store(on, AO::Relaxed);
+}
+
 /// Fallback guard of one solve: after 100 regions, a chain whose objectives fall back to the engine in more than 20% of the cases is
 /// switched off for the rest of that solve (the shared builder takes over). The state belongs to the solve (it is created in
 /// `pivot_solve` and `pivot_solve_par` and passed to the builder), so two solves, on one thread or on several, never steer each other.
 pub(super) struct ChainGuard {
     on: bool,
+    count_init: bool,
     reg: AtomicU64,
     fb: AtomicU64,
     eng: AtomicU64,
@@ -217,7 +226,7 @@ pub(super) struct ChainGuard {
 
 impl ChainGuard {
     pub(super) fn new() -> ChainGuard {
-        ChainGuard { on: CHAIN.load(AO::Relaxed), reg: AtomicU64::new(0), fb: AtomicU64::new(0), eng: AtomicU64::new(0), init: AtomicU64::new(0), reb: AtomicU64::new(0), off: AtomicBool::new(false), off_at: AtomicU64::new(0), no_outer: AtomicU64::new(0) }
+        ChainGuard { on: CHAIN.load(AO::Relaxed), count_init: GUARD_INIT.load(AO::Relaxed), reg: AtomicU64::new(0), fb: AtomicU64::new(0), eng: AtomicU64::new(0), init: AtomicU64::new(0), reb: AtomicU64::new(0), off: AtomicBool::new(false), off_at: AtomicU64::new(0), no_outer: AtomicU64::new(0) }
     }
 
     fn chain_on(&self) -> bool {
@@ -232,7 +241,7 @@ impl ChainGuard {
         self.no_outer.fetch_add(st.no_outer, AO::Relaxed);
         let r = self.reg.fetch_add(regions, AO::Relaxed) + regions;
         // an objective that went to the engine because the simplex failed, and a chain that could not be started at a vertex, both count
-        let fallbacks = st.fallbacks + st.init_failures;
+        let fallbacks = st.fallbacks + if self.count_init { st.init_failures } else { 0 };
         let f = self.fb.fetch_add(fallbacks, AO::Relaxed) + fallbacks;
         if r >= 100 && (f as f64) > 0.2 * (r as f64) * (2 * n) as f64 && !self.off.swap(true, AO::Relaxed) {
             self.off_at.store(r, AO::Relaxed);
