@@ -84,7 +84,7 @@ equality with it is an exact cycle check. The pivot budget per facet is `2n` (at
 `WALK_BUDGET_MIN`). A cycle or a spent budget is counted (`WalkCycle`, `WalkBudget`) and the facet also gets the
 QP just beyond the Chebyshev centre of the facet (`FallbackAcross`, `FallbackFail`: the QP fails when the point is
 outside the feasible set, which is what happens at a facet on the boundary of the parameter set). The Lean bound on the
-walk (distinct states, at most 2^n of them) is correct and useless as a cost limit, see above.
+walk (the number of reachable label states, about n 2^n, `chain_length_bound`) is correct and useless as a cost limit, see above.
 
 Choice of the budget (job array 45881978, release builds; an earlier sweep on gate builds is job array 45879140; ratio of the cap version to the variant, above 1 is faster; the
 regions found in brackets):
