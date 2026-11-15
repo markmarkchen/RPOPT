@@ -301,8 +301,13 @@ mod imp {
         R1LpRun,
         R1WitnessAcc,
         R1EmptyMember,
+        /// members of S whose sub-facet test (witness, LP or empty cut) was already done for the same active set earlier, and the
+        /// distinct active sets tested; of the empty ones, the repeats
+        R1TestRepeat,
+        R1TestDistinct,
+        R1EmptyRepeat,
     }
-    pub const NC: usize = 122;
+    pub const NC: usize = 125;
 
     #[derive(Clone, Debug)]
     pub struct Stats {
@@ -498,6 +503,25 @@ mod imp {
 
     thread_local! {
         static CALL_MAXD: Cell<usize> = const { Cell::new(0) };
+    }
+    thread_local! {
+        static TESTED: std::cell::RefCell<std::collections::HashMap<Vec<usize>, bool>> = std::cell::RefCell::new(std::collections::HashMap::new());
+    }
+    /// Records a sub-facet test of the active set `z` (and whether it was empty); counts repeats.
+    pub fn tested(z: &[usize], empty: bool) {
+        let prev = TESTED.with(|t| t.borrow_mut().insert(z.to_vec(), empty));
+        match prev {
+            Some(_) => {
+                bump(Counter::R1TestRepeat, 1);
+                if empty {
+                    bump(Counter::R1EmptyRepeat, 1);
+                }
+            }
+            None => bump(Counter::R1TestDistinct, 1),
+        }
+    }
+    pub fn tested_reset() {
+        TESTED.with(|t| t.borrow_mut().clear());
     }
     pub fn depth_reset() {
         CALL_MAXD.with(|c| c.set(0));

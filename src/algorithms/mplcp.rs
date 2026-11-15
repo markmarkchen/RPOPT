@@ -960,12 +960,16 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
         }
         if empty {
             crate::census_bump!(R1EmptyMember, 1);
+            #[cfg(feature = "lp_census")]
+            crate::census::tested(&z, true);
             continue;
         }
         let clears = |pt: &[f64]| (0..e2.rows).all(|i| f2[i] - e2.row(i).iter().zip(pt).map(|(x, y)| x * y).sum::<f64>() >= WITNESS_MARGIN);
         if let Some(pt) = witnesses.iter().find(|pt| clears(pt)).cloned() {
             crate::census_bump!(R1WitnessAcc, 1);
             crate::census_bump!(R1Emitted, 1);
+            #[cfg(feature = "lp_census")]
+            crate::census::tested(&z, false);
             out.push(Nbr::Z(z, Some(to_theta(&pt))));
             continue;
         }
@@ -979,12 +983,16 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
             Some(s) if s.x[d1] > 1e-9 => {
                 let cf = s.x[..d1].to_vec();
                 crate::census_bump!(R1Emitted, 1);
+                #[cfg(feature = "lp_census")]
+                crate::census::tested(&z, false);
                 out.push(Nbr::Z(z, Some(to_theta(&cf))));
                 witnesses.push(cf);
             }
             _ => {
                 crate::census_bump!(R1EmptyMember, 1);
                 crate::census_bump!(PfChebEmpty, 1);
+                #[cfg(feature = "lp_census")]
+                crate::census::tested(&z, true);
             }
         }
     }
