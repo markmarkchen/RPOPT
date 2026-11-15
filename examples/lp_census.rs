@@ -478,6 +478,31 @@ fn highdim_tables(rows: &[Row], skipped: &[(String, String)]) {
             c(r, Counter::R1TestDistinct), c(r, Counter::R1TestRepeat), c(r, Counter::R1EmptyRepeat), c(r, Counter::FastRel), c(r, Counter::PivotGap), c(r, Counter::FastDemoted)
         );
     }
+    println!("\n### High-dimension 3j: parametric_daqp active-set tests and region builds\n");
+    println!("| problem | regions | solve ms | tests/region | LICQ violated | empty | nonempty | empty before any DAQP solve | DAQP solves (stage 1 / stage 2) | LP fallbacks | ms in the tests | of which DAQP | of which LDL | ms in gen_cr_from_kkt | us per test | us per DAQP solve | other ms |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|");
+    for r in rows.iter().filter(|r| r.alg == "parametric_daqp" && c(r, Counter::PdTests) > 0.0) {
+        let n = r.regions.max(1) as f64;
+        let (t, tn, dn, bn) = (c(r, Counter::PdTests), c(r, Counter::PdTestNanos), c(r, Counter::PdDaqpNanos), c(r, Counter::PdBuildNanos));
+        let ds = c(r, Counter::PdDaqp1) + c(r, Counter::PdDaqp2);
+        println!(
+            "| {} | {} | {:.0} | {:.1} | {} | {} | {} | {} | {} / {} | {} | {:.0} | {:.0} | {:.0} | {:.0} | {:.2} | {:.2} | {:.0} |",
+            r.problem, r.regions, r.solve_s * 1e3, t / n, c(r, Counter::PdLicq), c(r, Counter::PdEmpty), c(r, Counter::PdRegion), c(r, Counter::PdEarlyEmpty),
+            c(r, Counter::PdDaqp1), c(r, Counter::PdDaqp2), c(r, Counter::PdLpFallback), tn / 1e6, dn / 1e6, c(r, Counter::PdLdlNanos) / 1e6, bn / 1e6, tn / t / 1e3, dn / ds.max(1.0) / 1e3,
+            r.solve_s * 1e3 - tn / 1e6 - bn / 1e6
+        );
+    }
+    println!("\n### High-dimension 3k: mplcp sub-facet emptiness tests answered by DAQP\n");
+    println!("| problem | regions | solve ms | DAQP empty / region | sent on to the LP / region | share answered by DAQP | us per DAQP test | LPs / region |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::DqEmpty) + c(r, Counter::DqFallback) > 0.0) {
+        let n = r.regions.max(1) as f64;
+        let (b, d) = (c(r, Counter::DqEmpty), c(r, Counter::DqFallback));
+        println!(
+            "| {} | {} | {:.0} | {:.2} | {:.2} | {:.0}% | {:.2} | {:.1} |",
+            r.problem, r.regions, r.solve_s * 1e3, b / n, d / n, 100.0 * b / (b + d), c(r, Counter::DqNanos) / (b + d) / 1e3, c(r, Counter::PfCheb) / n
+        );
+    }
     println!("\n### High-dimension 4: vertex clipping (`clip_flags`) outcomes per call\n");
     println!("| problem | algorithm | clip calls/region | ok | nt outside 2..=6 | more than 128 hyperplanes | infinite box | more than 600 vertices | too few vertices | vertex violates a row | redundancy LPs/region |");
     println!("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
