@@ -503,6 +503,14 @@ fn box_max(a: &[f64], lo: &[f64], hi: &[f64]) -> f64 {
 
 /// Tightens the box [lo, hi] with the rows of {E θ <= f} (interval constraint propagation). Every
 /// point of the polytope stays inside the box.
+pub(crate) fn propagate_box_pub(e: &Mat, f: &[f64], lo: &mut [f64], hi: &mut [f64], rounds: usize) {
+    propagate_box(e, f, lo, hi, rounds)
+}
+
+pub(crate) fn box_max_pub(a: &[f64], lo: &[f64], hi: &[f64]) -> f64 {
+    box_max(a, lo, hi)
+}
+
 fn propagate_box(e: &Mat, f: &[f64], lo: &mut [f64], hi: &mut [f64], rounds: usize) {
     let n = e.cols;
     for _ in 0..rounds {
@@ -570,11 +578,19 @@ fn region_bbox_pts(e: &Mat, f: &[f64], c: &[f64]) -> Option<(Vec<f64>, Vec<f64>,
     let mut obj = vec![0.0; n];
     for k in 0..n {
         obj[k] = 1.0;
+        #[cfg(feature = "lp_census")]
+        let _m = crate::census_diag::eng_begin();
         let x = crate::solver::lp::lp_point_from(Some(&obj), e, f, &[], c)?;
+        #[cfg(feature = "lp_census")]
+        crate::census_diag::eng_end(_m);
         lo[k] = x[k];
         pts.push(x);
         obj[k] = -1.0;
+        #[cfg(feature = "lp_census")]
+        let _m = crate::census_diag::eng_begin();
         let x = crate::solver::lp::lp_point_from(Some(&obj), e, f, &[], c)?;
+        #[cfg(feature = "lp_census")]
+        crate::census_diag::eng_end(_m);
         hi[k] = x[k];
         pts.push(x);
         obj[k] = 0.0;
@@ -883,6 +899,12 @@ pub fn gen_cr_from_prepared(program: &MpProgram, active_set: &[usize], try_clip:
             None => lp_flags(&e, &f, &center, &blo, &bhi),
         }
     };
+    #[cfg(feature = "lp_census")]
+    {
+        let t = crate::census_diag::t0();
+        crate::census_diag::on_built(program, active_set, &e, &f, &center, &pos, n_lambda, &inactive, &flags);
+        let _ = t;
+    }
     let test = |p: usize| -> bool { flags[p] };
     let mut kept_lambda = vec![];
     let mut kept_ineq = vec![];
@@ -980,9 +1002,22 @@ fn lp_flags(e: &Mat, f: &[f64], center: &[f64], blo: &[f64], bhi: &[f64]) -> Vec
     let el = e.select_rows(&live);
     let fl: Vec<f64> = live.iter().map(|&p| f[p]).collect();
     let bbox = region_bbox_pts(&el, &fl, center);
+    #[cfg(feature = "lp_census")]
+    let classes = std::cell::RefCell::new(vec![0u8; e.rows]);
+    #[cfg(feature = "lp_census")]
+    macro_rules! rec {
+        ($p:expr, $c:expr) => {
+            classes.borrow_mut()[$p] = $c
+        };
+    }
+    #[cfg(not(feature = "lp_census"))]
+    macro_rules! rec {
+        ($p:expr, $c:expr) => {};
+    }
     let test = |p: usize| -> bool {
         let lp_ = live_pos[p];
         if lp_ == usize::MAX {
+            rec!(p, 0);
             return false;
         }
         let a = el.row(lp_);
@@ -990,9 +1025,11 @@ fn lp_flags(e: &Mat, f: &[f64], center: &[f64], blo: &[f64], bhi: &[f64]) -> Vec
         let tol = 1e-9 * (1.0 + fp.abs());
         if let Some((lo, hi, pts)) = &bbox {
             if reject_by(a, fp, lo, hi) {
+                rec!(p, 1);
                 return false;
             }
             if pts.iter().any(|v| (crate::linalg::dot(a, v) - fp).abs() <= tol) {
+                rec!(p, 2);
                 return true;
             }
         }
@@ -1000,11 +1037,18 @@ fn lp_flags(e: &Mat, f: &[f64], center: &[f64], blo: &[f64], bhi: &[f64]) -> Vec
         let q: Vec<f64> = center.iter().zip(a).map(|(ci, ai)| ci + sft * ai).collect();
         let inside = (0..el.rows).all(|i| i == lp_ || crate::linalg::dot(el.row(i), &q) <= fl[i] + 1e-9 * (1.0 + fl[i].abs()));
         if inside && (crate::linalg::dot(a, &q) - fp).abs() <= tol {
+            rec!(p, 3);
             return true;
         }
-        crate::solver::lp::lp_feasible_from(&el, &fl, &[lp_], center)
+        let v = crate::solver::lp::lp_feasible_from(&el, &fl, &[lp_], center);
+        rec!(p, if v { 4 } else { 5 });
+        v
     };
-    (0..e.rows).map(test).collect()
+    #[allow(clippy::let_and_return)]
+    let out: Vec<bool> = (0..e.rows).map(test).collect();
+    #[cfg(feature = "lp_census")]
+    crate::census_diag::set_classes(classes.into_inner(), bbox.map(|(lo, hi, pts)| (lo, hi, pts)));
+    out
 }
 
 #[cfg(test)]

@@ -2103,6 +2103,7 @@ fn item_bytes(it: &Item) -> usize {
         + it.center.as_ref().map_or(0, |c| c.capacity() * 8)
         + it.entry.as_ref().map_or(0, |e| e.0.capacity() * 8)
         + it.verts.as_ref().map_or(0, |v| v.capacity() * 8)
+        + it.boxpts.as_ref().map_or(0, |v| v.capacity() * 8)
         + match &it.tab {
             TabSrc::Ready(t) => (t.t.capacity() + t.rho.capacity() + t.row_var.capacity() + t.col_var.capacity()) * 8,
             _ => 0,
@@ -2186,6 +2187,10 @@ struct Item {
     entry: Option<(Vec<f64>, f64)>,
     /// vertices of the region polytope (flattened) when the fast clip builder produced them
     verts: Option<Vec<f64>>,
+    /// the 2n optimal points of the region's bounding-box LPs (flattened, n coordinates each) when
+    /// the LP-path builder produced them: the children entered through a facet start their own box
+    /// LPs at one that lies on the shared facet
+    boxpts: Option<Vec<f64>>,
 }
 
 /// The initial region of the exploration (and its center) or `None` when the program has none.
@@ -2666,6 +2671,17 @@ fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>
     cands
 }
 
+/// (regions built by the chain, objectives that fell back to the engine, engine LPs, chain switched off by the guard) of the last solve.
+pub fn box_chain_stats() -> (u64, u64, u64, bool) {
+    build::chain_stats()
+}
+
+/// Switches the chained bounding-box LPs of the LP-path region builder (6 or more parameters; default on).
+/// Off sends every region to the shared builder, the previous behaviour; for comparisons.
+pub fn set_box_chain(on: bool) {
+    build::set_chain(on);
+}
+
 /// Switch between the multiplier law read from the tableau (the default) and the Cholesky KKT solve
 /// `optimal_control_law_dual` (opt-out, and always the fallback for a doubtful basis: a tiny pivot
 /// element or a non-finite row). The tableau law gives identical regions and saves the KKT solve of
@@ -2840,8 +2856,54 @@ fn tight_residual(program: &MpProgram, cr: &CriticalRegion, centre: &[f64]) -> f
 }
 
 
-fn build_cand(program: &MpProgram, plcp: &Plcp, parent: &Tab, c: &Cand, want_verts: bool) -> Option<(CriticalRegion, Option<Vec<f64>>, Option<Tab>, Option<Vec<f64>>)> {
+#[cfg(feature = "lp_census")]
+fn diag_tab_rows(plcp: &Plcp, parent: &Tab, c: &Cand) {
+    let Some((r, col)) = c.piv else {
+        crate::census_diag::add(crate::census_diag::s::TAB_NOPIV, 1);
+        crate::census_diag::set_tab_rows(None);
+        return;
+    };
+    let t = crate::census_diag::t0();
+    let (n, w) = (plcp.n, 1 + plcp.nt);
+    let inv = 1.0 / parent.tv(r, col);
+    let rrow: Vec<f64> = (0..w).map(|k| parent.rv(r, k) * -inv).collect();
+    let mut rows: Vec<(u8, usize, Vec<f64>)> = Vec::with_capacity(n);
+    for i in 0..n {
+        let (var, row): (usize, Vec<f64>) = if i == r {
+            (parent.col_var[col], rrow.clone())
+        } else {
+            let f = parent.tv(i, col);
+            (parent.row_var[i], (0..w).map(|j| parent.rv(i, j) + f * rrow[j]).collect())
+        };
+        let (kind, k) = if var < n { (1u8, var) } else { (0u8, var - n) };
+        let nrm = crate::linalg::norm(&row[1..]);
+        if !(nrm > 1e-12) {
+            continue;
+        }
+        let mut e: Vec<f64> = row[1..].iter().map(|v| -v / nrm).collect();
+        e.push(row[0] / nrm);
+        rows.push((kind, plcp.ineq[k], e));
+    }
+    crate::census_diag::lap(crate::census_diag::s::TAB_ROWS_NS, t);
+    let m: std::collections::HashMap<(u8, usize), (Vec<f64>, f64)> = rows
+        .into_iter()
+        .map(|(k, id, mut e)| {
+            let f = e.pop().unwrap();
+            ((k, id), (e, f))
+        })
+        .collect();
+    crate::census_diag::set_tab_rows(Some(m));
+}
+
+fn build_cand(program: &MpProgram, plcp: &Plcp, parent: &Tab, c: &Cand, want_verts: bool, parent_box: Option<&[f64]>) -> Option<(CriticalRegion, Option<Vec<f64>>, Option<Tab>, Option<Vec<f64>>, Option<Vec<f64>>)> {
     if program.num_t() > 1 {
+        #[cfg(feature = "lp_census")]
+        if crate::census_diag::on() {
+            crate::census_diag::set_entry(c.entry.as_ref(), c.hint.as_deref());
+            diag_tab_rows(plcp, parent, c);
+        }
+        #[cfg(feature = "lp_census")]
+        let _tlaw = crate::census_diag::t0();
         let (law, own) = if TABLEAU_LAW.load(std::sync::atomic::Ordering::Relaxed) {
             match candidate_law(plcp, parent, c) {
                 Some((l, t)) => (Some(l), t),
@@ -2850,7 +2912,9 @@ fn build_cand(program: &MpProgram, plcp: &Plcp, parent: &Tab, c: &Cand, want_ver
         } else {
             (None, None)
         };
-        let (cr, ce, verts) = build::build_region(program, &c.aset, c.hint.as_deref(), law, want_verts)?;
+        #[cfg(feature = "lp_census")]
+        crate::census_diag::lap(crate::census_diag::s::LAW_NS, _tlaw);
+        let (cr, ce, verts, boxpts) = build::build_region(program, &c.aset, c.hint.as_deref(), law, want_verts, parent_box, c.entry.as_ref())?;
         // A basis that is singular in exact arithmetic (parallel rows both active) can pass every
         // other test with a garbage law; its region then overlaps the true ones (pop_005, pop_007,
         // pop_011). Legitimate regions have residuals up to 1e-5 (masses5_N3), garbage ones 1e-1. The
@@ -2867,14 +2931,15 @@ fn build_cand(program: &MpProgram, plcp: &Plcp, parent: &Tab, c: &Cand, want_ver
             }
             crate::census_bump!(TightKeptByQp, 1);
         }
-        Some((cr, Some(ce), own, verts))
+        Some((cr, Some(ce), own, verts, boxpts))
     } else {
-        Some((gen_cr_from_active_set_lambda_first(program, &c.aset, true)?, None, None, None))
+        Some((gen_cr_from_active_set_lambda_first(program, &c.aset, true)?, None, None, None, None))
     }
 }
 
 fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegion> {
     let Some((initial, init_center)) = initial_region(program, seed) else { return vec![] };
+    build::reset_guard();
     let mut seen: Seen = Seen::default();
     seen.insert(initial.active_set.clone(), Slot::Built(0));
     let mut regions = vec![initial];
@@ -2884,9 +2949,9 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
         known.add(0, &regions[0]);
     }
     let mut queue: VecDeque<Item> = VecDeque::new();
-    queue.push_back(Item { idx: 0, center: init_center, tab: TabSrc::None, depth: 0, entry: None, verts: None });
+    queue.push_back(Item { idx: 0, center: init_center, tab: TabSrc::None, depth: 0, entry: None, verts: None, boxpts: None });
     let mut ws: Option<Tab> = None;
-    let mut pending: Vec<(CriticalRegion, Option<Vec<f64>>, Option<(usize, usize)>, Option<Tab>, Option<(Vec<f64>, f64)>, Option<Vec<f64>>)> = vec![];
+    let mut pending: Vec<(CriticalRegion, Option<Vec<f64>>, Option<(usize, usize)>, Option<Tab>, Option<(Vec<f64>, f64)>, Option<Vec<f64>>, Option<Vec<f64>>)> = vec![];
     let mut wave_limit = 1usize;
     LIVE_PARENTS.store(0, std::sync::atomic::Ordering::Relaxed);
     PEAK_PARENTS.store(0, std::sync::atomic::Ordering::Relaxed);
@@ -2902,7 +2967,7 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
         if let TabSrc::Ready(t) = &it.tab {
             ready_bytes -= tab_len_bytes(t);
         }
-        let Item { idx, center, tab, depth, entry, verts } = it;
+        let Item { idx, center, tab, depth, entry, verts, boxpts: parent_box } = it;
         if idx >= wave_limit {
             wave_limit = regions.len();
         }
@@ -2919,6 +2984,10 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
                 (Tab::empty(), across_fallback(plcp, cur, center.as_ref()))
             }
         };
+        #[cfg(feature = "lp_census")]
+        if crate::census_diag::on() {
+            crate::census_diag::set_parent(&cur.active_set);
+        }
         for c in cands {
             let fresh = seen_claim(&mut seen, &c.aset);
             #[cfg(feature = "lp_census")]
@@ -2928,8 +2997,8 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
                 continue;
             }
             crate::census_bump!(CandGen, 1);
-            let built = crate::census_timed!(MplcpBuildNanos, build_cand(program, plcp, &tab, &c, cert_active(cmode, plcp.nt)));
-            if let Some((cr, ce, own, vt)) = built {
+            let built = crate::census_timed!(MplcpBuildNanos, build_cand(program, plcp, &tab, &c, cert_active(cmode, plcp.nt), parent_box.as_deref()));
+            if let Some((cr, ce, own, vt, bp)) = built {
                 if c.cert.is_some() {
                     // audit: the search across a certified facet also reached a new region (it
                     // touches the facet only in a lower dimension; it is found through another
@@ -2937,7 +3006,7 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
                     AUDIT_EXTRA.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     crate::census_bump!(CertExtra, 1);
                 }
-                pending.push((cr, ce, c.piv, own, c.entry, vt));
+                pending.push((cr, ce, c.piv, own, c.entry, vt, bp));
             }
         }
         // the neighbours' tableaux are one pivot away (rebuilt from scratch every REFACTOR levels);
@@ -2948,7 +3017,7 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
         let over = budget > 0 && (LIVE_PARENTS.load(std::sync::atomic::Ordering::Relaxed) + 1) * tbytes + ready_bytes > budget;
         let tab = std::sync::Arc::new(tab);
         let mut lazy_children = 0usize;
-        for (cr, ce, piv, own, ent, vt) in pending.drain(..) {
+        for (cr, ce, piv, own, ent, vt, bp) in pending.drain(..) {
             let (src, nd) = match piv {
                 Some((v, kk)) if !over => {
                     lazy_children += 1;
@@ -2969,7 +3038,7 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
             if cmode != 6 && cert_active(cmode, plcp.nt) {
                 known.add(regions.len() - 1, regions.last().unwrap());
             }
-            let it = Item { idx: regions.len() - 1, center: ce, tab: src, depth: nd, entry: ent, verts: vt };
+            let it = Item { idx: regions.len() - 1, center: ce, tab: src, depth: nd, entry: ent, verts: vt, boxpts: bp };
             queue_bytes += item_bytes(&it);
             queue.push_back(it);
             PEAK_QUEUE_LEN.fetch_max(queue.len(), std::sync::atomic::Ordering::Relaxed);
@@ -3006,6 +3075,7 @@ fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalR
         return pivot_solve(program, plcp, seed);
     }
     let Some((initial, init_center)) = initial_region(program, seed) else { return vec![] };
+    build::reset_guard();
     let mut seen: Seen = Seen::default();
     seen.insert(initial.active_set.clone(), Slot::Built(0));
     let mut regions = vec![initial];
@@ -3014,14 +3084,14 @@ fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalR
     if cmode != 6 && cert_active(cmode, plcp.nt) {
         known.add(0, &regions[0]);
     }
-    let mut wave: Vec<Item> = vec![Item { idx: 0, center: init_center, tab: TabSrc::None, depth: 0, entry: None, verts: None }];
+    let mut wave: Vec<Item> = vec![Item { idx: 0, center: init_center, tab: TabSrc::None, depth: 0, entry: None, verts: None, boxpts: None }];
     // measured serial cost (ns) of expanding one region and of building one candidate
     let mut ns_expand: f64 = 0.0;
     let mut ns_build: f64 = 0.0;
     while !wave.is_empty() {
         let wave_limit = regions.len();
         let expand = |ws: &mut Option<Tab>, item: Item| -> Option<(Arc<Tab>, usize, Vec<Cand>)> {
-            let Item { idx, center, tab, depth, entry, verts } = item;
+            let Item { idx, center, tab, depth, entry, verts, .. } = item;
             let cur = &regions[idx];
             let (tab, cands) = match tab.resolve(plcp, cur) {
                 Some(tab) => {
@@ -3059,7 +3129,7 @@ fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalR
             }
         }
         let build = |(tab, depth, c): &(Arc<Tab>, usize, Cand)| -> Option<(CriticalRegion, Option<Vec<f64>>, Option<Tab>, usize, Option<(Vec<f64>, f64)>, Option<Vec<f64>>)> {
-            let (cr, center, own, vt) = build_cand(program, plcp, tab, c, cert_active(cmode, plcp.nt))?;
+            let (cr, center, own, vt, _) = build_cand(program, plcp, tab, c, cert_active(cmode, plcp.nt), None)?;
             let (ntab, nd) = match c.piv {
                 Some((v, kk)) => {
                     (Some(tab.pivoted(v, kk)), depth + 1)
@@ -3083,7 +3153,7 @@ fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalR
             if cmode != 6 && cert_active(cmode, plcp.nt) {
                 known.add(regions.len() - 1, regions.last().unwrap());
             }
-            wave.push(Item { idx: regions.len() - 1, center, tab: tab.into(), depth, entry, verts });
+            wave.push(Item { idx: regions.len() - 1, center, tab: tab.into(), depth, entry, verts, boxpts: None });
         }
     }
     regions

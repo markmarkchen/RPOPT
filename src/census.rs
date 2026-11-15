@@ -534,7 +534,9 @@ mod imp {
     /// everything smaller), in four classes: [0] refused by the old guard (mu <= 1e-7 mu_max), [1] not refused, each split by whether the
     /// reason-5 mismatch test passed (+2 when it failed)
     pub const NU_BASE: usize = EO_BASE + 16;
-    pub const NC: usize = NU_BASE + 16 * 4;
+    /// build-study slots (see `census_diag`)
+    pub const MD_BASE: usize = NU_BASE + 16 * 4;
+    pub const NC: usize = MD_BASE + 224;
     pub fn bump_slot(i: usize, n: u64) {
         MINE.with(|m| m.lock().unwrap().counters[i] += n);
     }
