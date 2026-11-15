@@ -1541,6 +1541,11 @@ pub fn search_stats() -> (usize, usize, usize, usize) {
     (g(&SEEN_LEN), g(&SEEN_BYTES), g(&PEAK_QUEUE_LEN), g(&PEAK_QUEUE_BYTES))
 }
 
+/// Bytes of a tableau's numbers and indices (what the budget counts).
+fn tab_len_bytes(t: &Tab) -> usize {
+    (t.t.len() + t.rho.len()) * 8 + (t.row_var.len() + t.col_var.len()) * 8
+}
+
 fn item_bytes(it: &Item) -> usize {
     std::mem::size_of::<Item>()
         + it.center.as_ref().map_or(0, |c| c.capacity() * 8)
@@ -2186,9 +2191,14 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
     PEAK_QUEUE_LEN.store(0, std::sync::atomic::Ordering::Relaxed);
     PEAK_QUEUE_BYTES.store(0, std::sync::atomic::Ordering::Relaxed);
     let mut queue_bytes = item_bytes(queue.front().unwrap());
+    // bytes of the tableaux that queued items own (a Case-2 child arrives with its own), counted against the same budget
+    let mut ready_bytes = 0usize;
     loop {
         let Some(it) = queue.pop_front() else { break };
         queue_bytes -= item_bytes(&it);
+        if let TabSrc::Ready(t) = &it.tab {
+            ready_bytes -= tab_len_bytes(t);
+        }
         let Item { idx, center, tab, depth, entry, verts } = it;
         if idx >= wave_limit {
             wave_limit = regions.len();
@@ -2223,10 +2233,10 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
         }
         // the neighbours' tableaux are one pivot away (rebuilt from scratch every REFACTOR levels);
         // each pivot is done when its region is popped, and the last one popped takes over this tableau
-        let tbytes = (tab.t.len() + tab.rho.len()) * 8 + (tab.row_var.len() + tab.col_var.len()) * 8;
+        let tbytes = tab_len_bytes(&tab);
         TAB_BYTES.store(tbytes, std::sync::atomic::Ordering::Relaxed);
         // beyond the budget for live parent tableaux the children are queued without one and rebuild it when popped
-        let over = budget > 0 && (LIVE_PARENTS.load(std::sync::atomic::Ordering::Relaxed) + 1) * tbytes > budget;
+        let over = budget > 0 && (LIVE_PARENTS.load(std::sync::atomic::Ordering::Relaxed) + 1) * tbytes + ready_bytes > budget;
         let tab = std::sync::Arc::new(tab);
         let mut lazy_children = 0usize;
         for (cr, ce, piv, own, ent, vt) in pending.drain(..) {
@@ -2236,7 +2246,14 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
                     (TabSrc::Lazy(tab.clone(), v, kk), depth + 1)
                 }
                 Some(_) => (TabSrc::None, 0),
-                None => (TabSrc::from(own), 0),
+                None => match own {
+                    // an owned tableau is kept while the live parents and the owned tableaux fit in the budget
+                    Some(t) if budget == 0 || (LIVE_PARENTS.load(std::sync::atomic::Ordering::Relaxed) + 1) * tbytes + ready_bytes + tab_len_bytes(&t) <= budget => {
+                        ready_bytes += tab_len_bytes(&t);
+                        (TabSrc::Ready(t), 0)
+                    }
+                    _ => (TabSrc::None, 0),
+                },
             };
             seen.insert(cr.active_set.clone(), Slot::Built(regions.len()));
             regions.push(cr);
