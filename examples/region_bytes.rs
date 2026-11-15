@@ -27,6 +27,9 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let alg = MpqpAlgorithm::from_name(&args[1]).expect("algorithm");
     let p = Arc::new(MpProgram::from_json_file(std::path::Path::new(&args[2])).unwrap());
+    if let Some(b) = std::env::var("MPLCP_TAB_BUDGET").ok().and_then(|v| v.parse().ok()) {
+        rpopt::algorithms::mplcp::set_tab_budget(b);
+    }
     let hwm0 = status_mb("VmHWM");
     let rss0 = status_mb("VmRSS");
     let sol = solve_mpqp(&p, alg);
