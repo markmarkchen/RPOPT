@@ -506,7 +506,13 @@ mod imp {
     pub const NWK: usize = 8;
     pub const WK_BASE: usize = CALIB + 4;
     pub const WK_NAMES: [&str; NWK] = ["1 slack, zero pivot", "1 slack, pivot in gap", "1 slack, nonzero pivot", "1 z row", "2 slack", "1 slack + 1 z", "2 z", "3 or more"];
-    pub const NC: usize = WK_BASE + NWK * 5;
+    /// walk Chebyshev LPs by outcome (0 empty at radius 1e-9, 1 nonempty); fields: calls, cold pivots, cold ns, shifted-start calls, shifted pivots,
+    /// shifted ns, phase-1 pivots, phase-1 ns
+    pub const EO_BASE: usize = WK_BASE + NWK * 5;
+    pub const NC: usize = EO_BASE + 16;
+    pub fn bump_slot(i: usize, n: u64) {
+        MINE.with(|m| m.lock().unwrap().counters[i] += n);
+    }
 
     #[derive(Clone, Debug)]
     pub struct Stats {

@@ -598,6 +598,21 @@ fn highdim_tables(rows: &[Row], skipped: &[(String, String)]) {
             pct(c(r, Counter::P1Same), c(r, Counter::P1Calls))
         );
     }
+    println!("\n### High-dimension 3q: walk Chebyshev LPs by outcome, cold against shifted start from the parent point and against the phase-1 feasibility LP\n");
+    println!("| problem | outcome | LPs | share of LPs | share of LP time | cold pivots/LP | cold us/LP | shifted pivots/LP | shifted us/LP | phase-1 pivots/LP | phase-1 us/LP |");
+    println!("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::ChebRows) > 0.0) {
+        let g = |o: usize, f: usize| r.s.counters[census::EO_BASE + o * 8 + f] as f64;
+        let (tc, tt) = (g(0, 0) + g(1, 0), g(0, 2) + g(1, 2));
+        for (o, nm) in [(0usize, "empty"), (1, "nonempty")] {
+            let n = g(o, 0).max(1.0);
+            let sn = g(o, 3).max(1.0);
+            println!(
+                "| {} | {} | {} | {} | {} | {:.1} | {:.1} | {:.1} | {:.1} | {:.1} | {:.1} |",
+                r.problem, nm, g(o, 0), pct(g(o, 0), tc), pct(g(o, 2), tt), g(o, 1) / n, g(o, 2) / n / 1e3, g(o, 4) / sn, g(o, 5) / sn / 1e3, g(o, 6) / n, g(o, 7) / n / 1e3
+            );
+        }
+    }
     println!("\n### High-dimension 3p: region-box prefilter on the pieces that reach the DAQP / LP stage, exact row redundancy, repeated hyperplanes, DAQP cost split\n");
     println!("| problem | tests | box proves empty | of those: DAQP empty / LP empty / LP nonempty (must be 0) | rows/piece | rows redundant over the box | cut rows/piece | redundant cut rows | non-redundant rows (exact, sample of walk LPs) | walks | walks on a hyperplane walked before | from the other side | share of walk time in repeats | DAQP tests | build us | solve us | certificate us |");
     println!("|---|---:|---:|---|---:|---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|");

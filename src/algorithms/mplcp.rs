@@ -804,21 +804,30 @@ fn cheb_probe(ef: &Mat, ff: &[f64], parent_rows: usize, pt: Option<&[f64]>, d1: 
         crate::census::bump(C::LpNlCalls, 1);
         crate::census::bump(C::LpNlNs, lp_ns);
         crate::census::bump(C::LpNlPiv, cold_piv);
-        // phase 1 only: feasibility of the rows shifted by 1e-9 ||a|| (radius above 1e-9)
-        let ffs: Vec<f64> = (0..ef.rows).map(|i| ff[i] - 1e-9 * ef.row(i).iter().map(|v| v * v).sum::<f64>().sqrt()).collect();
-        let t = std::time::Instant::now();
-        let p0 = crate::census::piv_get();
-        let feas = {
-            crate::census_purpose!(Other);
-            crate::solver::lp::lp_feasible_point(ef, &ffs, &[], None).is_some()
-        };
-        crate::census::bump(C::P1Calls, 1);
-        crate::census::bump(C::P1Pivots, crate::census::piv_get() - p0);
-        crate::census::bump(C::P1Ns, t.elapsed().as_nanos() as u64);
-        if cold_x.as_ref().map_or(false, |x| x[d1] > 1e-9) == feas {
-            crate::census::bump(C::P1Same, 1);
-        }
     }
+    let ne = cold_x.as_ref().map_or(false, |x| x[d1] > 1e-9) as usize;
+    let eo = crate::census::EO_BASE + ne * 8;
+    crate::census::bump_slot(eo, 1);
+    crate::census::bump_slot(eo + 1, cold_piv);
+    crate::census::bump_slot(eo + 2, lp_ns);
+    // phase 1 only: feasibility of the rows shifted by 1e-9 ||a|| (radius above 1e-9)
+    let ffs: Vec<f64> = (0..ef.rows).map(|i| ff[i] - 1e-9 * ef.row(i).iter().map(|v| v * v).sum::<f64>().sqrt()).collect();
+    let t = std::time::Instant::now();
+    let p0 = crate::census::piv_get();
+    let feas = {
+        crate::census_purpose!(Other);
+        crate::solver::lp::lp_feasible_point(ef, &ffs, &[], None).is_some()
+    };
+    crate::census::bump(C::P1Calls, 1);
+    crate::census::bump(C::P1Pivots, crate::census::piv_get() - p0);
+    let p1_ns = t.elapsed().as_nanos() as u64;
+    crate::census::bump(C::P1Ns, p1_ns);
+    let p1_piv = crate::census::piv_get() - p0;
+    if cold_x.as_ref().map_or(false, |x| x[d1] > 1e-9) == feas {
+        crate::census::bump(C::P1Same, 1);
+    }
+    crate::census::bump_slot(eo + 6, p1_piv);
+    crate::census::bump_slot(eo + 7, p1_ns);
     // exact redundancy of the rows of the piece, on every 8th LP
     thread_local! {
         static RED_N: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
@@ -886,7 +895,14 @@ fn cheb_probe(ef: &Mat, ff: &[f64], parent_rows: usize, pt: Option<&[f64]>, d1: 
     let np = crate::census::piv_get() - p0;
     crate::census::bump(C::ChebShiftCalls, 1);
     crate::census::bump(C::ChebShiftPivots, np);
-    crate::census::bump(C::ChebShiftNs, t.elapsed().as_nanos() as u64);
+    let sh_ns = t.elapsed().as_nanos() as u64;
+    crate::census::bump(C::ChebShiftNs, sh_ns);
+    {
+        let eo = crate::census::EO_BASE + (cold_x.as_ref().map_or(false, |x| x[d1] > 1e-9) as usize) * 8;
+        crate::census::bump_slot(eo + 3, 1);
+        crate::census::bump_slot(eo + 4, np);
+        crate::census::bump_slot(eo + 5, sh_ns);
+    }
     // same decision: both nonempty at the 1e-9 radius or both not, and for nonempty pieces the radius within 1e-6 relative
     let dc = cold_x.as_ref().map_or(false, |x| x[d1] > 1e-9);
     let ds = sol.as_ref().map_or(false, |x| x.x[d1] > 1e-9);
