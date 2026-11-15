@@ -205,3 +205,22 @@ An attempt to raise the foot hit rate with up to 8 alternating projections insid
 but was not faster (4.68 against 4.46 s on the laptop) and was reverted. The gap (0.3 s of 8.4 s) would close if the facet LPs cost 15% less; no exact
 change in `mplp_lex` alone does that. The remaining options are the ones named before: a facet interior point from the builder (which
 already finds one for many rows while testing redundancy), or a warm-started facet LP.
+
+## Round 6: warm-starting the facet LP from a point on the facet (measured upper bound, not implemented)
+
+Idea: the builder's per-row redundancy LP returns a point on each facet it decides by an LP; hand it to `mplp_lex` as the start of the facet
+Chebyshev LP. Before touching the shared builder and `CriticalRegion` (and its serialisation), the best case was measured: on
+randlp_t10_x6_m50_s0 (laptop, gate profile, walk), for each of the 190,628 facets that need an LP, a vertex of the facet was computed (random
+objective over the facet polytope, untimed) and the facet Chebyshev LP was solved cold and with `lp_point_from` starting at (vertex, r = 0):
+
+| facet Chebyshev LP | total time | per LP |
+|---|---:|---:|
+| cold (`lp_point`) | 969 ms | 5.1 us |
+| warm from a facet vertex | 827 ms | 4.3 us |
+
+Same optimum on all 190,628. The saving is 15% of the facet-LP time, 0.14 s of a 4.5 s walk (3%), against a gap to `combinatorial_graph` of 6%.
+A builder LP returns a vertex of the facet (a lower-dimensional face), so it cannot pass the relative-interior margin test either, and it exists
+only for the rows the builder decides by an LP (the others are decided by the box, a bounding-box vertex or the projection of the center,
+which is the foot already used here). So the export cannot win this problem and was not implemented; no code changed.
+The facet LPs are 1.97 s of 8.7 s with the census overhead; their cold cost per LP is already small (the 202,733 LPs average 9.7 us with the census
+clock reads, 5.1 us without), so the walk is near the floor of its facet-by-facet design on this problem.
