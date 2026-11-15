@@ -54,6 +54,9 @@ const FAT: f64 = 1e-4;
 /// Break-even of the direct crossing: attempt while  s > DIRECT_S0 + DIRECT_Q q  (see the loop).
 const DIRECT_S0: f64 = 0.17;
 const DIRECT_Q: f64 = 1.8;
+/// Fewer parameters: the facet LP is so small that the pivot and the checks cost as much (measured: 11 to 40% slower on the
+/// 2 to 4 parameter problems of `bench/problems_lp`, 5 to 12% faster at 5 or more parameters on random mpLPs).
+const DIRECT_MIN_NT: usize = 5;
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -518,7 +521,8 @@ pub fn solve(program: &MpProgram, seed: u64) -> Result<Vec<CriticalRegion>, Stri
     regions.push(cr0);
     queue.push_back((0, basis0));
     let h_zero = program.h.data.iter().all(|v| *v == 0.0);
-    let (mut s_avg, mut q_avg, mut probe) = (1.0f64, 0.0f64, 0usize);
+    let (mut s_avg, mut q_avg) = (1.0f64, 0.0f64);
+    let (mut n_reg, mut probe_gap, mut next_probe) = (0usize, 4usize, 0usize);
     let mut parent = Work { b: vec![], binv: vec![], t: vec![] };
     let mut wk = parent.clone();
     while let Some((ri, basis)) = queue.pop_front() {
@@ -533,7 +537,20 @@ pub fn solve(program: &MpProgram, seed: u64) -> Result<Vec<CriticalRegion>, Stri
         };
         let mut centre: Option<Option<Vec<f64>>> = None;
         let mut all_rows: Option<(Mat, Vec<f64>)> = None;
-        let (dctx, dctx_rows, zset) = if h_zero && regions[ri].cheb_radius.is_some_and(|r| r > FAT) { region_context(&lex, program, &regions[ri], &basis) } else { (false, vec![], vec![]) };
+        // Direct crossing is tried in a region when the running success rates say it pays (see below), and in a
+        // probe region otherwise; each lost probe doubles the wait for the next (at most 256 regions).
+        let gate_open = s_avg > DIRECT_S0 + DIRECT_Q * q_avg;
+        let probing = !gate_open && n_reg >= next_probe;
+        let try_region = h_zero && nt >= DIRECT_MIN_NT && regions[ri].cheb_radius.is_some_and(|r| r > FAT) && (gate_open || probing || n_reg < 8);
+        if try_region && probing {
+            probe_gap = (probe_gap * 2).min(256);
+            next_probe = n_reg + probe_gap;
+        }
+        if gate_open {
+            probe_gap = 4;
+        }
+        n_reg += 1;
+        let (dctx, dctx_rows, zset) = if try_region { region_context(&lex, program, &regions[ri], &basis) } else { (false, vec![], vec![]) };
         for k in 0..facets.len() {
             let (nk, fk) = (&facets[k].0, facets[k].1);
             // facet on the boundary of Θ
@@ -547,12 +564,11 @@ pub fn solve(program: &MpProgram, seed: u64) -> Result<Vec<CriticalRegion>, Stri
             // Attempts pay off while their success rate s beats their cost: an attempt costs about 0.17 of the
             // LP it saves, a failure after a fresh region build (rate q) about 1.8 of it (measured on the 6 to 12
             // parameter mpLPs, see bench/results/mplp_lex_enumeration.md). s and q are running averages over the
-            // last attempts; every 16th facet is attempted regardless so that they keep tracking.
+            // last attempts of the regions where it is tried.
             let mut attempted = false;
             let mut expensive_fail = false;
-            probe = probe.wrapping_add(1);
             let mut direct = match (&dctx, direct_row(&dctx_rows, nk, fk)) {
-                (true, Some(j)) if s_avg > DIRECT_S0 + DIRECT_Q * q_avg || probe % 16 == 0 => {
+                (true, Some(j)) => {
                     attempted = true;
                     direct_cross(&lex, &parent, &mut wk, &mut sc, program, &zset, &basis, j, nk)
                 }
