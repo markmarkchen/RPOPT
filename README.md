@@ -154,7 +154,7 @@ function. Every exact method returns the same set of critical regions as PPOPT o
 | `combinatorial_graph`, `combinatorial_graph_parallel` | Arnström, Axehill 2024, as simplified in PPOPT | PPOPT | breadth-first visit order |
 | `parametric_daqp` | Arnström, Axehill 2024, as published | paper | least-distance transformation and DAQP subproblems; 1.5x to 2.9x faster than the authors' `pdaqp` |
 | `ahmadi` | Ahmadi-Moshkenani, Johansen, Olaru 2018 | paper | handles LICQ and strict-complementarity violations (PPOPT ships an empty stub) |
-| `mplcp`, `mplcp_parallel` | Jones, Morari 2006, mp-LCP pivoting | paper | the fastest serial mpQP solver on the benchmark; lexicographic perturbation: no gaps or overlaps at degenerate vertices; mpLPs are routed to `mplp_lex`; the neighbour search on the facet a region was entered through by a single pivot is skipped (it can only return the parent; about 2% faster serial, same regions; measured on Negishi, median ratio 1.02 to 1.03 against an A/A noise band of 0.99 to 1.01 on the larger problems, see `bench/results/negishi_entry_skip_ab.md`; no resolvable gain at 16 threads); each region's law is read from the pivot tableau instead of a fresh KKT solve (same regions; coefficients agree with the KKT solve to about 6e-9 relative, so not bit-identical; `mplcp::set_tableau_law(false)` restores the KKT solve); child tableaux are pivoted lazily when popped (a shared parent, no time change, 4% to 29% less peak memory on 3 to 8 parameter problems) and rebuilt from scratch every 32 levels instead of 8 (the pivot drift does not grow with depth; 1% to 6% faster serial on sys3x2_N3 to N7 and masses2_N8, same active sets and order, facet rows within 2e-12 except 1.6e-8 on pop_005; measured on Negishi against an A/A band of 0.98 to 1.00, see `bench/results/mplcp_tableau_handling.md`); the region build no longer repeats the KKT rows and the Chebyshev LP when it falls back to the LP path, and uses vertex clipping only up to 5 parameters (6 parameters: 1.6x to 21x faster, 7 to 10 parameters: 1.01x to 1.04x, 3 to 5 parameters: 1.01x to 1.06x, see `bench/results/mplcp_build_speed.md`) |
+| `mplcp`, `mplcp_parallel` | Jones, Morari 2006, mp-LCP pivoting | paper | the fastest serial mpQP solver on the benchmark; lexicographic perturbation: no gaps or overlaps at degenerate vertices (the Case-2 sign test is scale-free since the pop_001 twin-row fix, so no end filter is needed: 0 lexico-infeasible regions on 135 problems; serial 1.04x faster, 1.45x to 1.58x on the two largest degenerate cases, `bench/results/mplcp_case2_tolerance.md`); mpLPs are routed to `mplp_lex`; the neighbour search on the facet a region was entered through by a single pivot is skipped (it can only return the parent; about 2% faster serial, same regions; measured on Negishi, median ratio 1.02 to 1.03 against an A/A noise band of 0.99 to 1.01 on the larger problems, see `bench/results/negishi_entry_skip_ab.md`; no resolvable gain at 16 threads); a facet certificate (a facet whose Case-2 neighbour search would only return a known region is skipped when a known region has the opposite row on the same hyperplane and contains the facet, checked on the facet's clip vertices, 3 to 5 parameters only; 11% to 41% of the Case-2 facets skipped, 1.05x to 1.15x faster serial on `masses2_N4` to `N8` and `pop_006`, `bench/results/mplcp_facet_certificate.md`) is implemented but **off by default** (`mplcp::set_certificate(1)`, or `RPOPT_CERT=1` in the examples): at 6 parameters it lost a real region on `masses3_N4`, and the stray overlapping regions of `pop_005`, `pop_007` and `pop_011` could pass as the known neighbour, so it stays off until that is understood; each region's law is read from the pivot tableau instead of a fresh KKT solve (same regions; coefficients agree with the KKT solve to about 6e-9 relative, so not bit-identical; `mplcp::set_tableau_law(false)` restores the KKT solve); child tableaux are pivoted lazily when popped (a shared parent, no time change, 4% to 29% less peak memory on 3 to 8 parameter problems) and rebuilt from scratch every 32 levels instead of 8 (the pivot drift does not grow with depth; 1% to 6% faster serial on sys3x2_N3 to N7 and masses2_N8, same active sets and order, facet rows within 2e-12 except 1.6e-8 on pop_005; measured on Negishi against an A/A band of 0.98 to 1.00, see `bench/results/mplcp_tableau_handling.md`); the region build no longer repeats the KKT rows and the Chebyshev LP when it falls back to the LP path, and uses vertex clipping only up to 5 parameters (6 parameters: 1.6x to 21x faster, 7 to 10 parameters: 1.01x to 1.04x, 3 to 5 parameters: 1.01x to 1.06x, see `bench/results/mplcp_build_speed.md`) |
 | `mplcp_enum` | Herceg, Jones, Kvasnica, Morari 2015 | paper | basis enumeration for general M (mpQP and mpLP); exponential |
 | `mplp_lex` | Jones, Kerrigan, Maciejowski 2007 | paper | lexicographic mpLP: unique, gap- and overlap-free partition for degenerate mpLPs; the fastest mpLP solver on the benchmark and 3x to 30x faster than `graph` at 5 to 12 parameters; `combinatorial` is 1.2x to 1.7x faster on three problems with 48 to 2,048 regions at 8 to 12 parameters (`bench/results/mplp_lex_highdim.md`); the facet interior point comes from the region center's foot on the facet plane, with the facet LP as fallback (4 to 18% faster, same regions) |
 | `algorithms::dp::solve_mpc_dp` | Mitze, Mönnigmann 2020, 2022; Mitze, Kvasnica, Mönnigmann 2023 | paper | active-set dynamic programming over the MPC horizon; takes the MPC model (`mpc::MpcProblem`) |
@@ -439,7 +439,8 @@ time of `graph` (119 problems solved).
   instead of dropping neighbours). The known-region skip of Case-2 facets is safe when the known region is
   lexico-feasible. Open: KKT necessity, Case-2 completeness (a Lemke-type termination statement), and the
   facet-graph connectivity behind coverage. Tolerances and floating point are not modelled. The model traced the
-  pop_001 overlap to absolute tolerances in the Case-2 sign test of `pivot_facet`; the fix is in progress.
+  pop_001 overlap to absolute tolerances in the Case-2 sign test of `pivot_facet`; that is fixed (see "Bugs found
+  and fixed" below and `bench/results/mplcp_case2_tolerance.md`).
 
 ## How it is fast
 
@@ -519,7 +520,8 @@ Bugs found and fixed while porting:
   active, for example rows 4 and 23 of `pop_001`), because a basis with an identically vanishing multiplier or slack
   is lexico-infeasible and the fallback start (and, in `pop_001`, a facet pivot) can land on one. `mplcp` now
   replaces a lexico-infeasible start by the lexicographic Lemke basis at the start region's Chebyshev center
-  (`lex_feasible_start`) and drops lexico-infeasible regions at the end (`drop_lex_infeasible`).
+  (`lex_feasible_start`). A lexico-infeasible region found by a facet pivot was first dropped by an end filter
+  (`drop_lex_infeasible`); the filter is gone since the Case-2 fix below.
 - **No start region above 15 parameters.** On `masses8_N2` (16 parameters, `bench/problems_highdim`) every solver
   that walks from a start region (`mplcp`, `graph`, `geometric`, `combinatorial_graph`, `parametric_daqp`) returned no
   regions; only the enumeration solvers found the 394. There were two causes:
@@ -530,6 +532,17 @@ Bugs found and fixed while porting:
 
   That one LP now falls back to Clarabel, and the samplers fall back to the centre and to points in the Chebyshev
   ball. Both run only where the old code found nothing, so problems that already worked are unchanged.
+- **Case-2 sign test of `mplcp` (`pivot_facet`).** The lexico-inequality Γ = a_l row_j − a_j row_l scales with
+  a_l a_j, which is 1e-20 for rows with a near the pivot tolerance 1e-10, so the absolute zero tolerance read both
+  twins (rows 4 and 23 of `pop_001`) as "zero, so nonnegative" and accepted both. The test now uses the scale-free
+  row_j/a_j − row_l/a_l with tolerances relative to its largest entry, and `in_z` uses the same relative tolerance
+  as the zero-row test of `adjacent` (it could differ, which sent Case 2 a finite step off the facet). With the end
+  filter removed `pop_001` gives 3529 regions (main 3535: six were twins of existing regions), 0 lexico-infeasible
+  regions on 135 problems, and the serial solve is 1.04x faster in the median (1.45x on `masses3_N4`, 1.58x on
+  `pop_001`). The `depth > 6` guard is unchanged and still fires on `pop_005`, `masses4_N3`, `masses3_N4`,
+  `masses5_N2` and `masses3_N3`. Open and not caused by this change: a stray overlapping region on `pop_005`,
+  `pop_007` and `pop_011` (also on main), and 2 regions on `pop_081` (also on main). Details:
+  `bench/results/mplcp_case2_tolerance.md`.
 - **Dense LP on larger problems.** It reported false infeasibility (from 48 variables up) because the anti-cycling
   rule switched on too early. This is fixed: decisions now match Clarabel up to 192 variables.
 - **Parameter bounding box.** When constraint processing drops parameter bounds as redundant, the box now falls

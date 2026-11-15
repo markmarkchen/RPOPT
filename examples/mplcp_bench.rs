@@ -21,6 +21,10 @@ fn main() {
     let threads: Vec<usize> = args[1].split(',').filter(|s| !s.is_empty()).map(|s| s.parse().unwrap()).collect();
     let reps: usize = args[2].parse().unwrap();
     let geo = std::env::var("NOGEO").is_err();
+    // RPOPT_CERT=0|1|2|3|4: mplcp facet certificate off (default), on (3 to 5 parameters), audit, on at 2 to 6, audit at 2 to 6
+    if let Ok(m) = std::env::var("RPOPT_CERT") {
+        rpopt::algorithms::mplcp::set_certificate(m.parse().unwrap());
+    }
     for path in &args[3..] {
         let p = std::path::Path::new(path);
         let name = p.file_stem().unwrap().to_string_lossy().to_string();
