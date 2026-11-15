@@ -395,6 +395,14 @@ time of `graph`. Those runs come from a shared, busy machine.
   documentation example.
 - **LP solver:** the LP changes were checked against 904,241 captured LPs, with zero changes in feasibility
   decisions.
+- **Formal verification:** [`verification/lean/`](verification/lean/README.md) has Lean 4 and Mathlib proofs (no
+  `sorry`, standard axioms only) of the exact-arithmetic mathematics behind `mplcp` and `mplp_lex`. They show
+  that a pLCP solution gives the unique mp-QP optimizer, that each region's tableau law is optimal on its region
+  and equals the KKT-solve law, that pivots and the Case-1 facet step are correct, that lexico-feasible bases
+  never overlap (both solvers), and that the entry-facet skip is safe when the parent region is lexico-feasible.
+  Open: KKT necessity, the Case-2 degenerate-facet step, and the facet-graph connectivity behind coverage.
+  Tolerances and floating point are not modelled. The model traced the pop_001 overlap to absolute tolerances in
+  the Case-2 sign test of `pivot_facet`; the fix is in progress.
 
 ## How it is fast
 
@@ -523,6 +531,7 @@ bench/                  problem generators (problems: mpQP MPC, problems_lp: mpL
 python/                 rpopt-py, the PPOPT-compatible Python bindings
 docs/                   technical-report (algorithms, speed techniques, benchmarks, results) and
                         mplcp-report (why pLCP pivoting is fast, and why recent surveys omit it)
+verification/lean/      Lean 4 proofs of the mplcp and mplp_lex mathematics (status table in its README)
 ```
 
 </details>
