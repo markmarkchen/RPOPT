@@ -466,6 +466,12 @@ Bugs found and fixed while porting:
   (`pop_001`, `pop_019`, `pop_031`, `pop_052`, `pop_071`) because the sampled start active set had linearly
   dependent rows (duplicate bounds binding together), so it had no multiplier law. The start now requires full row
   rank and falls back to a canonical basis (`degenerate_start`, now also used by `mplcp`).
+- **Overlapping regions from `mplcp` on degenerate programs.** After that fix `mplcp` returned the same parameter
+  set twice on `pop_001`, `pop_019` and `pop_031` (index sets that differ in which of several dependent rows is
+  active, for example rows 4 and 23 of `pop_001`), because a basis with an identically vanishing multiplier or slack
+  is lexico-infeasible and the fallback start (and, in `pop_001`, a facet pivot) can land on one. `mplcp` now
+  replaces a lexico-infeasible start by the lexicographic Lemke basis at the start region's Chebyshev center
+  (`lex_feasible_start`) and drops lexico-infeasible regions at the end (`drop_lex_infeasible`).
 - **Dense LP on larger problems.** It reported false infeasibility (from 48 variables up) because the anti-cycling
   rule switched on too early. This is fixed: decisions now match Clarabel up to 192 variables.
 - **Parameter bounding box.** When constraint processing drops parameter bounds as redundant, the box now falls
