@@ -540,9 +540,22 @@ Bugs found and fixed while porting:
   filter removed `pop_001` gives 3529 regions (main 3535: six were twins of existing regions), 0 lexico-infeasible
   regions on 135 problems, and the serial solve is 1.04x faster in the median (1.45x on `masses3_N4`, 1.58x on
   `pop_001`). The `depth > 6` guard is unchanged and still fires on `pop_005`, `masses4_N3`, `masses3_N4`,
-  `masses5_N2` and `masses3_N3`. Open and not caused by this change: a stray overlapping region on `pop_005`,
-  `pop_007` and `pop_011` (also on main), and 2 regions on `pop_081` (also on main). Details:
+  `masses5_N2` and `masses3_N3`. Two more defects of `mplcp` that were also on main, found with the same tools, are described next. Details:
   `bench/results/mplcp_case2_tolerance.md`.
+- **`mplcp` lost regions when the Case-2 walk met a dependent pair (`pop_081`).** `pivot_facet` returned when no row
+  decreased in the entering variable before testing "α rises, so the entering variable replaces α", which is the
+  neighbour. With parallel duplicate rows (pop_081: one variable) two of four regions were never found and 3070 of
+  4000 feasible samples lay in no region. The test now comes first; pop_081 returns 4 regions and covers all samples.
+- **Stray overlapping regions from singular bases (`pop_005`, `pop_007`, `pop_011`).** The Case-2 walk pivoted on a
+  candidate row with a = 1.6e-10 in a row of magnitude 4e3 (rounding noise above the absolute pivot tolerance) and
+  returned a basis with two parallel rows active, whose tableau law (multipliers of 1e13) gave a region of radius
+  0.6 that overlapped the true regions (up to 3% of the feasible parameters inside two regions). A candidate region is
+  now rejected when its own law does not make its active constraints tight (relative residual above 1e-3; legitimate
+  regions stay below 2e-5, strays are above 0.1). A relative pivot tolerance was tried instead and rejected: it
+  also drops real regions of radius 1e-8 to 1e-6. On 135 problems: samples inside two regions 212 to 0, samples in no
+  region 3070 to 0, lexico-infeasible regions 0. With the strays gone the facet certificate (mode 3, 2 to 6
+  parameters) returns the same regions as without it on 27 standard and census problems.
+  `bench/results/mplcp_stray_regions.md`.
 - **Dense LP on larger problems.** It reported false infeasibility (from 48 variables up) because the anti-cycling
   rule switched on too early. This is fixed: decisions now match Clarabel up to 192 variables.
 - **Parameter bounding box.** When constraint processing drops parameter bounds as redundant, the box now falls
