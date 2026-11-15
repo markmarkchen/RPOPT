@@ -53,6 +53,8 @@ struct Plcp {
 }
 
 /// Rows of [M | q | R] that are a positive multiple of another row (within 1e-9 of the row's largest entry).
+#[cold]
+#[inline(never)]
 fn twin_rows(n: usize, nt: usize, m: &[f64], q: &[f64], r: &[f64]) -> Vec<bool> {
     let w = n + 1 + nt;
     let row = |i: usize| -> Vec<f64> {
@@ -2101,21 +2103,7 @@ impl TabSrc {
                 }
                 Err(a) => a.pivoted(v, kk),
             }),
-            TabSrc::None => {
-                let z = z_of(plcp, cr);
-                let mut t = tableau_for(plcp, &z);
-                match t.as_mut() {
-                    None => {
-                        crate::census_bump!(ResolveNone, 1);
-                    }
-                    Some(tb) => {
-                        let _snapped = snap_noise(plcp, tb, &z);
-                        crate::census_bump!(SnapRebuilds, 1);
-                        crate::census_bump!(SnapEntries, _snapped);
-                    }
-                }
-                t
-            }
+            TabSrc::None => rebuild_dropped(plcp, cr),
         }
     }
 }
@@ -2176,6 +2164,26 @@ fn tableau_of(plcp: &Plcp, cr: &CriticalRegion) -> Option<Tab> {
     tableau_for(plcp, &z_of(plcp, cr))
 }
 
+/// The tableau of a queued child whose tableau was dropped (or of the root), factored from its active set, with the
+/// rounding noise of structural zeros removed (`snap_noise`).
+#[cold]
+#[inline(never)]
+fn rebuild_dropped(plcp: &Plcp, cr: &CriticalRegion) -> Option<Tab> {
+    let z = z_of(plcp, cr);
+    let mut t = tableau_for(plcp, &z);
+    match t.as_mut() {
+        None => {
+            crate::census_bump!(ResolveNone, 1);
+        }
+        Some(tb) => {
+            let _snapped = snap_noise(plcp, tb, &z);
+            crate::census_bump!(SnapRebuilds, 1);
+            crate::census_bump!(SnapEntries, _snapped);
+        }
+    }
+    t
+}
+
 /// The z-basic rows of the region's basis, in the order of its active set.
 fn z_of(plcp: &Plcp, cr: &CriticalRegion) -> Vec<usize> {
     let neq = plcp.eq.len();
@@ -2194,6 +2202,8 @@ impl Tab {
 /// nearest point lies outside the facet gives some other region, which is harmless (it is a region of the solution, or
 /// already seen), but the search is then no longer guaranteed to find every neighbour; that is why every use is counted
 /// in `resolve_fallbacks` instead of being silent.
+#[cold]
+#[inline(never)]
 fn across_fallback(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>>) -> Vec<Cand> {
     let mut cands = vec![];
     let Some(c) = center.cloned().or_else(|| chebyshev_ball(&cur.e, &cur.f, &[]).map(|s| s.x[..cur.e.cols].to_vec())) else { return cands };
@@ -2238,7 +2248,14 @@ const SNAP_REL: f64 = 1e-18;
 /// small against its own row (below `SNAP_REL` of the largest entry of the row) it is set to zero. A real small entry (the
 /// masses problems have slacks of 1e-13 against rows of 1e13) is reproduced by both orders to many digits and is kept.
 /// Returns the number of entries set to zero.
+#[cold]
+#[inline(never)]
 fn snap_noise(plcp: &Plcp, t: &mut Tab, z: &[usize]) -> usize {
+    // twin constraints are the only places with structural zeros that rounding can fill: without them there is nothing to do
+    let twin = plcp.twin.get_or_init(|| twin_rows(plcp.n, plcp.nt, &plcp.m, &plcp.q, &plcp.r));
+    if !twin.iter().any(|&b| b) {
+        return 0;
+    }
     let mut r = z.to_vec();
     r.reverse();
     let Some(mut u) = tableau_for(plcp, &r) else { return 0 };
@@ -2254,10 +2271,6 @@ fn snap_noise(plcp: &Plcp, t: &mut Tab, z: &[usize]) -> usize {
         return 0;
     }
     let (n, nc, w) = (t.n, t.nc, t.w);
-    let twin = plcp.twin.get_or_init(|| twin_rows(plcp.n, plcp.nt, &plcp.m, &plcp.q, &plcp.r));
-    if !twin.iter().any(|&b| b) {
-        return 0;
-    }
     let mut count = 0;
     for i in 0..n {
         let iu = row_of_u[i];
