@@ -530,18 +530,6 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
             // lexico-inequalities (16): Γ_j = a_l row_j - a_j row_l  ⪰ 0 for all j in P. Γ_j scales
             // with a_l a_j (1e-20 for rows with a near PTOL), so the tolerances are applied to the
             // scale-free Γ_j / (a_l a_j) = row_j / a_j - row_l / a_l instead.
-            // a complete leaf basis whose active set is known is dropped by the caller anyway, and so is a branch
-            // cut by the lexicographic tests: both continue with no output, so the cheap Seen lookup goes first
-            let leaf_z = if leaving == alpha { Some(z_after(tab, n, l, e)) } else { None };
-            let leaf_known = match (&leaf_z, fpoly.seen) {
-                (Some(z), Some(seen)) => seen.contains_key(&p.active_set(z.iter().copied())),
-                _ => false,
-            };
-            crate::census_lap!(cm, Seen);
-            if leaf_known {
-                crate::census_bump!(LeafSkip, 1);
-                continue;
-            }
             let mut ok = true;
             cut_rows.clear();
             cut_rhs.clear();
@@ -577,6 +565,18 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
             for (r, &f) in cut_rows.chunks(d1.max(1)).zip(&cut_rhs) {
                 ef.push_row(r);
                 ff.push(f);
+            }
+            // a leaf branch (alpha leaves: the next basis is complementary and the walk returns it)
+            // whose active set is known is dropped by the caller anyway: skip its Chebyshev LP
+            let leaf_z = if leaving == alpha { Some(z_after(tab, n, l, e)) } else { None };
+            let leaf_known = match (&leaf_z, fpoly.seen) {
+                (Some(z), Some(seen)) => seen.contains_key(&p.active_set(z.iter().copied())),
+                _ => false,
+            };
+            crate::census_lap!(cm, Seen);
+            if leaf_known {
+                crate::census_bump!(LeafSkip, 1);
+                continue;
             }
             if leaf_z.is_some() {
                 crate::census_bump!(LeafKept, 1);
