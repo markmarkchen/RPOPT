@@ -1874,6 +1874,45 @@ fn refined_dependency(p: &Plcp, zj: &[usize], c: usize) -> Option<(Vec<f64>, f64
     (mu.iter().all(|v| v.is_finite()) && rho.is_finite()).then_some((mu, rho))
 }
 
+/// Verdict on one multiplier of the dependency a_c = sum_j mu_j a_j, from the original data.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum MuClass {
+    /// nu <= REFINED_ZERO
+    Zero,
+    /// nu >= MU_NONZERO and mu > 0 (the row is in P-)
+    Positive,
+    /// nu >= MU_NONZERO and mu < 0
+    Negative,
+    /// between: the call is left to the walk
+    Band,
+}
+
+/// The multiplier part of the refined rule as one function, shared by the rank-1 enumeration and any other consumer: for the active z rows `zj`
+/// (pLCP indices) and the vanishing slack row `var` (pLCP index), the recomputed multipliers (`refined_dependency`), each as (mu, nu, class) with
+/// nu = |mu| / sqrt(M_cc / M_jj). `None` with equality rows, a singular Gram matrix or a non-finite value. The rank-1 enumeration takes every
+/// multiplier of a call from these values as soon as one tableau entry is not clearly zero or clearly large.
+pub(crate) fn classify_multipliers(p: &Plcp, zj: &[usize], var: usize) -> Option<Vec<(f64, f64, MuClass)>> {
+    let (mu, _) = refined_dependency(p, zj, var)?;
+    let n = p.n;
+    let mcc = p.m[var * n + var].max(1e-300);
+    Some(
+        zj.iter()
+            .zip(&mu)
+            .map(|(&j, &m)| {
+                let nu = m.abs() / (mcc / p.m[j * n + j].max(1e-300)).sqrt();
+                let class = if nu <= REFINED_ZERO {
+                    MuClass::Zero
+                } else if nu >= MU_NONZERO {
+                    if m > 0.0 { MuClass::Positive } else { MuClass::Negative }
+                } else {
+                    MuClass::Band
+                };
+                (m, nu, class)
+            })
+            .collect(),
+    )
+}
+
 /// Is the set of constraints (original indices, no equality rows) linearly dependent, judged on the equilibrated Gram matrix of their
 /// rows? Such an active set violates LICQ and cannot be the active set of a region.
 #[cfg(feature = "lp_census")]
@@ -2083,6 +2122,8 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
             crate::census_bump!(FastDemoted, 1);
         }
         if (tve > PTOL && !demoted) || nonzero_rel {
+            // (a pivot in the undecided band that the dependency residual calls nonzero is mostly rounding in the tableau: the child is factored
+            // from its basis, never pivoted, whatever the size of tve)
             let blocked = zrows.iter().any(|&i| i != v && -(tab.t[i * n + kk] + gam[i] * tve) > PTOL);
             if !blocked {
                 crate::census_bump!(AdjFast, 1);
@@ -2095,7 +2136,7 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
                         return (vec![], None);
                     }
                 }
-                if nonzero_rel {
+                if nonzero_rel || gap_nonzero {
                     // a pivot below PTOL leaves a badly scaled child tableau and an entry hyperplane that
                     // the pivot step cannot be trusted with: hand over the basis only, so the child is
                     // factored from its active set (measured on masses8_N2: keeping the pivoted tableau
