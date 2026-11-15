@@ -247,6 +247,18 @@ theorem pivotSeq_eq_of_isTableau {M : Matrix ι ι ℝ} {r : ι → ℝ} {B : Fi
   obtain ⟨h1, h2⟩ := tableau_unique (pivotSeq_isTableau l h hp) h'
   exact Prod.ext h1 h2
 
+/-- **Rebuilding a child's tableau gives the pivoted one** (the tableau budget of `pivot_solve`:
+over budget, a child is rebuilt from its active set by `tableau_for` instead of pivoting the
+parent's copy). -/
+theorem rebuilt_eq_pivoted {M : Matrix ι ι ℝ} {r : ι → ℝ} {B : Finset ι} {ρ : ι → ℝ}
+    {T : Matrix ι ι ℝ} (h : IsTableau M r B ρ T) {v : ι} (hp : T v v ≠ 0) {l : List ι}
+    (hnd : l.Nodup) (hpl : NonzeroPivots M l) (hl : l.toFinset = toggle B v) :
+    pivotSeq r M l = (pivVec T ρ v v, pivT T v v) := by
+  have h1 := tableauFor_isTableau M r hnd hpl
+  rw [hl] at h1
+  obtain ⟨e1, e2⟩ := tableau_unique h1 (pivot_isTableau h hp)
+  exact Prod.ext e1 e2
+
 end Principal
 
 end Rpopt
