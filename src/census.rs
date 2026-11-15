@@ -435,6 +435,14 @@ mod imp {
         DqBuildNs,
         DqSolveNs,
         DqCertNs,
+        /// rank-1 multiplier rule (scale-free): multipliers the old guard refused that are now members of P-, ones the old guard refused that are
+        /// now zero (noise), multipliers at or below PTOL that are now members, multipliers in the gap (left to the walk), and calls whose
+        /// absolute mismatch refusal is now passed
+        MuAccepted,
+        MuNoiseZero,
+        MuNewPositive,
+        MuGap,
+        MuMismatchFreed,
         /// `tableau_for` refusals (an absolute pivot below 1e-11), and those whose pivot is not small against the
         /// diagonal of M (pivot / M_ii above 1e-6); `resolve` returning no tableau for a region; refusals inside
         /// `candidate_law` (fresh tableau refused, or the one-pivot step below 1e-9)
@@ -519,8 +527,12 @@ mod imp {
     /// walk Chebyshev LPs by outcome (0 empty at radius 1e-9, 1 nonempty); fields: calls, cold pivots, cold ns, shifted-start calls, shifted pivots,
     /// shifted ns, phase-1 pivots, phase-1 ns
     pub const EO_BASE: usize = WK_BASE + NWK * 5;
+    /// rank-1 multiplier census: nu = |mu_j| sqrt(M_jj / M_cc) of every active row with mu_j > PTOL, by decade 10^-k (k = 0..=15, 15 holds
+    /// everything smaller), in four classes: [0] refused by the old guard (mu <= 1e-7 mu_max), [1] not refused, each split by whether the
+    /// reason-5 mismatch test passed (+2 when it failed)
+    pub const NU_BASE: usize = EO_BASE + 16;
     /// build-study slots (see `census_diag`)
-    pub const MD_BASE: usize = EO_BASE + 16;
+    pub const MD_BASE: usize = NU_BASE + 16 * 4;
     pub const NC: usize = MD_BASE + 160;
     pub fn bump_slot(i: usize, n: u64) {
         MINE.with(|m| m.lock().unwrap().counters[i] += n);
