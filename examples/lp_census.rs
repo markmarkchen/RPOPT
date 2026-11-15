@@ -114,7 +114,7 @@ fn main() {
     if let Some(ps) = &problems {
         let al: Vec<String> = algs.clone().unwrap_or_else(|| QP_ALGOS.iter().map(|x| x.to_string()).collect());
         for p in ps {
-            let path = ["bench/problems_large", "bench/problems"].iter().map(|d| format!("{d}/{p}.json")).find(|f| std::path::Path::new(f).exists()).unwrap_or_else(|| panic!("no problem {p}"));
+            let path = ["bench/problems_large", "bench/problems_highdim", "bench/problems"].iter().map(|d| format!("{d}/{p}.json")).find(|f| std::path::Path::new(f).exists()).unwrap_or_else(|| panic!("no problem {p}"));
             for a in &al {
                 jobs.push((path.clone(), a.clone()));
             }
