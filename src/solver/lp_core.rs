@@ -8,10 +8,46 @@
 //! the tableau runs when that path cannot verify its answer, and for larger LPs.
 
 use crate::linalg::{dot, Lu, Mat};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 #[path = "lp_rev.rs"]
 mod rev;
+
+/// How the last LP of this thread ended. `None` from an LP call means "no point", which covers a proof of infeasibility and also a solve that gave up
+/// (iteration limit, a Farkas ray that did not verify, a basis that did not pass the check): a caller that treats the second as the first discards a
+/// region or a facet on numerical noise. `last_status` tells them apart.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LpStatus {
+    /// a verified optimum (or feasible point)
+    Optimal,
+    /// infeasibility proved (a verified Farkas ray, or an exact test)
+    Infeasible,
+    /// no verified answer (iteration limit, a Farkas ray that did not verify, a basis that did not pass the check, ...). Every public LP entry point sets
+    /// this on entry, so a path that forgets to record its outcome reads as undecided.
+    Undecided,
+}
+
+thread_local! {
+    static STATUS: Cell<LpStatus> = const { Cell::new(LpStatus::Undecided) };
+}
+
+pub(crate) fn set_status(s: LpStatus) {
+    STATUS.with(|c| c.set(s));
+}
+
+/// The status of the last LP call of this thread: `Optimal` after a result, `Infeasible` after a proof, `Undecided` after a refusal to answer.
+pub fn last_status() -> LpStatus {
+    STATUS.with(|c| c.get())
+}
+
+/// Called by the entry points after the work: a result is `Optimal`; no result keeps the status recorded on the way (`Infeasible` after a proof,
+/// `Undecided` otherwise).
+fn finish<T>(out: Option<T>) -> Option<T> {
+    if out.is_some() {
+        set_status(LpStatus::Optimal);
+    }
+    out
+}
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -452,6 +488,11 @@ pub(crate) fn solve(c: Option<&[f64]>, a: &Mat, b: &[f64], eq: &[usize], want: W
 /// changes the simplex starting point. A feasible or nearly feasible `x0` leaves few violated
 /// rows and so few pivots.
 pub(crate) fn solve_from(c: Option<&[f64]>, a: &Mat, b: &[f64], eq: &[usize], x0: Option<&[f64]>, want: Want) -> Option<Core> {
+    set_status(LpStatus::Undecided);
+    finish(solve_from_inner(c, a, b, eq, x0, want))
+}
+
+fn solve_from_inner(c: Option<&[f64]>, a: &Mat, b: &[f64], eq: &[usize], x0: Option<&[f64]>, want: Want) -> Option<Core> {
     SCRATCH.with(|cell| {
         let mut guard = cell.borrow_mut();
         let s = &mut *guard;
@@ -487,6 +528,11 @@ pub(crate) fn solve_from(c: Option<&[f64]>, a: &Mat, b: &[f64], eq: &[usize], x0
 
 /// `solve_from` with the shifted right hand side `bs = b - A x0` supplied by the caller.
 pub(crate) fn solve_shifted(a: &Mat, bs: &[f64], eq: &[usize], x0: &[f64], want: Want) -> Option<Core> {
+    set_status(LpStatus::Undecided);
+    finish(solve_shifted_inner(a, bs, eq, x0, want))
+}
+
+fn solve_shifted_inner(a: &Mat, bs: &[f64], eq: &[usize], x0: &[f64], want: Want) -> Option<Core> {
     SCRATCH.with(|cell| {
         let mut guard = cell.borrow_mut();
         if !TABLEAU_ONLY.load(Ordering::Relaxed) {
@@ -517,6 +563,7 @@ fn solve_in(s: &mut Scratch, c: Option<&[f64]>, a: &Mat, b: &[f64], eq: &[usize]
     if n == 0 {
         for i in 0..m {
             if b[i] < -1e-9 || (s.is_eq[i] && b[i].abs() > 1e-9) {
+                set_status(LpStatus::Infeasible);
                 return None;
             }
         }
@@ -587,10 +634,12 @@ fn solve_in(s: &mut Scratch, c: Option<&[f64]>, a: &Mat, b: &[f64], eq: &[usize]
     let max_iter = 50 * (n + ncols) + 1000;
 
     if let Outcome::IterLimit = tab.iterate(n + 1, inv1, max_iter, false) {
+        set_status(LpStatus::Undecided);
         return None;
     }
     let infeas: f64 = (0..n).filter(|&r| tab.basis[r] >= nstruct).map(|r| tab.at(r, rhs).abs()).sum();
     if infeas > 1e-9 * c_scale {
+        set_status(LpStatus::Undecided);
         return None; // dual infeasible -> primal unbounded (or infeasible)
     }
     tab.live = n + 1;
@@ -616,13 +665,18 @@ fn solve_in(s: &mut Scratch, c: Option<&[f64]>, a: &Mat, b: &[f64], eq: &[usize]
     let mut verified = false;
     for round in 0..REFACTOR_ROUNDS {
         match tab.iterate(n, inv2, max_iter, true) {
-            Outcome::IterLimit => return None,
+            Outcome::IterLimit => {
+                set_status(LpStatus::Undecided);
+                return None;
+            }
             Outcome::Unbounded(e) => {
-                if data.certificate_holds(&tab, e, y) || round + 1 == REFACTOR_ROUNDS {
-                    return None; // primal infeasible
+                if data.certificate_holds(&tab, e, y) {
+                    set_status(LpStatus::Infeasible);
+                    return None; // primal infeasible, proved by the Farkas ray
                 }
-                if !data.refactor(&mut tab) {
-                    return None;
+                if round + 1 == REFACTOR_ROUNDS || !data.refactor(&mut tab) {
+                    set_status(LpStatus::Undecided);
+                    return None; // the ray did not verify: infeasible is likely but not proved
                 }
             }
             Outcome::Optimal => {
@@ -641,6 +695,7 @@ fn solve_in(s: &mut Scratch, c: Option<&[f64]>, a: &Mat, b: &[f64], eq: &[usize]
         }
     }
     if !verified {
+        set_status(LpStatus::Undecided);
         return None;
     }
     match want {

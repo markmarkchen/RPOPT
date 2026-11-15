@@ -29,6 +29,14 @@ pub fn chebyshev_ball(a: &Mat, b: &[f64], eq: &[usize]) -> Option<LpSolution> {
     Some(LpSolution { x, obj, dual: vec![], slack: vec![], active_set: vec![] })
 }
 
+/// `chebyshev_ball` together with how its LP ended: `(Some(sol), Optimal)` for a verified optimum; `(None, Infeasible)` when the system `A x <= b`
+/// is proved empty; `(None, Undecided)` when the LP gave no verified answer (iteration limit, Farkas ray that did not verify, ...), in which case the
+/// system may well have an interior. A caller that drops a facet, a region or a branch on "no result" should drop it only on `Infeasible`.
+pub fn chebyshev_ball_status(a: &Mat, b: &[f64], eq: &[usize]) -> (Option<LpSolution>, crate::solver::lp::LpStatus) {
+    let r = chebyshev_ball(a, b, eq);
+    (r, crate::solver::lp::last_status())
+}
+
 /// Chebyshev center and radius, convenience wrapper.
 pub fn chebyshev_center(a: &Mat, b: &[f64]) -> Option<(Vec<f64>, f64)> {
     let s = chebyshev_ball(a, b, &[])?;

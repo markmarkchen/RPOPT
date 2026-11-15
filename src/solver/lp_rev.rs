@@ -576,6 +576,7 @@ fn run<const N: usize>(rs: &mut RevScratch, c: Option<&[f64]>, a: &Mat, b: &[f64
         }
         let infeas: f64 = (0..N).filter(|&r| st.kind[r] == K_ART).map(|r| st.beta[r].abs()).sum();
         if infeas > 1e-9 * c_scale {
+            super::set_status(super::LpStatus::Undecided);
             return Rev::Done(None); // dual infeasible -> primal unbounded (or infeasible)
         }
         iterate::<N, false, false>(&mut st, rows, bs, inv, flags, c_scale, max_iter, &mut x_zero)
@@ -587,6 +588,7 @@ fn run<const N: usize>(rs: &mut RevScratch, c: Option<&[f64]>, a: &Mat, b: &[f64
         Out::IterLimit => Rev::Undecided,
         Out::Unbounded { e, oe, u } => {
             if certificate::<N>(&st, rows, bs, flags, e, oe, &u) {
+                super::set_status(super::LpStatus::Infeasible);
                 Rev::Done(None)
             } else {
                 Rev::Undecided

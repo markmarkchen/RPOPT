@@ -24,7 +24,8 @@
 //! original matrix. If a check fails the iterations resume from the clean tableau.
 
 use crate::linalg::{dot, Mat};
-use super::lp_core::{solve, Want};
+use super::lp_core::{set_status, solve, Want};
+pub use super::lp_core::{last_status, LpStatus};
 use super::lp_small::Verdict;
 
 #[derive(Clone, Debug)]
@@ -63,10 +64,17 @@ pub fn solve_lp(c: Option<&[f64]>, a: &Mat, b: &[f64], eq: &[usize]) -> Option<L
 pub fn lp_feasible(a: &Mat, b: &[f64], eq: &[usize]) -> bool {
     LP_CALLS.add(1);
     capture::hook(capture::Call::Feasible, None, a, b, eq, None);
+    set_status(LpStatus::Undecided);
     crate::census_call!(Lp, {
         match small_feasible(a, b, eq) {
-            Verdict::Feasible(_) => return true,
-            Verdict::Infeasible => return false,
+            Verdict::Feasible(_) => {
+                set_status(LpStatus::Optimal);
+                return true;
+            }
+            Verdict::Infeasible => {
+                set_status(LpStatus::Infeasible);
+                return false;
+            }
             Verdict::Undecided => {}
         }
         solve(None, a, b, eq, Want::Feasible).is_some()
@@ -92,6 +100,27 @@ fn small_point(z: &[f64; 4], n: usize, x0: Option<&[f64]>) -> Vec<f64> {
     z
 }
 
+/// Does row `p` of `a x <= b` bind somewhere on the polyhedron (is it a facet and not redundant)? `lp_feasible_from` with the row at equality, but an LP that
+/// gives no verified answer keeps the row (a redundant row costs one empty facet search; a dropped real one loses the regions across it). The number of rows
+/// kept this way is `kept_rows_undecided()`.
+pub fn lp_row_binds(a: &Mat, b: &[f64], p: usize, x0: &[f64]) -> bool {
+    if lp_feasible_from(a, b, &[p], x0) {
+        return true;
+    }
+    if last_status() == LpStatus::Undecided {
+        KEPT_ROWS_UNDECIDED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        return true;
+    }
+    false
+}
+
+static KEPT_ROWS_UNDECIDED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Rows kept as facets because their LP was undecided (process-wide).
+pub fn kept_rows_undecided() -> usize {
+    KEPT_ROWS_UNDECIDED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// `lp_feasible` starting the simplex from `x0` (see `lp_core::solve_from`).
 pub fn lp_feasible_from(a: &Mat, b: &[f64], eq: &[usize], x0: &[f64]) -> bool {
     LP_CALLS.add(1);
@@ -103,6 +132,7 @@ pub fn lp_feasible_from(a: &Mat, b: &[f64], eq: &[usize], x0: &[f64]) -> bool {
 pub fn lp_feasible_point(a: &Mat, b: &[f64], eq: &[usize], x0: Option<&[f64]>) -> Option<Vec<f64>> {
     LP_CALLS.add(1);
     capture::hook(capture::Call::FeasiblePoint, None, a, b, eq, x0);
+    set_status(LpStatus::Undecided);
     crate::census_call!(Lp, {
         if eq.is_empty() && a.cols <= 4 {
             let shifted;
@@ -114,8 +144,14 @@ pub fn lp_feasible_point(a: &Mat, b: &[f64], eq: &[usize], x0: Option<&[f64]>) -
                 None => b,
             };
             match small_feasible(a, bb, eq) {
-                Verdict::Feasible(z) => return Some(small_point(&z, a.cols, x0)),
-                Verdict::Infeasible => return None,
+                Verdict::Feasible(z) => {
+                    set_status(LpStatus::Optimal);
+                    return Some(small_point(&z, a.cols, x0));
+                }
+                Verdict::Infeasible => {
+                    set_status(LpStatus::Infeasible);
+                    return None;
+                }
                 Verdict::Undecided => {}
             }
         }
@@ -128,11 +164,18 @@ pub fn lp_feasible_point(a: &Mat, b: &[f64], eq: &[usize], x0: Option<&[f64]>) -
 pub fn lp_feasible_point_shifted(a: &Mat, bs: &[f64], eq: &[usize], x0: &[f64]) -> Option<Vec<f64>> {
     LP_CALLS.add(1);
     capture::hook(capture::Call::FeasiblePointShifted, None, a, bs, eq, Some(x0));
+    set_status(LpStatus::Undecided);
     crate::census_call!(Lp, {
         if eq.is_empty() && a.cols <= 4 {
             return match super::lp_small::verdict(a, bs) {
-                Verdict::Feasible(z) => Some(small_point(&z, a.cols, Some(x0))),
-                Verdict::Infeasible => None,
+                Verdict::Feasible(z) => {
+                    set_status(LpStatus::Optimal);
+                    Some(small_point(&z, a.cols, Some(x0)))
+                }
+                Verdict::Infeasible => {
+                    set_status(LpStatus::Infeasible);
+                    None
+                }
                 Verdict::Undecided => super::lp_core::solve_shifted(a, bs, eq, x0, Want::Point).map(|c| c.x),
             };
         }
