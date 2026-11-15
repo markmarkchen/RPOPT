@@ -105,3 +105,51 @@ by the Lean condition on S's vanishing rows (single vanishing row; every other v
 Exactly half of the known Case-1 crossings leave R still queued (the other half are the second visit of the pair), and
 the Lean condition holds on all but one of them. The saving is at most the cost of the queued calls, 0.1% to 1.4% of the
 solve, before the bookkeeping to mark an item and to match the facet by hyperplane at the pop.
+
+## 5. Index-first lookup (naming the neighbour by row index) and the all-swaps test, on the merged pre-check tree
+
+Counters only (scratch build, release profile, Negishi node a017 at load 70 to 75, one census solve each; the plain
+solve time is the same tree without counters, run before it on the same node). A facet from row i of E has the
+neighbour A xor {i}: the row is mapped to its constraint through the region's `lambda_set`, `regular_set` and `omega_set`
+(rows are lambda, regular, omega in that order; the mapping was available on every region of every problem), and a lambda
+row removes the constraint, a regular row adds it, an omega row (parameter-set boundary) has no neighbour.
+
+| problem | plain ms | facets | omega rows (boundary, class none) | A xor {i} a known built region | of those: single vanishing row and Case-1 fast | index-known but not single or not fast | index set equals the toggle set |
+|---|---:|---:|---:|---:|---:|---:|---|
+| rand_t8_x5_m20_s0 | 562 | 86,346 | 21,432 | 25,288 | 25,288 | 0 | 25,288 of 25,288 |
+| rand_t12_x5_m20_s0 | 2458 | 235,103 | 118,289 | 42,240 | 42,240 | 0 | 42,240 of 42,240 |
+| pop_017 | 449 | 55,862 | 3,578 | 18,330 | 18,329 | 1 | 18,347 of 18,347 |
+| masses4_N3 | 1949 | 73,623 | 17,255 | 11,135 | 11,088 | 47 | 13,135 of 13,135 |
+| pop_002 | 72,659 | 3,929,854 | 376,956 | 3,022,287 | 3,019,536 | 2,751 | 3,024,576 of 3,024,576 |
+
+- The index rule agrees with the tableau on every known Case-1 neighbour (0 disagreements, 0 misses, and no Case-1
+  facet whose neighbour was unknown to the tableau but known to the index). The only exceptions are index-known facets
+  that are degenerate (more than one vanishing row, a rank-1 or walk facet): 47, 1, 0, 0 and 2,751 of them (0.4%, 0.01%,
+  0%, 0% and 0.09% of the index-known facets). Skipping those by index alone would drop their neighbours, so an exact
+  skip needs the "single vanishing row" fact. The stored region cannot give it: `remove_duplicate_rows` drops the rows that
+  coincide, so the builder would have to record which rows had duplicates or near-duplicates.
+- Facets settled this way (omega boundary plus index-known single Case-1) and the time the `adjacent` calls spend on them
+  today, as a share of the plain solve (ceiling, before the cost of the index lookups themselves, about 50 ns each):
+  rand_t8 46,720 facets, 24.5 ms, 4.4%; rand_t12 160,529 facets, 91 ms, 3.7%; pop_017 21,907 facets, 14.3 ms, 3.2%;
+  masses4_N3 28,343 facets, 25.4 ms, 1.3%; pop_002 3,396,492 facets, 4,177 ms, 5.7%.
+- Regions whose every facet is settled (their tableau would never be resolved): rand_t8 19, rand_t12 53, pop_017 166,
+  masses4_N3 37 (0.02 to 0.3 ms of resolve in all four), pop_002 133,239 of 321,026 (41%), which spend 3,254 ms of the
+  6,551 ms of tableau resolve time (4.5% of the plain solve).
+  The rank-1 and walk facets keep every other region's tableau needed.
+
+## 6. All swaps A + {c} - {j}, for every j in A, known (no dependency needed)
+
+For each rank-1 facet (class: P- empty, all known, tested) with entering row c, every swap over all inequality indices j in
+A is looked up (known = built or rejected); if all are known, no dependency is needed.
+
+| problem | rank-1 facets | all swaps known | share | `adjacent` time of those facets | share of the plain solve | mean share of swaps known |
+|---|---:|---:|---:|---:|---:|---:|
+| rand_t8_x5_m20_s0 | 36,354 | 807 | 2.2% | 1.2 ms | 0.2% | 0.40 |
+| rand_t12_x5_m20_s0 | 69,133 | 2,562 | 3.7% | 7.2 ms | 0.3% | 0.48 |
+| pop_017 | 30,799 | 9,130 | 30% | 11.9 ms | 2.7% | 0.71 |
+| masses4_N3 | 40,023 | 11,149 | 28% | 22.4 ms | 1.1% | 0.62 |
+| pop_002 | 229,034 | 42,303 | 18% | 131 ms | 0.2% | 0.82 |
+
+The test needs |A| key lookups per facet (20 to 40, about 0.4 to 1.5 us), against 1.2 to 4.3 us for the whole all-known
+rank-1 call, so the net saving is a fraction of the time shown: at most about 2% of the solve on pop_017 and 1% on
+masses4_N3, 0.3% or less elsewhere.
