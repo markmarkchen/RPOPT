@@ -575,6 +575,10 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
                     bcentre = centre.map(|c| c.to_vec());
                     bwit = witness.map(|w| w.to_vec());
                 }
+                if bwit.is_none() && bcentre.is_none() && daqp_certainly_empty(&ef, &ff, d1) {
+                    crate::census_bump!(PfChebEmpty, 1);
+                    continue;
+                }
                 if bwit.is_none() && bcentre.is_none() {
                     crate::census_bump!(PfCheb, 1);
                     let ball = {
@@ -969,6 +973,13 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
             #[cfg(feature = "lp_census")]
             crate::census::tested(&z, false);
             out.push(Nbr::Z(z, Some(to_theta(&pt))));
+            continue;
+        }
+        if daqp_certainly_empty(&e2, &f2, d1) {
+            crate::census_bump!(R1EmptyMember, 1);
+            crate::census_bump!(PfChebEmpty, 1);
+            #[cfg(feature = "lp_census")]
+            crate::census::tested(&z, true);
             continue;
         }
         crate::census_bump!(R1LpRun, 1);
@@ -1388,8 +1399,113 @@ pub fn regions(program: &MpProgram, seed: u64, method: Method) -> Vec<CriticalRe
 /// 0 to 7), so the period only trades a rebuild (about |z| pivots) against nothing. 8 -> 32.
 const REFACTOR: usize = 32;
 
-/// A point this far inside every row of a sub-facet polytope (rows are unit vectors, so it is a distance)
-/// certifies a Chebyshev radius above the LP's 1e-9 acceptance threshold.
+/// Bound on the coordinates of a sub-facet polytope, used to check an infeasibility certificate of DAQP.
+const DAQP_COORD_BOUND: f64 = 1e3;
+
+static DAQP_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// Switches the DAQP emptiness filter of the sub-facet tests (default on); off sends every test to the LP.
+pub fn set_daqp_tests(on: bool) {
+    DAQP_ON.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The filter pays only when most of its calls end in a certified empty (a call that does not costs a DAQP solve and
+/// then the LP as well). Per thread, after each window of `DQ_WINDOW` calls with fewer than `DQ_MIN_SHARE` percent
+/// certified, the next `DQ_PAUSE` tests skip DAQP and go straight to the LP, then it is tried again.
+const DQ_WINDOW: u32 = 512;
+const DQ_MIN_SHARE: u32 = 60;
+const DQ_PAUSE: u32 = 8192;
+
+#[derive(Default)]
+struct DqState {
+    dq: crate::algorithms::pdaqp::daqp::Daqp,
+    cols: Vec<f64>,
+    rhs: Vec<f64>,
+    calls: u32,
+    empties: u32,
+    pause: u32,
+}
+
+thread_local! {
+    static DQ_WS: std::cell::RefCell<DqState> = std::cell::RefCell::new(DqState::default());
+}
+
+/// True when `{x in R^d1 : e x <= f}` is certainly empty: DAQP reports it infeasible and its certificate checks.
+/// DAQP's infeasibility answer alone is not enough, because on nearly parallel rows its null-vector step can claim
+/// infeasibility for a polytope with a ball of radius 1e-6 inside (seen on masses4_N3). A certificate `p >= 0` with
+/// residual `r = sum p_i a_i` and gap `g = sum p_i b_i` proves emptiness when `g + |r|_1 R < 0` for coordinates
+/// bounded by `R`, so only certificates that pass this check are used. Most sub-facet tests of the neighbour search
+/// are empty, and one DAQP solve costs a fraction of the LP; everything not certified goes to the LP unchanged.
+fn daqp_certainly_empty(e: &Mat, f: &[f64], d1: usize) -> bool {
+    use crate::algorithms::pdaqp::daqp::{Rows, Status};
+    if d1 == 0 || e.rows == 0 || !DAQP_ON.load(std::sync::atomic::Ordering::Relaxed) {
+        return false;
+    }
+    #[cfg(feature = "lp_census")]
+    let t0 = std::time::Instant::now();
+    let n = e.rows;
+    let empty = DQ_WS.with(|ws| {
+        let st = &mut *ws.borrow_mut();
+        if st.pause > 0 {
+            st.pause -= 1;
+            return None;
+        }
+        let DqState { dq, cols, rhs, .. } = &mut *st;
+        cols.clear();
+        cols.resize(n * d1, 0.0);
+        rhs.clear();
+        rhs.resize(n, 0.0);
+        for i in 0..n {
+            let row = e.row(i);
+            let nrm = row.iter().map(|v| v * v).sum::<f64>().sqrt();
+            if !(nrm > 1e-12) {
+                return Some(false);
+            }
+            for t in 0..d1 {
+                cols[t * n + i] = row[t] / nrm;
+            }
+            rhs[i] = f[i] / nrm;
+        }
+        let rows = Rows { cols: &cols[..], stride: n, b: &rhs[..], n, dim: d1 };
+        let certified = dq.solve(&rows, 0) == Status::Infeasible && {
+            let (w, p) = dq.certificate();
+            let sp: f64 = p.iter().sum();
+            if !(sp > 0.0) || p.iter().any(|v| !v.is_finite()) {
+                false
+            } else {
+                // a multiplier that came out slightly negative is charged to the residual
+                let neg: f64 = p.iter().map(|&v| (-v).max(0.0)).sum();
+                let gap: f64 = w.iter().zip(p).map(|(&i, &v)| v * rhs[i]).sum();
+                let res: f64 = (0..d1).map(|t| w.iter().zip(p).map(|(&i, &v)| v * cols[t * n + i]).sum::<f64>().abs()).sum();
+                gap + (res + neg) * DAQP_COORD_BOUND < -1e-10 * sp
+            }
+        };
+        st.calls += 1;
+        st.empties += certified as u32;
+        if st.calls == DQ_WINDOW {
+            if st.empties * 100 < DQ_MIN_SHARE * DQ_WINDOW {
+                st.pause = DQ_PAUSE;
+            }
+            st.calls = 0;
+            st.empties = 0;
+        }
+        Some(certified)
+    });
+    #[cfg(feature = "lp_census")]
+    crate::census::bump(crate::census::Counter::DqNanos, t0.elapsed().as_nanos() as u64);
+    match empty {
+        Some(true) => {
+            crate::census_bump!(DqEmpty, 1);
+            true
+        }
+        Some(false) => {
+            crate::census_bump!(DqFallback, 1);
+            false
+        }
+        None => false,
+    }
+}
+
 const WITNESS_MARGIN: f64 = 1e-8;
 
 /// Pivot budget of one facet walk in `pivot_facet`: `WALK_BUDGET_PER_ROW * n` pivots (n = rows of the
@@ -1399,6 +1515,24 @@ const WITNESS_MARGIN: f64 = 1e-8;
 /// `bench/results/mplcp_case2_phase3.md`.
 const WALK_BUDGET_PER_ROW: usize = 2;
 const WALK_BUDGET_MIN: usize = 64;
+
+/// Memory statistics and knobs of the serial exploration: parents whose tableau is shared by queued lazy children,
+/// the peak of that count, and the size of one tableau; `TAB_BUDGET` (bytes, 0 = no limit, default 256 MiB) is the limit on the tableaux of live parents beyond which a parent's children are queued without a
+/// tableau and rebuild it from their active set when popped.
+static LIVE_PARENTS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static PEAK_PARENTS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static TAB_BYTES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static TAB_BUDGET: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(256 << 20);
+
+/// (peak number of live parent tableaux, bytes of one tableau) of the last serial exploration.
+pub fn tab_stats() -> (usize, usize) {
+    (PEAK_PARENTS.load(std::sync::atomic::Ordering::Relaxed), TAB_BYTES.load(std::sync::atomic::Ordering::Relaxed))
+}
+
+/// The byte budget for live parent tableaux (0 = none) of the serial exploration.
+pub fn set_tab_budget(tab_budget: usize) {
+    TAB_BUDGET.store(tab_budget, std::sync::atomic::Ordering::Relaxed);
+}
 
 /// Where a queued region's tableau comes from. `Lazy` is the parent's tableau shared with the
 /// siblings plus the principal pivot (row, column) that turns it into this region's tableau; the
@@ -1422,6 +1556,7 @@ impl TabSrc {
             TabSrc::Ready(t) => Some(t),
             TabSrc::Lazy(a, v, kk) => Some(match std::sync::Arc::try_unwrap(a) {
                 Ok(mut t) => {
+                    LIVE_PARENTS.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
                     t.pivot(v, kk);
                     t
                 }
@@ -2017,7 +2152,11 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
     let mut ws: Option<Tab> = None;
     let mut pending: Vec<(CriticalRegion, Option<Vec<f64>>, Option<(usize, usize)>, Option<Tab>, Option<(Vec<f64>, f64)>, Option<Vec<f64>>)> = vec![];
     let mut wave_limit = 1usize;
-    while let Some(Item { idx, center, tab, depth, entry, verts }) = queue.pop_front() {
+    LIVE_PARENTS.store(0, std::sync::atomic::Ordering::Relaxed);
+    PEAK_PARENTS.store(0, std::sync::atomic::Ordering::Relaxed);
+    let budget = TAB_BUDGET.load(std::sync::atomic::Ordering::Relaxed);
+    loop {
+        let Some(Item { idx, center, tab, depth, entry, verts }) = queue.pop_front() else { break };
         if idx >= wave_limit {
             wave_limit = regions.len();
         }
@@ -2051,10 +2190,19 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
         }
         // the neighbours' tableaux are one pivot away (rebuilt from scratch every REFACTOR levels);
         // each pivot is done when its region is popped, and the last one popped takes over this tableau
+        let tbytes = (tab.t.len() + tab.rho.len()) * 8 + (tab.row_var.len() + tab.col_var.len()) * 8;
+        TAB_BYTES.store(tbytes, std::sync::atomic::Ordering::Relaxed);
+        // beyond the budget for live parent tableaux the children are queued without one and rebuild it when popped
+        let over = budget > 0 && (LIVE_PARENTS.load(std::sync::atomic::Ordering::Relaxed) + 1) * tbytes > budget;
         let tab = std::sync::Arc::new(tab);
+        let mut lazy_children = 0usize;
         for (cr, ce, piv, own, ent, vt) in pending.drain(..) {
             let (src, nd) = match piv {
-                Some((v, kk)) => (TabSrc::Lazy(tab.clone(), v, kk), depth + 1),
+                Some((v, kk)) if !over => {
+                    lazy_children += 1;
+                    (TabSrc::Lazy(tab.clone(), v, kk), depth + 1)
+                }
+                Some(_) => (TabSrc::None, 0),
                 None => (TabSrc::from(own), 0),
             };
             seen.insert(cr.active_set.clone(), Slot::Built(regions.len()));
@@ -2063,6 +2211,10 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
                 known.add(regions.len() - 1, regions.last().unwrap());
             }
             queue.push_back(Item { idx: regions.len() - 1, center: ce, tab: src, depth: nd, entry: ent, verts: vt });
+        }
+        if lazy_children > 0 {
+            let live = LIVE_PARENTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+            PEAK_PARENTS.fetch_max(live, std::sync::atomic::Ordering::Relaxed);
         }
     }
     regions

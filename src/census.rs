@@ -310,8 +310,29 @@ mod imp {
         R1TestRepeat,
         R1TestDistinct,
         R1EmptyRepeat,
+        /// parametric_daqp: active-set tests and their outcomes (LICQ violated / empty / nonempty), ns in the tests and in the region
+        /// builds, DAQP solves (stage 1, stage 2) and their ns, empties decided before any DAQP solve, general-LP fallbacks, ns in the
+        /// LDL' of the Gram block and in forming the rows
+        PdTests,
+        PdLicq,
+        PdEmpty,
+        PdRegion,
+        PdTestNanos,
+        PdBuildNanos,
+        PdDaqp1,
+        PdDaqp2,
+        PdDaqpNanos,
+        PdEarlyEmpty,
+        PdLpFallback,
+        PdLdlNanos,
+        PdSetupNanos,
+        /// mplcp sub-facet emptiness tests answered by DAQP on the relaxed rows (empty) or sent on to the LP,
+        /// and ns spent in the DAQP solves
+        DqEmpty,
+        DqFallback,
+        DqNanos,
     }
-    pub const NC: usize = 127;
+    pub const NC: usize = 143;
 
     #[derive(Clone, Debug)]
     pub struct Stats {
