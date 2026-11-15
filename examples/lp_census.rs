@@ -417,6 +417,18 @@ fn highdim_tables(rows: &[Row], skipped: &[(String, String)]) {
             c(r, Counter::CertNanos) / 1e3 / fe, pct(c(r, Counter::CertNanos), r.solve_s * 1e9)
         );
     }
+    println!("\n### High-dimension 3e: mplcp Case-2 leaf pruning, sub-facet hints and walk limits\n");
+    println!("| problem | regions | LP/region | Chebyshev LPs/region in pivot_facet | leaf branches skipped | leaves kept | leaves with own centre | old hint inside / outside the leaf sub-facet | cycle stops | budget stops | fallbacks found / failed |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---|---:|---:|---|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::AdjCalls) > 0.0) {
+        let n = r.regions.max(1) as f64;
+        let (sk, kp) = (c(r, Counter::LeafSkip), c(r, Counter::LeafKept));
+        println!(
+            "| {} | {} | {:.1} | {:.1} | {} ({}) | {} | {} | {} / {} | {} | {} | {} / {} |",
+            r.problem, r.regions, r.s.lp_calls() as f64 / n, c(r, Counter::PfCheb) / n, sk, pct(sk, sk + kp), kp, c(r, Counter::HintCentre),
+            c(r, Counter::HintInside), c(r, Counter::HintOutside), c(r, Counter::WalkCycle), c(r, Counter::WalkBudget), c(r, Counter::FallbackAcross), c(r, Counter::FallbackFail)
+        );
+    }
     println!("\n### High-dimension 4: vertex clipping (`clip_flags`) outcomes per call\n");
     println!("| problem | algorithm | clip calls/region | ok | nt outside 2..=6 | more than 128 hyperplanes | infinite box | more than 600 vertices | too few vertices | vertex violates a row | redundancy LPs/region |");
     println!("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
