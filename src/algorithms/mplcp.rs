@@ -1084,6 +1084,13 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
             if !blocked {
                 crate::census_bump!(AdjFast, 1);
                 crate::census_bump!(AdjFastNanos, _cen_t.elapsed().as_nanos());
+                if nonzero_rel {
+                    // a pivot below PTOL leaves a badly scaled child tableau and an entry hyperplane that
+                    // the pivot step cannot be trusted with: hand over the basis only, so the child is
+                    // factored from its active set (measured on masses8_N2: keeping the pivoted tableau
+                    // cost 1.5x main, this costs 0.86x)
+                    return (vec![Nbr::Z(z_toggle(tab, n, v), None)], None);
+                }
                 return (vec![Nbr::Toggle(v, kk)], None);
             }
         }
