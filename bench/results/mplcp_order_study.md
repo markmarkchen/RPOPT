@@ -124,3 +124,36 @@ run in shuffled order, 3 alternations per problem, same node per task. Solve ms,
 
 `lexcheck 3000` on the switched variant: overlaps 0 and gaps 0 on all five problems (masses5_N3: 5068 regions).
 Region counts on masses5_N3 differ between builds anyway (5060, 5067, 5084, 5268), all with 0 gaps and 0 overlaps.
+
+## What makes a masses8_N2 walk cost milliseconds (main ddf0aa8, one census solve each, lp_census build)
+"rel" = region reached through a relative-test toggle (basis-only hand-over, tableau rebuilt from the active set).
+Per-call means; "LPs" are all LP calls inside the walk call, at the LP time per call shown. All walk calls were refused
+by reason 6 except where stated. Node a005 load 84 (default) and a007 load 56 (guard off), so ms are indicative.
+
+masses8_N2, default: 399 regions, solve 2588 ms, 764 walk calls, 1343 ms. 148 rel regions take 1273 ms of region
+expansion (8.60 ms each) against 175 ms for the 251 others (0.70 ms each).
+
+| class (rel, finds new regions, completes) | calls | ms | ms/call | pivots | branches | leaves | Chebyshev LPs | LP us | empty | budget hit | Across probes |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| rel, new, budget hit | 15 | 985 | 65.7 | 63.3 | 485 | 17.5 | 404 | 134 | 90% | 100% | 8.9 |
+| rel, new, completes | 8 | 177 | 22.1 | 26.2 | 165 | 5.6 | 144 | 146 | 86% | 0% | 0 |
+| not rel, new, budget hit | 2 | 92 | 46.2 | 67.5 | 442 | 19.0 | 384 | 112 | 91% | 100% | 6.5 |
+| not rel, new, completes | 3 | 9 | 2.9 | 2.7 | 23 | 1.3 | 16 | 68 | n/a | 0% | 0 |
+| rel, no new region | 449 | 58 | 0.13 | 2.0 | 1.0 | 0 | 1.0 | 118 | 10% | 0% | 0 |
+| not rel, no new region | 251 | 20 | 0.08 | 2.0 | 1.0 | 0 | 0.9 | 77 | 0% | 0% | 0 |
+| reasons 5 and 1 | 36 | 2 | 0.05 | 1.5 | 0.5 | 0 | 0.4 | 92 | n/a | 0% | 0 |
+
+- The cost is bimodal. 25 walks that find new regions take 1254 ms (93% of walk time, 48% of the solve), 22 to 66 ms
+  each; the other 739 walks (3 cheap new-region walks and 736 without) cost 0.05 to 0.13 ms each. The mean of 1.8 ms
+  hides those few.
+- A 66 ms walk is 63 pivots (the 2n budget, hit in 17 of the 25), 485 sub-facet branches, 404 Chebyshev LPs at 134 us
+  (82% of the walk) and 90% of those LPs find the sub-facet empty. The Across fallback after the budget costs 0.12 ms
+  per walk and `lex_lemke` 2.2 ms in total, so the fallback is not the cost.
+- 15 of the 17 budget-hit walks and 23 of the 25 expensive walks start in rel regions; the rel regions are where the
+  rank-1 refusal happens (their tableau is rebuilt from the active set, and the recomputed multipliers sit at 1e-10 to 1e-8).
+- masses7_N2 shows the same on a smaller scale: 699 walk calls, 253 ms; the 11 expensive walks are 10 in rel regions (8 completing at
+  11.5 ms, 2 budget-hit at 35 ms) and 1 not rel (budget-hit, 39 ms); 140 rel regions take 229 ms (1.64 ms each) against 101 ms for 253 others.
+
+With `RPOPT_NO_R6=1` (same binary): masses8_N2 36 walk calls (all reasons 5 and 1, 1.8 ms in total), solve 1207 ms
+(0.47x), rel regions 0.26 ms each (38 ms); masses7_N2 28 walk calls (1.2 ms), solve 801 ms against 1072 ms (0.75x),
+rel regions 0.18 ms each. So the guard removes every expensive walk on both problems.
