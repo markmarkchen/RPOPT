@@ -848,6 +848,31 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
     if (0..n).any(|i| i != c && tab.row_var[i] < n && tab.t[i * n + kk].abs() > 1e-8) {
         return None;
     }
+    // Hypotheses of the rank-1 lemma (Lean DependentFacet): row c of the tableau is w_c = rho_c + sum_j mu_j w_j with
+    // no z column, and column kk is -mu_j on the active rows and 0 elsewhere (checked above for the slack rows).
+    // Row c: zero on every nonbasic z column, and mu_j on the nonbasic w_j column of every active row j.
+    for (col, &cv) in tab.col_var.iter().enumerate().take(n) {
+        if cv >= n && cv < 2 * n {
+            if tab.t[c * n + col].abs() > 1e-8 {
+                return None;
+            }
+        }
+    }
+    let zrows_all: Vec<usize> = (0..n).filter(|&i| tab.row_var[i] >= n && tab.row_var[i] < 2 * n).collect();
+    let mu_max = zrows_all.iter().fold(0.0f64, |m, &i| m.max(tab.t[i * n + kk].abs()));
+    for &i in &zrows_all {
+        let mi = -tab.t[i * n + kk];
+        let colw = tab.col_of(tab.row_var[i] - n);
+        if (tab.t[c * n + colw] - mi).abs() > 1e-8 * (1.0 + mi.abs()) {
+            return None;
+        }
+        // a multiplier between the zero tolerance and 1e-7 of the largest one is neither zero nor safely
+        // positive: the columns of A + {c} - {j} could be nearly dependent, the walk decides
+        let m = mi.abs();
+        if m > PTOL && m <= 1e-7 * mu_max.max(1.0) {
+            return None;
+        }
+    }
     let pm: Vec<usize> = (0..n).filter(|&i| tab.row_var[i] >= n && tab.row_var[i] < 2 * n && -tab.t[i * n + kk] > PTOL).collect();
     let mu: Vec<f64> = pm.iter().map(|&i| -tab.t[i * n + kk]).collect();
     if pm.is_empty() {
