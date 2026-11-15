@@ -294,6 +294,10 @@ mod imp {
         /// rank-1 enumeration (Case 2 with one vanishing slack row and a zero pivot): calls it answered, calls it
         /// handed back to the walk, candidates emitted, members dropped as known, sub-facet LPs run, members
         /// accepted by a witness, members whose sub-facet is empty
+        /// fast path taken through the scale-free nonzero pivot (absolute tve <= PTOL), and single-vanishing-slack-row
+        /// calls whose pivot measure lies between the zero and nonzero thresholds (left to the walk)
+        FastRel,
+        PivotGap,
         R1Handled,
         R1Fallback,
         R1Emitted,
@@ -307,7 +311,7 @@ mod imp {
         R1TestDistinct,
         R1EmptyRepeat,
     }
-    pub const NC: usize = 125;
+    pub const NC: usize = 127;
 
     #[derive(Clone, Debug)]
     pub struct Stats {
