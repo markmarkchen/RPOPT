@@ -31,6 +31,10 @@ fn child(path: &str, alg: &str) {
     if let Some(b) = std::env::var("MPLCP_TAB_BUDGET").ok().and_then(|v| v.parse().ok()) {
         rpopt::algorithms::mplcp::set_tab_budget(b);
     }
+    // RPOPT_CLIP_BUDGET=<units>: work budget of mplcp's vertex clip (default 2^18; the profile of main is taken with u64::MAX)
+    if let Some(b) = std::env::var("RPOPT_CLIP_BUDGET").ok().and_then(|v| v.parse().ok()) {
+        rpopt::algorithms::mplcp::set_clip_budget(b);
+    }
     // RPOPT_BOXCHAIN=0: mplcp builds its regions with the shared redundancy step (the build study counters need it)
     if std::env::var("RPOPT_BOXCHAIN").map_or(false, |v| v == "0") {
         rpopt::algorithms::mplcp::set_box_chain(false);
@@ -56,6 +60,8 @@ fn child(path: &str, alg: &str) {
     let mut runs: Vec<(f64, usize, Stats)> = vec![];
     let lap_ns = census::calibrate();
     loop {
+        rpopt::census_diag::conn_reset();
+        rpopt::census_diag::regs_reset();
         census::reset();
         rpopt::algorithms::mplcp::census_reset_local();
         census::set_calib(lap_ns);
@@ -63,16 +69,54 @@ fn child(path: &str, alg: &str) {
         let sol = solve_mpqp_with(&prog, algo, &opts);
         let dt = t0.elapsed().as_secs_f64();
         runs.push((dt, sol.critical_regions.len(), census::snapshot()));
-        if dt > 5.0 || runs.len() == 3 {
+        if dt > 5.0 || runs.len() == 3 || std::env::var("RPOPT_ONCE").is_ok() {
             break;
         }
+    }
+    if let Ok(path) = std::env::var("RPOPT_PERREGION") {
+        rpopt::census_diag::regs_dump(&path);
     }
     runs.sort_by(|a, b| a.0.total_cmp(&b.0));
     let (dt, regions, s) = &runs[runs.len() / 2];
     println!(
         "{}",
-        json!({"regions": regions, "solve_s": dt, "runs": runs.len(), "calls": s.calls, "infeasible": s.infeasible, "nanos": s.nanos, "counters": s.counters.to_vec()})
+        json!({"conn": rpopt::census_diag::conn_report(*regions).into_iter().map(|(k, v)| (k.to_string(), json!(v))).collect::<serde_json::Map<String, Value>>(), "regions": regions, "solve_s": dt, "runs": runs.len(), "calls": s.calls, "infeasible": s.infeasible, "nanos": s.nanos, "counters": s.counters.to_vec(), "profile": profile(alg, s, *dt)})
     );
+}
+
+/// Time profile of one solve in ns, by phase (see `bench/results/time_profile.md`). LP and QP time by
+/// purpose comes from the census; mplcp's construction and neighbour search from its own timers.
+fn profile(alg: &str, s: &Stats, dt: f64) -> Value {
+    use rpopt::census_diag::{s as d, slot};
+    let c = |k: Counter| s.counter(k) as f64;
+    let by = |p: usize| (s.nanos[0][p] + s.nanos[1][p]) as f64;
+    let total = dt * 1e9 - if alg == "mplcp" { slot(s, d::PF_REGSTAT_NS) } else { 0.0 };
+    let build_total = if alg == "mplcp" { c(Counter::MplcpBuildNanos) } else { c(Counter::BuildNanos) };
+    let build_lp = c(Counter::BuildLpNanos);
+    let (cand, case2, rank1, tab, rowgen, box_ns, perrow, cheb, build_other);
+    if alg == "mplcp" {
+        cand = c(Counter::MplcpNbrNanos);
+        case2 = c(Counter::AdjCase2Nanos);
+        rank1 = [Counter::R1Nanos0, Counter::R1Nanos1, Counter::R1Nanos2, Counter::R1Nanos3, Counter::R1Nanos4, Counter::R1Nanos5].iter().map(|&k| c(k)).sum::<f64>();
+        tab = c(Counter::MplcpTabNanos);
+        rowgen = slot(s, d::LAW_NS) + slot(s, d::ROWS_NS);
+        cheb = slot(s, d::CHEB_NS);
+        box_ns = if slot(s, d::PF_BOX_NS) > 0.0 { slot(s, d::PF_BOX_NS) } else { by(4) };
+        perrow = if slot(s, d::PF_PERROW_NS) > 0.0 { slot(s, d::PF_PERROW_NS) } else { by(0) };
+        build_other = (build_total - rowgen - cheb - box_ns - perrow).max(0.0);
+    } else {
+        cand = if alg == "parametric_daqp" { c(Counter::PdTestNanos) } else { by(1) + by(2) };
+        case2 = 0.0;
+        rank1 = 0.0;
+        tab = 0.0;
+        rowgen = (build_total - build_lp).max(0.0);
+        box_ns = by(4);
+        perrow = by(0);
+        cheb = by(3);
+        build_other = (build_lp - box_ns - perrow - cheb).max(0.0);
+    }
+    let rest = total - cand - tab - build_total;
+    json!({"pd_tests": c(Counter::PdTests), "total": total, "cand": cand, "case2": case2, "rank1": rank1, "tab": tab, "build_total": build_total, "rowgen": rowgen, "box": box_ns, "perrow": perrow, "cheb": cheb, "build_other": build_other, "rest": rest, "work_ok": (0..28).map(|b| slot(s, d::PF_WORK_OK + b)).collect::<Vec<f64>>(), "work_fail": (0..28).map(|b| slot(s, d::PF_WORK_FAIL + b)).collect::<Vec<f64>>(), "clip": slot(s, d::PF_CLIP_NS), "clip_fail": slot(s, d::PF_CLIP_FAIL_NS), "clip_fails": slot(s, d::PF_CLIP_FAILS), "setup": slot(s, d::PF_SETUP_NS), "init": slot(s, d::PF_INIT_NS), "loop": slot(s, d::PF_LOOP_NS)})
 }
 
 struct Row {
