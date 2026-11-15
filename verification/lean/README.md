@@ -9,11 +9,11 @@ Lean 4 and Mathlib proofs of the mathematics behind two RPOPT solvers:
 
 The proofs are at the model level, in exact real arithmetic. They justify the steps the Rust code
 takes, not its floating point execution. Every result listed as proved has no `sorry`, and
-`Audit.lean` prints the axioms of all 82 main theorems: each uses only `propext`,
+`Audit.lean` prints the axioms of all 91 main theorems: each uses only `propext`,
 `Classical.choice` and `Quot.sound` (two use none). Modelling assumptions are explicit hypotheses,
 never axioms.
 
-Rust line numbers refer to main at commit `b5c8f6d`.
+Rust line numbers refer to main at commit `d3ad15c` (mplcp.rs unchanged since `b5c8f6d`).
 
 ## Build
 
@@ -51,6 +51,7 @@ lake env lean Audit.lean    # one line per main theorem: the axioms it depends o
 | `MplpLex/Certificate.lean` | LP weak duality and the basis certificate |
 | `MplpLex/Pivot.lean` | ratio tests, rank-1 basis update, dual and primal simplex steps |
 | `MplpLex/LexUnique.lean` | uniqueness of the lexico-optimal basis |
+| `MplpLex/Enumeration.lean` | the enumeration path for H = 0: conditions (D) and (Z), full-dimensional regions, no overlaps |
 | `Audit.lean` | `#print axioms` for every main theorem |
 
 ## Status
@@ -104,6 +105,11 @@ lake env lean Audit.lean    # one line per main theorem: the axioms it depends o
 | B2 | `primal_direction`, `ratio_test`, `lex_ratio_test` | phase 2: the edge direction and the (lexicographic) ratio test keep primal feasibility | proved |
 | B3 | `lexOptimal_unique`, `nondeg_basis_unique` | the lexico-optimal basis is unique for each `θ` (no overlaps) | proved |
 | B3 | gap-freeness | every feasible `θ` has a lexico-optimal basis (termination of the lexicographic simplex) | **open** |
+| Enum | `EnumBasis.LexOpt` | step 1: lexico-optimal at θ means (D) and lexico-positive nonbasic slack rows; `lexOpt_unique` ties it to `lexOptimal_unique` | definition, proved link |
+| Enum | `primalLex_iff_of_interior`, `slack_zero_of_interior` | step 2: in the interior of the closed region, primal lexico-feasibility is exactly (Z) | proved |
+| Enum | `fullDim_iff`, `interior_region_eq` | step 3: `R_B` is full-dimensional iff (D), (Z) and the closed region is full-dimensional; then both have the same interior | proved |
+| Enum | `enum_interiors_disjoint` | two different bases passing (D) and (Z) have closed regions with disjoint interiors | proved |
+| Enum | step 4 (walk reaches every full-dimensional `R_B`) | Jones et al. Thm 22 | **open**; needed only to say the walk and the enumeration agree |
 
 Named open pieces of Case 2:
 
@@ -151,7 +157,7 @@ rather than returns.
 
 ## Correspondence with the Rust code
 
-`mplcp.rs` at `b5c8f6d` unless noted; `build` is `mplcp_build.rs`.
+`mplcp.rs` at `d3ad15c` unless noted; `build` is `mplcp_build.rs`.
 
 | Lean theorem | Rust function or step | What it justifies |
 |:-------------|:----------------------|:------------------|
@@ -181,15 +187,18 @@ rather than returns.
 | `reach_skip` | leaf pruning: a leaf whose active set is in `Seen` is skipped (533-538) | the caller would drop it anyway: same explored set |
 | `known_region_unique_neighbour`, `known_region_skip`, `vertices_subset_polyhedron` | facet certificate `certify` (1140-1208), asked in `adjacent` after the fast path (801-806); `CERT` mode (1051, default 0) | skipping a Case-2 facet contained in a known region |
 | `cr_interiors_disjoint` | stray overlapping regions (pop_005, pop_007, pop_011) | which hypothesis an overlap breaks |
-| `relint_of_strict` | mplp_lex.rs facet point: foot of the region's Chebyshev centre (533-556), else the facet's Chebyshev LP (557-583) | the point used for the lexicographic neighbour is in the facet's relative interior |
+| `relint_of_strict` | mplp_lex.rs facet point: foot of the region's Chebyshev centre (539-562), else the facet's Chebyshev LP (563-589) | the point used for the lexicographic neighbour is in the facet's relative interior |
 | `chebyshev_ball_feasible` | program.rs `ball_points` (1227), `feasible_space_chebychev_ball` (1075) with the Clarabel fallback (1242); used by `gen_optimal_active_set` and `degenerate_start` | sampled start parameters are feasible (inequality rows) |
 | `reach_least` | `pivot_solve` (1457), `pivot_solve_par` (1535), `seen` (1460, 1484, 1512, 1544, 1582, 1607) | the explored set does not depend on the visiting order |
-| `reach_skip` | `seen_claim` before `build_cand` (986, 1484); mplp_lex `crossed` (mplp_lex.rs 502, 509, 526-528, 598) | skipping known neighbours is safe |
+| `reach_skip` | `seen_claim` before `build_cand` (986, 1484); mplp_lex `crossed` (mplp_lex.rs 508, 515, 532-534, 604) | skipping known neighbours is safe |
 | `lp_certificate`, `basis_certificate` | mplp_lex.rs header (13-16), `Lex::solve` (264-377), `Ok(())` at 358 | a basis with no lexico-negative slack or multiplier row is optimal |
 | `rank1_inverse`, `rank1_tableau` | mplp_lex.rs `Lex::pivot` (159-181) | the rank-1 update of `binv` and `t` |
 | `dual_pivot`, `ratio_test` | mplp_lex.rs phase 1 (310-342), ratio `l / y` with `y > 1e-9` (324-338) | phase 1 keeps dual feasibility |
 | `primal_direction`, `lex_ratio_test` | mplp_lex.rs phase 2 (343-374), `aj = -T_jp` (365), `slack_cmp` (226-258) | phase 2 keeps primal lexico-feasibility |
 | `lexOptimal_unique` | mplp_lex.rs header (17-19), `slack_sign` (196-223), `lam_row` (380-395) | one lexico-optimal basis per `θ` |
+| `EnumBasis.dual`, `LexOpt` | mplp_lex.rs `dual_lex_feasible_bases` (684-797), test `lex_sign(&lam_out) <= 0` (766); `enumeration_applies` (671-680) requires H = 0 | (D) is a property of the basis alone |
+| `EnumBasis.ZCond`, `primalLex_iff_of_interior` | mplp_lex.rs `candidate_ok` (804-886): zero test (840-855), ε-row sign over `B ∪ {j}` (862-882) | (Z) on the identically zero slacks |
+| `fullDim_iff`, `enum_interiors_disjoint` | mplp_lex.rs `enumerate_regions` (890-896), dispatch in `solve` (445-446), `use_enumeration` cost model (656-668) | the enumerated regions are the full-dimensional lexicographic regions, without overlaps |
 
 ## Modelling assumptions
 
@@ -338,6 +347,30 @@ All of these appear as explicit hypotheses of the theorems that need them.
     - *Comment wording* (847-852): "at most 2^n pivots, Lean walk_no_repeat". The proved bound is the number
       of reachable label states (`chain_length_bound`, about `n 2^n`). `walk_no_repeat` needs a lexico-feasible
       start; finiteness in general comes from `walk_repeat_returns` plus the cycle check.
+11. **mplp_lex enumeration for H = 0 (d3ad15c).** Steps 1 to 3 of the argument are proved
+    (`MplpLex/Enumeration.lean`), with the slack and multiplier rows taken as the coefficient vectors of
+    the perturbed LP (the same modelling link as `LexOptimalBasis`). What the merged path depends on:
+    - *Its own exactness:*
+      - each enumerated region is a full-dimensional region of the lexicographic partition, and the
+        regions do not overlap (`fullDim_iff`, `enum_interiors_disjoint`); this needs no walk;
+      - it misses nothing that exists, since it lists every basis. Coverage of the feasible set
+        therefore depends only on B3 gap-freeness (every feasible θ has a lexico-optimal basis, open),
+        not on Theorem 22.
+    - *Step 4* (the walk reaches every full-dimensional `R_B`, Jones et al. Thm 22, connectivity of the
+      graph of lexico-optimal bases) is needed only for "the walk's regions equal the enumerated ones",
+      that is, to justify switching between the two paths by cost. It is open here, like A6 for mplcp.
+      The enumeration is the path that does not need it.
+    - *Departures, all at tolerance level:*
+      - (D) is decided by `lex_sign` with the absolute `TOL = 1e-9` on the multiplier rows (766);
+      - (Z) treats a slack as identically zero below a relative `1e-12`, and reads the ε-row sign with
+        the absolute `TOL` (840-882);
+      - full dimensionality is decided by the region builder (`gen_cr_from_active_set_lambda_first`).
+      The bounding-box pre-filter in `candidate_ok` (856-858) only drops bases whose closed region misses
+      the box of Θ; it is sound when that box contains Θ.
+    - *Why (Z) matters:* without it, a basis whose zero slack has a lexico-negative ε-row passes, and its
+      closed region coincides with that of its lexico-feasible twin. The hypothesis `hZ` of
+      `interior_region_eq` fails, which explains the overlapping extra regions on the two degenerate
+      problems.
 
 The measurements in findings 3 to 5 come from an uncommitted debug build run on the laptop (runs of 4
 to 30 s). They are diagnostics, not timings.

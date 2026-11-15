@@ -16,3 +16,4 @@ import RpoptProofs.Optimizations.KnownRegionSkip
 import RpoptProofs.MplpLex.Certificate
 import RpoptProofs.MplpLex.Pivot
 import RpoptProofs.MplpLex.LexUnique
+import RpoptProofs.MplpLex.Enumeration

@@ -97,3 +97,13 @@ import RpoptProofs
 -- Round 3c: Case-2 fix and facet certificate
 #print axioms Rpopt.gamma_scale_nonneg
 #print axioms Rpopt.cr_interiors_disjoint
+-- Round 5: mplp_lex enumeration (H = 0)
+#print axioms Rpopt.EnumBasis.region_subset_closed
+#print axioms Rpopt.EnumBasis.primalLex_zcond
+#print axioms Rpopt.EnumBasis.slack_zero_of_interior
+#print axioms Rpopt.EnumBasis.primalLex_iff_of_interior
+#print axioms Rpopt.EnumBasis.lexOpt_iff_of_interior
+#print axioms Rpopt.EnumBasis.interior_region_eq
+#print axioms Rpopt.EnumBasis.fullDim_iff
+#print axioms Rpopt.EnumBasis.lexOpt_unique
+#print axioms Rpopt.enum_interiors_disjoint
