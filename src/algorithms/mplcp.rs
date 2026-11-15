@@ -609,12 +609,18 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
                     bcentre = centre.map(|c| c.to_vec());
                     bwit = witness.map(|w| w.to_vec());
                 }
+                #[cfg(feature = "lp_census")]
+                let boxe = if bwit.is_none() && bcentre.is_none() { box_probe(&ef, &ff, fpoly.ef.rows) } else { false };
                 crate::census_skip!(cm);
                 let dq = bwit.is_none() && bcentre.is_none() && daqp_certainly_empty(&ef, &ff, d1);
                 if bwit.is_none() && bcentre.is_none() {
                     crate::census_lap!(cm, Daqp);
                 }
                 if dq {
+                    #[cfg(feature = "lp_census")]
+                    if boxe {
+                        crate::census_bump!(BoxEmptyDaqp, 1);
+                    }
                     crate::census_bump!(PfChebEmpty, 1);
                     continue;
                 }
@@ -622,13 +628,28 @@ fn walk_one(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, centr
                     crate::census_bump!(PfCheb, 1);
                     #[cfg(feature = "lp_census")]
                     let piv0 = crate::census::piv_get();
+                    #[cfg(feature = "lp_census")]
+                    let lp_t = std::time::Instant::now();
                     let ball = {
                         crate::census_purpose!(Neighbour);
                         chebyshev_ball(&ef, &ff, &[])
                     };
                     crate::census_lap!(cm, Lp);
                     #[cfg(feature = "lp_census")]
-                    cheb_probe(&ef, &ff, fpoly.ef.rows, centre.or(witness).or(fpoly.hint_f), d1, crate::census::piv_get() - piv0, ball.as_ref().map(|s| s.x.clone()));
+                    let lp_ns = lp_t.elapsed().as_nanos() as u64;
+                    #[cfg(feature = "lp_census")]
+                    {
+                        let lp_ok = matches!(&ball, Some(s) if s.x[d1] > 1e-9);
+                        if boxe {
+                            crate::census_bump!(BoxEmpty, 1);
+                            if lp_ok {
+                                crate::census_bump!(BoxEmptyNonempty, 1);
+                            } else {
+                                crate::census_bump!(BoxEmptyLp, 1);
+                            }
+                        }
+                        cheb_probe(&ef, &ff, fpoly.ef.rows, centre.or(witness).or(fpoly.hint_f), d1, crate::census::piv_get() - piv0, ball.as_ref().map(|s| s.x.clone()), leaf_z.is_some(), lp_ns);
+                    }
                     crate::census_skip!(cm);
                     match ball {
                         Some(s) if s.x[d1] > 1e-9 => {
@@ -773,8 +794,60 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, budget: usize, o
 /// Census only: what a walk Chebyshev LP looked like against its parent (rows added, parent point violations, cold pivots), and
 /// an extra primal-shifted solve from the parent point to see how many pivots a warm start takes.
 #[cfg(feature = "lp_census")]
-fn cheb_probe(ef: &Mat, ff: &[f64], parent_rows: usize, pt: Option<&[f64]>, d1: usize, cold_piv: u64, cold_x: Option<Vec<f64>>) {
+fn cheb_probe(ef: &Mat, ff: &[f64], parent_rows: usize, pt: Option<&[f64]>, d1: usize, cold_piv: u64, cold_x: Option<Vec<f64>>, leaf: bool, lp_ns: u64) {
     use crate::census::Counter as C;
+    if leaf {
+        crate::census::bump(C::LpLeafCalls, 1);
+        crate::census::bump(C::LpLeafNs, lp_ns);
+        crate::census::bump(C::LpLeafPiv, cold_piv);
+    } else {
+        crate::census::bump(C::LpNlCalls, 1);
+        crate::census::bump(C::LpNlNs, lp_ns);
+        crate::census::bump(C::LpNlPiv, cold_piv);
+        // phase 1 only: feasibility of the rows shifted by 1e-9 ||a|| (radius above 1e-9)
+        let ffs: Vec<f64> = (0..ef.rows).map(|i| ff[i] - 1e-9 * ef.row(i).iter().map(|v| v * v).sum::<f64>().sqrt()).collect();
+        let t = std::time::Instant::now();
+        let p0 = crate::census::piv_get();
+        let feas = {
+            crate::census_purpose!(Other);
+            crate::solver::lp::lp_feasible_point(ef, &ffs, &[], None).is_some()
+        };
+        crate::census::bump(C::P1Calls, 1);
+        crate::census::bump(C::P1Pivots, crate::census::piv_get() - p0);
+        crate::census::bump(C::P1Ns, t.elapsed().as_nanos() as u64);
+        if cold_x.as_ref().map_or(false, |x| x[d1] > 1e-9) == feas {
+            crate::census::bump(C::P1Same, 1);
+        }
+    }
+    // exact redundancy of the rows of the piece, on every 8th LP
+    thread_local! {
+        static RED_N: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    }
+    let k = RED_N.with(|c| {
+        c.set(c.get() + 1);
+        c.get()
+    });
+    if k % 8 == 0 && ef.rows > 0 {
+        let mut nonred = 0u64;
+        for i in 0..ef.rows {
+            let keep: Vec<usize> = (0..ef.rows).filter(|&j| j != i).collect();
+            let (a2, b2) = (ef.select_rows(&keep), keep.iter().map(|&j| ff[j]).collect::<Vec<f64>>());
+            let obj: Vec<f64> = ef.row(i).iter().map(|v| -v).collect();
+            let red = {
+                crate::census_purpose!(Other);
+                match crate::solver::lp::lp_point(Some(&obj), &a2, &b2, &[]) {
+                    Some(x) => ef.row(i).iter().zip(&x).map(|(a, b)| a * b).sum::<f64>() <= ff[i] + 1e-9 * (1.0 + ff[i].abs()),
+                    None => false,
+                }
+            };
+            if !red {
+                nonred += 1;
+            }
+        }
+        crate::census::bump(C::RedSamples, 1);
+        crate::census::bump(C::RedRows, ef.rows as u64);
+        crate::census::bump(C::RedNonRed, nonred);
+    }
     let added = ef.rows - parent_rows;
     crate::census::bump(C::ChebRows, ef.rows as u64);
     crate::census::bump(C::ChebDims, d1 as u64);
@@ -814,12 +887,95 @@ fn cheb_probe(ef: &Mat, ff: &[f64], parent_rows: usize, pt: Option<&[f64]>, d1: 
     crate::census::bump(C::ChebShiftCalls, 1);
     crate::census::bump(C::ChebShiftPivots, np);
     crate::census::bump(C::ChebShiftNs, t.elapsed().as_nanos() as u64);
-    // same decision: both nonempty at the 1e-9 radius or both not, and the radius within 1e-7
-    if let (Some(a), Some(b)) = (cold_x, sol) {
-        if (a[d1] > 1e-9) == (b.x[d1] > 1e-9) && (a[d1] - b.x[d1]).abs() <= 1e-7 {
-            crate::census::bump(C::ChebShiftSame, 1);
+    // same decision: both nonempty at the 1e-9 radius or both not, and for nonempty pieces the radius within 1e-6 relative
+    let dc = cold_x.as_ref().map_or(false, |x| x[d1] > 1e-9);
+    let ds = sol.as_ref().map_or(false, |x| x.x[d1] > 1e-9);
+    if dc == ds && (!dc || (cold_x.as_ref().unwrap()[d1] - sol.as_ref().unwrap().x[d1]).abs() <= 1e-6 * (1.0 + cold_x.as_ref().unwrap()[d1].abs())) {
+        crate::census::bump(C::ChebShiftSame, 1);
+    } else if std::env::var("CHEB_DBG").is_ok() {
+        eprintln!("cheb mismatch cold {:?} shifted {:?} rows {} d1 {}", cold_x.as_ref().map(|x| x[d1]), sol.as_ref().map(|x| x.x[d1]), ef.rows, d1);
+    }
+}
+
+/// Census only: forgets the hyperplanes walked so far (call between repeated solves).
+#[cfg(feature = "lp_census")]
+pub fn census_reset_local() {
+    HYPERS.with(|h| h.borrow_mut().clear());
+}
+
+// Census only: the box of the region (in theta) and the facet basis, set once per walk call, for `box_probe`.
+#[cfg(feature = "lp_census")]
+thread_local! {
+    static BOXCTX: std::cell::RefCell<Option<(Vec<f64>, Vec<f64>, Vec<Vec<f64>>)>> = const { std::cell::RefCell::new(None) };
+    static HYPERS: std::cell::RefCell<std::collections::HashMap<Vec<i64>, u8>> = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+#[cfg(feature = "lp_census")]
+fn box_set(e_all: &Mat, f_all: &[f64], centre: Option<&[f64]>, nb: &[Vec<f64>]) {
+    let bx = centre.and_then(|c| crate::mpqp_utils::region_bbox(e_all, f_all, c));
+    BOXCTX.with(|b| *b.borrow_mut() = bx.map(|(lo, hi)| (lo, hi, nb.to_vec())));
+}
+
+/// Census only: records the facet hyperplane (sign-canonical g, b); true when the hyperplane was walked before.
+#[cfg(feature = "lp_census")]
+fn census_hyper(g: &[f64], b: f64) -> bool {
+    use crate::census::Counter as C;
+    let s = g.iter().find(|v| v.abs() > 1e-9).map_or(1.0, |v| v.signum());
+    let side: u8 = if s > 0.0 { 1 } else { 2 };
+    let mut key: Vec<i64> = g.iter().map(|v| (s * v * 1e6).round() as i64).collect();
+    key.push((s * b * 1e6).round() as i64);
+    crate::census::bump(C::HyperWalks, 1);
+    let prev = HYPERS.with(|h| {
+        let mut h = h.borrow_mut();
+        let e = h.entry(key).or_insert(0);
+        let p = *e;
+        *e |= side;
+        p
+    });
+    if prev != 0 {
+        crate::census::bump(C::HyperRepeat, 1);
+        if prev & side == 0 {
+            crate::census::bump(C::HyperOther, 1);
         }
     }
+    prev != 0
+}
+
+/// Census only: would the region box decide this piece? Counts the test, the polytope rows, the rows redundant over the box, the rows
+/// added to the parent piece (and the redundant ones among them); true when a row's minimum over the box exceeds its rhs (piece empty).
+#[cfg(feature = "lp_census")]
+fn box_probe(ef: &Mat, ff: &[f64], parent_rows: usize) -> bool {
+    use crate::census::Counter as C;
+    crate::census::bump(C::BoxTests, 1);
+    crate::census::bump(C::BoxRows, ef.rows as u64);
+    crate::census::bump(C::BoxCutRows, (ef.rows - parent_rows) as u64);
+    BOXCTX.with(|b| {
+        let b = b.borrow();
+        let Some((lo, hi, nb)) = b.as_ref() else { return false };
+        let (mut empty, mut red, mut redc) = (false, 0u64, 0u64);
+        for i in 0..ef.rows {
+            let row = ef.row(i);
+            // row . theta_f = c . theta on the facet, c = sum_j row[j] nb[j]
+            let (mut mn, mut mx) = (0.0, 0.0);
+            for k in 0..lo.len() {
+                let ck: f64 = row.iter().zip(nb).map(|(r, v)| r * v[k]).sum();
+                mn += (ck * lo[k]).min(ck * hi[k]);
+                mx += (ck * lo[k]).max(ck * hi[k]);
+            }
+            if mn > ff[i] + 1e-9 {
+                empty = true;
+            }
+            if mx <= ff[i] {
+                red += 1;
+                if i >= parent_rows {
+                    redc += 1;
+                }
+            }
+        }
+        crate::census::bump(C::BoxRedRows, red);
+        crate::census::bump(C::BoxRedCut, redc);
+        empty
+    })
 }
 
 /// Records a returned basis with the Chebyshev centre (facet coordinates) of the sub-facet it was
@@ -1334,6 +1490,35 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
     // cost of the old caps, and a spent budget is not silent: the facet also gets the QP just across it.
     let budget = (WALK_BUDGET_PER_ROW * n).max(WALK_BUDGET_MIN);
     crate::census_lap!(cm, Setup);
+    #[cfg(feature = "lp_census")]
+    let wk_class = {
+        let k = zrows.len();
+        let nsl = zrows.iter().filter(|&&i| tab.row_var[i] < n).count();
+        match (k, nsl) {
+            (1, 1) => {
+                let c = zrows[0];
+                let kk = tab.col_of(comp(tab.row_var[c], n));
+                let m = pivot_measure(p, tab, c, kk);
+                if m <= MEASURE_ZERO {
+                    0
+                } else if m <= MEASURE_NONZERO {
+                    1
+                } else {
+                    2
+                }
+            }
+            (1, _) => 3,
+            (2, 2) => 4,
+            (2, 1) => 5,
+            (2, _) => 6,
+            _ => 7,
+        }
+    };
+    #[cfg(feature = "lp_census")]
+    let hyper_rep = census_hyper(&g, b);
+    #[cfg(feature = "lp_census")]
+    box_set(e_all, f_all, region_centre, &nb);
+    crate::census_lap!(cm, Census);
     let mut lost: Vec<Vec<f64>> = vec![];
     let complete = pivot_facet(p, &mut work, n, Facet { ef: &ef, ff: &ff, sc: &rowsc, seen, hint_f: hint_f.as_deref() }, budget, &mut out, &mut lost);
     *ws = Some(work);
@@ -1391,7 +1576,14 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
     }
     crate::census_lap!(cm, Post);
     #[cfg(feature = "lp_census")]
-    crate::census::c2_commit(3, &cm0, 0);
+    crate::census::c2_commit(3, &cm0, wk_class);
+    #[cfg(feature = "lp_census")]
+    {
+        crate::census::bump(crate::census::Counter::HyperNs, _cen_t.elapsed().as_nanos() as u64);
+        if hyper_rep {
+            crate::census::bump(crate::census::Counter::HyperRepeatNs, _cen_t.elapsed().as_nanos() as u64);
+        }
+    }
     (nbrs, certified)
 }
 
@@ -1605,6 +1797,7 @@ fn daqp_certainly_empty(e: &Mat, f: &[f64], d1: usize) -> bool {
     #[cfg(feature = "lp_census")]
     let t0 = std::time::Instant::now();
     let n = e.rows;
+    crate::census_bump!(DqTests, 1);
     let empty = DQ_WS.with(|ws| {
         let st = &mut *ws.borrow_mut();
         if st.pause > 0 {
@@ -1612,6 +1805,8 @@ fn daqp_certainly_empty(e: &Mat, f: &[f64], d1: usize) -> bool {
             return None;
         }
         let DqState { dq, cols, rhs, .. } = &mut *st;
+        #[cfg(feature = "lp_census")]
+        let tb = std::time::Instant::now();
         cols.clear();
         cols.resize(n * d1, 0.0);
         rhs.clear();
@@ -1628,7 +1823,16 @@ fn daqp_certainly_empty(e: &Mat, f: &[f64], d1: usize) -> bool {
             rhs[i] = f[i] / nrm;
         }
         let rows = Rows { cols: &cols[..], stride: n, b: &rhs[..], n, dim: d1 };
-        let certified = dq.solve(&rows, 0) == Status::Infeasible && {
+        #[cfg(feature = "lp_census")]
+        crate::census::bump(crate::census::Counter::DqBuildNs, tb.elapsed().as_nanos() as u64);
+        #[cfg(feature = "lp_census")]
+        let ts = std::time::Instant::now();
+        let st_inf = dq.solve(&rows, 0) == Status::Infeasible;
+        #[cfg(feature = "lp_census")]
+        crate::census::bump(crate::census::Counter::DqSolveNs, ts.elapsed().as_nanos() as u64);
+        #[cfg(feature = "lp_census")]
+        let tc = std::time::Instant::now();
+        let certified = st_inf && {
             let (w, p) = dq.certificate();
             let sp: f64 = p.iter().sum();
             if !(sp > 0.0) || p.iter().any(|v| !v.is_finite()) {
@@ -1641,6 +1845,8 @@ fn daqp_certainly_empty(e: &Mat, f: &[f64], d1: usize) -> bool {
                 gap + (res + neg) * DAQP_COORD_BOUND < -1e-10 * sp
             }
         };
+        #[cfg(feature = "lp_census")]
+        crate::census::bump(crate::census::Counter::DqCertNs, tc.elapsed().as_nanos() as u64);
         st.calls += 1;
         st.empties += certified as u32;
         if st.calls == DQ_WINDOW {

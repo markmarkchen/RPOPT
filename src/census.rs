@@ -394,6 +394,45 @@ mod imp {
         ChebShiftNs,
         ChebShiftSame,
         ChebDims,
+        /// walk Chebyshev LPs split by leaf / non-leaf branch: calls, ns, cold pivots; phase-1 feasibility LP on the rows shifted by
+        /// 1e-9 ||a|| for the non-leaf ones (calls, pivots, ns, same verdict as the Chebyshev LP)
+        LpLeafCalls,
+        LpLeafNs,
+        LpLeafPiv,
+        LpNlCalls,
+        LpNlNs,
+        LpNlPiv,
+        P1Calls,
+        P1Pivots,
+        P1Ns,
+        P1Same,
+        /// box prefilter on the pieces that reach the DAQP / LP stage: tests, pieces the region box proves empty, of those the ones DAQP
+        /// answered empty / the LP answered empty / the LP found nonempty (must be 0), polytope rows, rows redundant over the box,
+        /// rows added to the parent piece and of those the redundant ones
+        BoxTests,
+        BoxEmpty,
+        BoxEmptyDaqp,
+        BoxEmptyLp,
+        BoxEmptyNonempty,
+        BoxRows,
+        BoxRedRows,
+        BoxCutRows,
+        BoxRedCut,
+        /// exact row redundancy on every 8th walk LP: samples, rows, non-redundant rows
+        RedSamples,
+        RedRows,
+        RedNonRed,
+        /// walks by facet hyperplane: walks, walks on a hyperplane walked before, of those from the other side, ns of the repeats and of all walks
+        HyperWalks,
+        HyperRepeat,
+        HyperOther,
+        HyperRepeatNs,
+        HyperNs,
+        /// DAQP test: calls (including paused), ns building the rows, ns in the solve, ns in the certificate check
+        DqTests,
+        DqBuildNs,
+        DqSolveNs,
+        DqCertNs,
         /// end marker: the Case-2 component block starts here
         CounterEnd,
     }
@@ -459,8 +498,13 @@ mod imp {
         C2_BASE + (c * 2 + ci) * 4 + f
     }
     /// timer calibration: ns per lap, and laps counted (set by the driver)
-    pub const NC: usize = C2_BASE + NCOMP * 8 + 4;
     pub const CALIB: usize = C2_BASE + NCOMP * 8;
+    /// walk classes (by vanishing rows): 0 one slack row, zero pivot; 1 one slack row, pivot in the gap; 2 one slack row, nonzero pivot;
+    /// 3 one z row; 4 two slack rows; 5 one slack one z; 6 two z rows; 7 three or more. Fields: calls, ns, LP ns, DAQP ns, Gamma ns
+    pub const NWK: usize = 8;
+    pub const WK_BASE: usize = CALIB + 4;
+    pub const WK_NAMES: [&str; NWK] = ["1 slack, zero pivot", "1 slack, pivot in gap", "1 slack, nonzero pivot", "1 z row", "2 slack", "1 slack + 1 z", "2 z", "3 or more"];
+    pub const NC: usize = WK_BASE + NWK * 5;
 
     #[derive(Clone, Debug)]
     pub struct Stats {
@@ -793,7 +837,7 @@ mod imp {
     }
     /// Moves the accumulated laps into the statistics under case `case` (2 rank-1, 3 walk), with the call's
     /// total time and allocations (from the mark `m0` taken at its start), and clears them.
-    pub fn c2_commit(case: usize, m0: &Mark, extra_pre_ns: u64) {
+    pub fn c2_commit(case: usize, m0: &Mark, class: usize) {
         let ns = m0.0.elapsed().as_nanos() as u64;
         let (a, b) = (A_CALLS.with(|c| c.get()) - m0.1, A_BYTES.with(|c| c.get()) - m0.2);
         let mut v = c2_snapshot();
@@ -803,7 +847,6 @@ mod imp {
         v[t + 1] += 1;
         v[t + 2] += a;
         v[t + 3] += b;
-        let _ = extra_pre_ns;
         let ci = case - 2;
         MINE.with(|m| {
             let mut s = m.lock().unwrap();
@@ -811,6 +854,14 @@ mod imp {
                 for f in 0..4 {
                     s.counters[c2_slot(c, ci, f)] += v[c * 4 + f];
                 }
+            }
+            if case == 3 {
+                let b = WK_BASE + class * 5;
+                s.counters[b] += 1;
+                s.counters[b + 1] += v[Comp::Total as usize * 4] - v[Comp::Census as usize * 4] - v[Comp::HintCensus as usize * 4];
+                s.counters[b + 2] += v[Comp::Lp as usize * 4];
+                s.counters[b + 3] += v[Comp::Daqp as usize * 4];
+                s.counters[b + 4] += v[Comp::Gamma as usize * 4];
             }
         });
     }

@@ -364,7 +364,7 @@ pub(crate) fn chebyshev_ball_from(a: &Mat, b: &[f64], x0: &[f64]) -> Option<crat
 }
 
 /// Bounding box of {Eθ <= f} (2n LPs started at the interior point `c`); None if unbounded.
-fn region_bbox(e: &Mat, f: &[f64], c: &[f64]) -> Option<(Vec<f64>, Vec<f64>)> {
+pub(crate) fn region_bbox(e: &Mat, f: &[f64], c: &[f64]) -> Option<(Vec<f64>, Vec<f64>)> {
     crate::census_purpose!(Bbox);
     let n = e.cols;
     let mut lo = vec![0.0; n];

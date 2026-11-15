@@ -35,6 +35,7 @@ fn child(path: &str, alg: &str) {
     let lap_ns = census::calibrate();
     loop {
         census::reset();
+        rpopt::algorithms::mplcp::census_reset_local();
         census::set_calib(lap_ns);
         let t0 = Instant::now();
         let sol = solve_mpqp_with(&prog, algo, &opts);
@@ -570,6 +571,46 @@ fn highdim_tables(rows: &[Row], skipped: &[(String, String)]) {
             c(r, Counter::ChebPivots) / n, pct(c(r, Counter::ChebHasPt), n), c(r, Counter::ChebViolAll) / hp, c(r, Counter::ChebViolNew) / hp, pct(c(r, Counter::ChebPtInside), c(r, Counter::ChebHasPt)),
             c(r, Counter::ChebPivotsPt) / hp, c(r, Counter::ChebShiftPivots) / c(r, Counter::ChebShiftCalls).max(1.0), c(r, Counter::ChebShiftNs) / c(r, Counter::ChebShiftCalls).max(1.0) / 1e3, lpn / n / 1e3,
             pct(c(r, Counter::ChebShiftSame), c(r, Counter::ChebShiftCalls))
+        );
+    }
+    println!("\n### High-dimension 3n: mplcp walk calls by class of vanishing rows (time without census work)\n");
+    println!("| problem | class | walk calls | share of calls | us/call | share of solve | LP share of class time | DAQP share | Gamma share |");
+    println!("|---|---|---:|---:|---:|---:|---:|---:|---:|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::ChebRows) > 0.0) {
+        let tot: f64 = (0..census::NWK).map(|k| r.s.counters[census::WK_BASE + k * 5] as f64).sum();
+        for k in 0..census::NWK {
+            let g = |f: usize| r.s.counters[census::WK_BASE + k * 5 + f] as f64;
+            if g(0) == 0.0 {
+                continue;
+            }
+            println!("| {} | {} | {} | {} | {:.0} | {} | {} | {} | {} |", r.problem, census::WK_NAMES[k], g(0), pct(g(0), tot), g(1) / g(0) / 1e3, pct(g(1), r.solve_s * 1e9), pct(g(2), g(1)), pct(g(3), g(1)), pct(g(4), g(1)));
+        }
+    }
+    println!("\n### High-dimension 3o: walk Chebyshev LPs, leaf against non-leaf, and the phase-1 feasibility LP for non-leaf branches\n");
+    println!("| problem | leaf LPs | leaf us/LP | leaf pivots/LP | non-leaf LPs | non-leaf us/LP | non-leaf pivots/LP | non-leaf share of LP time | phase-1 pivots/LP | phase-1 us/LP | phase-1 same verdict |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::ChebRows) > 0.0) {
+        let (lc, nc) = (c(r, Counter::LpLeafCalls), c(r, Counter::LpNlCalls));
+        println!(
+            "| {} | {} | {:.1} | {:.1} | {} | {:.1} | {:.1} | {} | {:.1} | {:.1} | {} |",
+            r.problem, lc, c(r, Counter::LpLeafNs) / lc.max(1.0) / 1e3, c(r, Counter::LpLeafPiv) / lc.max(1.0), nc, c(r, Counter::LpNlNs) / nc.max(1.0) / 1e3, c(r, Counter::LpNlPiv) / nc.max(1.0),
+            pct(c(r, Counter::LpNlNs), c(r, Counter::LpNlNs) + c(r, Counter::LpLeafNs)), c(r, Counter::P1Pivots) / c(r, Counter::P1Calls).max(1.0), c(r, Counter::P1Ns) / c(r, Counter::P1Calls).max(1.0) / 1e3,
+            pct(c(r, Counter::P1Same), c(r, Counter::P1Calls))
+        );
+    }
+    println!("\n### High-dimension 3p: region-box prefilter on the pieces that reach the DAQP / LP stage, exact row redundancy, repeated hyperplanes, DAQP cost split\n");
+    println!("| problem | tests | box proves empty | of those: DAQP empty / LP empty / LP nonempty (must be 0) | rows/piece | rows redundant over the box | cut rows/piece | redundant cut rows | non-redundant rows (exact, sample of walk LPs) | walks | walks on a hyperplane walked before | from the other side | share of walk time in repeats | DAQP tests | build us | solve us | certificate us |");
+    println!("|---|---:|---:|---|---:|---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp" && c(r, Counter::ChebRows) > 0.0) {
+        let t = c(r, Counter::BoxTests).max(1.0);
+        let dq = c(r, Counter::DqTests).max(1.0);
+        println!(
+            "| {} | {} | {} | {} / {} / {} | {:.1} | {:.1} | {:.2} | {:.2} | {:.1} of {:.1} | {} | {} | {} | {} | {} | {:.2} | {:.2} | {:.2} |",
+            r.problem, c(r, Counter::BoxTests), pct(c(r, Counter::BoxEmpty), t), c(r, Counter::BoxEmptyDaqp), c(r, Counter::BoxEmptyLp), c(r, Counter::BoxEmptyNonempty),
+            c(r, Counter::BoxRows) / t, c(r, Counter::BoxRedRows) / t, c(r, Counter::BoxCutRows) / t, c(r, Counter::BoxRedCut) / t,
+            c(r, Counter::RedNonRed) / c(r, Counter::RedSamples).max(1.0), c(r, Counter::RedRows) / c(r, Counter::RedSamples).max(1.0),
+            c(r, Counter::HyperWalks), pct(c(r, Counter::HyperRepeat), c(r, Counter::HyperWalks)), pct(c(r, Counter::HyperOther), c(r, Counter::HyperWalks)), pct(c(r, Counter::HyperRepeatNs), c(r, Counter::HyperNs)),
+            c(r, Counter::DqTests), c(r, Counter::DqBuildNs) / dq / 1e3, c(r, Counter::DqSolveNs) / dq / 1e3, c(r, Counter::DqCertNs) / dq / 1e3
         );
     }
     println!("\n### High-dimension 4: vertex clipping (`clip_flags`) outcomes per call\n");
