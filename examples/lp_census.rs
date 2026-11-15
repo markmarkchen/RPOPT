@@ -31,6 +31,10 @@ fn child(path: &str, alg: &str) {
     if let Ok(m) = std::env::var("RPOPT_CERT") {
         rpopt::algorithms::mplcp::set_certificate(m.parse().unwrap());
     }
+    // MPLCP_TAB_BUDGET=<bytes>: limit on live parent tableaux (default 256 MiB, 0 = none)
+    if let Some(b) = std::env::var("MPLCP_TAB_BUDGET").ok().and_then(|v| v.parse().ok()) {
+        rpopt::algorithms::mplcp::set_tab_budget(b);
+    }
     let mut runs: Vec<(f64, usize, Stats)> = vec![];
     let lap_ns = census::calibrate();
     loop {
@@ -628,6 +632,7 @@ fn highdim_tables(rows: &[Row], skipped: &[(String, String)]) {
             c(r, Counter::DqTests), c(r, Counter::DqBuildNs) / dq / 1e3, c(r, Counter::DqSolveNs) / dq / 1e3, c(r, Counter::DqCertNs) / dq / 1e3
         );
     }
+<<<<<<< HEAD
     println!("\n### High-dimension 3s: rank-1 multipliers under the scale-free rule (nu = |mu_j| sqrt(M_jj / M_cc), zero below 1e-9, nonzero above 1e-6)\n");
     println!("| problem | Case-2 calls | answered by the enumeration | handed to the walk | members the old guard refused, now in P- | refused by the old guard, now zero | tiny (<= PTOL) now in P- | in the gap | mismatch refusals now passed |");
     println!("|---|---:|---:|---:|---:|---:|---:|---:|---:|");
@@ -635,6 +640,15 @@ fn highdim_tables(rows: &[Row], skipped: &[(String, String)]) {
         println!(
             "| {} | {} | {} | {} | {} | {} | {} | {} | {} |",
             r.problem, c(r, Counter::AdjCase2), c(r, Counter::R1Handled), c(r, Counter::R1Fallback), c(r, Counter::MuAccepted), c(r, Counter::MuNoiseZero), c(r, Counter::MuNewPositive), c(r, Counter::MuGap), c(r, Counter::MuMismatchFreed)
+=======
+    println!("\n### High-dimension 3j: mplcp tableau rebuilds refused\n");
+    println!("| problem | regions | `tableau_for` refusals | of which pivot / M_ii above 1e-6 | regions popped without a tableau (neighbour search skipped) | `candidate_law`: fresh tableau refused | `candidate_law`: one-pivot step below 1e-9| bases accepted in the second pivot order |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|");
+    for r in rows.iter().filter(|r| r.alg == "mplcp") {
+        println!(
+            "| {} | {} | {} | {} | {} | {} | {} | {} |",
+            r.problem, r.regions, c(r, Counter::TabRefuse), c(r, Counter::TabRefuseRel), c(r, Counter::ResolveNone), c(r, Counter::CandLawNoTab), c(r, Counter::CandLawSmallPiv), c(r, Counter::TabRescued)
+>>>>>>> main
         );
     }
     println!("\n### High-dimension 4: vertex clipping (`clip_flags`) outcomes per call\n");
