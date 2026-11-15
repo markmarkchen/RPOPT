@@ -13,6 +13,9 @@ fn main() {
     if let Ok(m) = std::env::var("RPOPT_CERT") {
         rpopt::algorithms::mplcp::set_certificate(m.parse().unwrap());
     }
+    if let Ok(v) = std::env::var("MPLP_LEX_MODE") {
+        rpopt::algorithms::mplp_lex::set_mode(v.parse().unwrap());
+    }
     let alg = MpqpAlgorithm::from_name(&args[1]).expect("algorithm");
     // RPOPT_HASH_SCALE: rounding scale of E and f (default 1e9)
     let scale: f64 = std::env::var("RPOPT_HASH_SCALE").ok().and_then(|v| v.parse().ok()).unwrap_or(1e9);

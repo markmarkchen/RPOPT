@@ -442,6 +442,12 @@ pub fn solve(program: &MpProgram, seed: u64) -> Result<Vec<CriticalRegion>, Stri
     if rank(&program.a) < nx {
         return Err("mplp_lex: constraint matrix A is rank deficient (no vertices)".into());
     }
+    if use_enumeration(program) {
+        let regions = enumerate_regions(program);
+        if !regions.is_empty() {
+            return Ok(regions);
+        }
+    }
     let b0 = initial_basis(&program.a, neq).ok_or("mplp_lex: dependent equality rows")?;
     let lex = Lex::new(&program.a, neq);
     let mut sc = Scratch::new(m, nx);
@@ -606,6 +612,287 @@ pub fn solve(program: &MpProgram, seed: u64) -> Result<Vec<CriticalRegion>, Stri
         }
     }
     Ok(regions)
+}
+
+
+// ---------------------------------------------------------------------------------------------
+// Enumeration path (H = 0): the lexicographic partition without a walk.
+//
+// For H = 0 the multipliers of a basis B, λ = -A_B^{-T} c, do not depend on θ. The dual lexicographic
+// condition of Jones et al. (eq. (9)) is therefore a property of the basis alone: every basic
+// inequality row p must have a lexicographically positive row  [ λ_p | -β_{.,p} ]  (β = A_B^{-1}).
+// Call such a basis dual lex-feasible. Then (see bench/results/mplp_lex_enumeration.md):
+//   the walk's regions  =  { gen_cr(B) : B dual lex-feasible and its closed region is full dimensional }.
+// ---------------------------------------------------------------------------------------------
+
+/// Largest variable count handled by the stack-array elimination of the enumeration.
+const ENUM_MAX_NX: usize = 8;
+
+/// Number of k-subsets of n items (as a float).
+pub fn binom(n: usize, k: usize) -> f64 {
+    let mut r = 1.0f64;
+    for i in 0..k.min(n) {
+        r = r * (n - i) as f64 / (i + 1) as f64;
+    }
+    r
+}
+
+/// Path selection: 0 automatic (cost model), 1 always the walk, 2 enumeration whenever it applies.
+static MODE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+/// Overrides the automatic choice between the walk and the enumeration (for tests and benchmarks).
+pub fn set_mode(mode: u8) {
+    MODE.store(mode, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Cost model of the enumeration pass: about `ENUM_NS * nx^2` nanoseconds per subset (measured 23 ns at
+/// nx = 3, 57 ns at nx = 5, 42 ns at nx = 6 on the laptop; the model is conservative). The pass is run
+/// only when its predicted cost is at most `ENUM_BUDGET_NS`, a loss that no walk is cheap enough to notice
+/// (the walk of the smallest mpLP in the benchmarks takes 0.3 ms and has 134,596 subsets, far above the budget).
+const ENUM_NS: f64 = 4.0;
+const ENUM_BUDGET_NS: f64 = 1.0e6;
+
+/// Whether `solve` takes the enumeration path for this program.
+pub fn use_enumeration(program: &MpProgram) -> bool {
+    match MODE.load(std::sync::atomic::Ordering::Relaxed) {
+        1 => false,
+        2 => enumeration_applies(program),
+        _ => {
+            if !enumeration_applies(program) {
+                return false;
+            }
+            let nx = program.num_x() as f64;
+            binom(program.num_constraints(), program.num_x() - program.num_equality_constraints()) * ENUM_NS * nx * nx <= ENUM_BUDGET_NS
+        }
+    }
+}
+
+/// Whether the enumeration path applies: an mpLP with H = 0, equality rows first, at most `ENUM_MAX_NX` variables.
+pub fn enumeration_applies(program: &MpProgram) -> bool {
+    let nx = program.num_x();
+    let neq = program.num_equality_constraints();
+    program.q.is_none()
+        && nx <= ENUM_MAX_NX
+        && neq <= nx
+        && program.num_constraints() >= nx
+        && program.h.data.iter().all(|v| *v == 0.0)
+        && (0..neq).all(|i| program.equality_indices.contains(&i))
+}
+
+/// All dual lex-feasible bases (equality rows first, then the chosen inequality rows ascending), and
+/// the number of subsets looked at.
+pub fn dual_lex_feasible_bases(program: &MpProgram) -> (Vec<Vec<usize>>, u64) {
+    let nx = program.num_x();
+    let m = program.num_constraints();
+    let neq = program.num_equality_constraints();
+    let k = nx - neq;
+    let a = &program.a;
+    let lex = Lex::new(a, neq);
+    let mut out: Vec<Vec<usize>> = vec![];
+    let mut visited = 0u64;
+    let mut idx: Vec<usize> = (neq..neq + k).collect();
+    let mut w = Work { b: vec![], binv: vec![], t: vec![] };
+    let mut lam_out = vec![0.0; nx + 2];
+    let zero = vec![0.0; nx];
+    if k == 0 {
+        return (vec![(0..neq).collect()], 1);
+    }
+    if neq + k > m {
+        return (out, 0);
+    }
+    loop {
+        visited += 1;
+        // λ from A_B' λ = -c (Gaussian elimination, partial pivoting)
+        let mut mat = [[0.0f64; ENUM_MAX_NX + 1]; ENUM_MAX_NX];
+        for p in 0..nx {
+            let row = if p < neq { p } else { idx[p - neq] };
+            for kk in 0..nx {
+                mat[kk][p] = a[(row, kk)];
+            }
+        }
+        for kk in 0..nx {
+            mat[kk][nx] = -program.c[kk];
+        }
+        let mut ok = true;
+        for col in 0..nx {
+            let mut piv = col;
+            for r in col + 1..nx {
+                if mat[r][col].abs() > mat[piv][col].abs() {
+                    piv = r;
+                }
+            }
+            if mat[piv][col].abs() < 1e-11 {
+                ok = false;
+                break;
+            }
+            mat.swap(col, piv);
+            let d = mat[col][col];
+            for r in col + 1..nx {
+                let f = mat[r][col] / d;
+                if f != 0.0 {
+                    for cc in col..=nx {
+                        mat[r][cc] -= f * mat[col][cc];
+                    }
+                }
+            }
+        }
+        if ok {
+            let mut lam = [0.0f64; ENUM_MAX_NX];
+            for r in (0..nx).rev() {
+                let mut v = mat[r][nx];
+                for cc in r + 1..nx {
+                    v -= mat[r][cc] * lam[cc];
+                }
+                lam[r] = v / mat[r][r];
+            }
+            let mut feasible = true;
+            let mut tie = false;
+            for p in neq..nx {
+                if lam[p] < -TOL {
+                    feasible = false;
+                    break;
+                }
+                if lam[p] <= TOL {
+                    tie = true;
+                }
+            }
+            if feasible && tie {
+                // exact decision by the full lexicographic row of every basic inequality
+                let mut basis: Vec<usize> = (0..neq).collect();
+                basis.extend_from_slice(&idx);
+                if lex.fresh(&basis, &mut w).is_ok() {
+                    for p in neq..nx {
+                        lex.lam_row(&w, p, &program.c, &zero, &mut lam_out);
+                        if lex_sign(&lam_out) <= 0 {
+                            feasible = false;
+                            break;
+                        }
+                    }
+                } else {
+                    feasible = false;
+                }
+            }
+            if feasible {
+                let mut basis: Vec<usize> = (0..neq).collect();
+                basis.extend_from_slice(&idx);
+                out.push(basis);
+            }
+        }
+        // next combination
+        let mut i = k;
+        loop {
+            if i == 0 {
+                return (out, visited);
+            }
+            i -= 1;
+            if idx[i] < m - (k - i) {
+                idx[i] += 1;
+                for j in i + 1..k {
+                    idx[j] = idx[j - 1] + 1;
+                }
+                break;
+            }
+        }
+    }
+}
+
+/// Primal lexicographic condition that does not depend on θ: a nonbasic row whose slack
+/// s_j(θ) = (b_j - T_j b_B) + (F_j - T_j F_B) θ is identically zero must have a lexicographically
+/// positive identity-block row  e_j - T_j E_B  (columns in increasing order). Every other row is
+/// positive in the interior of the closed region. Cancellation noise of 1e-12 (relative) counts as zero,
+/// as in `solve`.
+fn candidate_ok(lex: &Lex, program: &MpProgram, basis: &[usize], w: &mut Work) -> bool {
+    if lex.fresh(basis, w).is_err() {
+        return false;
+    }
+    let (nx, nt, m) = (lex.nx, program.num_t(), lex.m);
+    let bbox = program.theta_bbox();
+    let mut in_b = vec![false; m];
+    for &i in basis {
+        in_b[i] = true;
+    }
+    // x_b = β b_B, X_t = β F_B
+    let mut xb = vec![0.0; nx];
+    let mut xt = vec![0.0; nx * nt];
+    for k in 0..nx {
+        for (p, &bp) in basis.iter().enumerate() {
+            let beta = w.binv[k * nx + p];
+            xb[k] += beta * program.b[bp];
+            for t in 0..nt {
+                xt[k * nt + t] += beta * program.f[(bp, t)];
+            }
+        }
+    }
+    let mut cols: Vec<(usize, usize)> = basis.iter().enumerate().map(|(p, &c)| (c, p)).collect();
+    cols.sort_unstable();
+    for j in 0..m {
+        if in_b[j] {
+            continue;
+        }
+        let aj = program.a.row(j);
+        let (mut c0, mut m0) = (program.b[j], program.b[j].abs());
+        for k in 0..nx {
+            let t = aj[k] * xb[k];
+            c0 -= t;
+            m0 += t.abs();
+        }
+        // slack function  c0 + l θ  and its maximum over the box of Θ: below zero means an empty region
+        let mut zero = c0.abs() <= 1e-12 * m0;
+        let mut best = c0;
+        for t in 0..nt {
+            let (mut l, mut ml) = (program.f[(j, t)], program.f[(j, t)].abs());
+            for k in 0..nx {
+                let v = aj[k] * xt[k * nt + t];
+                l -= v;
+                ml += v.abs();
+            }
+            if l.abs() > 1e-12 * ml {
+                zero = false;
+            }
+            if let Some((lo, hi)) = bbox {
+                best += (l * lo[t]).max(l * hi[t]);
+            }
+        }
+        if bbox.is_some() && best < -1e-7 * (1.0 + c0.abs() + m0) {
+            return false;
+        }
+        if !zero {
+            continue;
+        }
+        // identically zero slack: sign of the identity-block row over the columns B ∪ {j}
+        let mut sign = 1;
+        let mut order: Vec<(usize, Option<usize>)> = cols.iter().map(|&(c, p)| (c, Some(p))).collect();
+        let at = order.partition_point(|&(c, _)| c < j);
+        order.insert(at, (j, None));
+        for (c, p) in order {
+            let mut v = if c == j { 1.0 } else { 0.0 };
+            if let Some(p) = p {
+                v -= w.t[j * nx + p];
+            }
+            if v > TOL {
+                sign = 1;
+                break;
+            }
+            if v < -TOL {
+                sign = -1;
+                break;
+            }
+        }
+        if sign < 0 {
+            return false;
+        }
+    }
+    true
+}
+
+/// The partition by enumeration: the closed region of every dual lex-feasible basis with lexicographically
+/// admissible zero slack rows, if it is full dimensional.
+pub fn enumerate_regions(program: &MpProgram) -> Vec<CriticalRegion> {
+    let (bases, _) = dual_lex_feasible_bases(program);
+    let lex = Lex::new(&program.a, program.num_equality_constraints());
+    let mut w = Work { b: vec![], binv: vec![], t: vec![] };
+    let ok: Vec<&Vec<usize>> = bases.iter().filter(|b| candidate_ok(&lex, program, b, &mut w)).collect();
+    ok.iter().filter_map(|b| gen_cr_from_active_set_lambda_first(program, b, true)).collect()
 }
 
 fn rhs_at(p: &MpProgram, th: &[f64]) -> Vec<f64> {
