@@ -2369,6 +2369,11 @@ fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>
             })
         };
         let (nbrs, certified) = adjacent(plcp, tab, cur.e.row(k), cur.f[k], &cur.e, &cur.f, ws, if cert.is_some() { Some(&cfun as &dyn Fn() -> Option<usize>) } else { None }, cert.map_or(false, |c| c.audit), seen, center.map(|c| c.as_slice()));
+        // audit mode: every certified facet is counted, whether or not its search returned a candidate (a rank-1 search of a
+        // facet whose neighbours are all known returns none)
+        if certified.is_some() && cert.map_or(false, |c| c.audit) {
+            AUDIT_CERTIFIED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
         if nbrs.is_empty() {
             continue;
         }
@@ -2666,9 +2671,6 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
         let cx = CertCtx::new(cmode, verts.as_deref(), &known, &regions, plcp.nt, wave_limit);
         let cands = crate::census_timed!(MplcpNbrNanos, expand_candidates(plcp, cur, center.as_ref(), &tab, depth, entry.as_ref(), cx.as_ref(), Some(&seen), program, &mut ws));
         for c in cands {
-            if c.cert.is_some() {
-                AUDIT_CERTIFIED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            }
             let fresh = seen_claim(&mut seen, &c.aset);
             #[cfg(feature = "lp_census")]
             crate::census::seen(fresh);
