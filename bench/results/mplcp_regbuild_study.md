@@ -75,3 +75,15 @@ Row classes in the present LP path: propagated parameter box (free), exact box (
 | masses4_N3 | 64.1 | 31.2 | 154.4 | 369.3 | 103.4 | 33.4 | 301 |
 
 Open item (not investigated): in study 5, 26% to 49% of the KKT rows found no counterpart among the rows read from the parent tableau by one pivot, while the rows that did match agree exactly. Suspicion: children whose active set is more than one toggle from the parent (candidates of the Case-2 walk carry a piv of the last pivot only), so the one-pivot rows describe a different basis. Not checked.
+
+### Build study 8: pivots and time of the 2n box LPs (job 45909719, commit 189d01c)
+
+Engine = present revised dual simplex from the centre (pivots as counted by the engine, wall time with census clock reads). Own cold / warm = a plain primal simplex written for the census (not tuned, so its microseconds are not comparable with the engine's; compare steps). Warm order 1: min t1, max t1, min t2, ...; order 2: all max, then all min reversed. The own simplex failed (singular Gram matrix or no blocking row) in the last column's share of regions, so its step counts are lower bounds on degenerate regions.
+
+| problem | n | engine pivots/LP | engine us/LP | own cold steps/LP | own cold us/LP | warm order 1 steps/LP | us/LP | warm order 2 steps/LP | us/LP | bounds differing from engine: own cold | warm 1 | warm 2 | rows tight at a box point | tight-set differences: warm 1 | warm 2 | failures/region |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| rand_t8_x5_m20_s0 | 8 | 18.24 | 5.86 | 7.81 | 14.37 | 5.70 | 16.45 | 5.56 | 16.14 | 1.2% | 0.9% | 1.2% | 20.0 | 0.29 | 0.31 | 0.192 |
+| rand_t10_x5_m20_s0 | 10 | 23.39 | 8.73 | 8.16 | 29.87 | 5.95 | 27.84 | 5.17 | 24.47 | 2.8% | 1.2% | 1.4% | 27.8 | 0.54 | 0.52 | 0.592 |
+| pop_017 | 6 | 13.50 | 3.86 | 6.37 | 21.83 | 3.75 | 11.42 | 3.52 | 10.96 | 4.5% | 4.3% | 4.6% | 13.4 | 0.20 | 0.20 | 0.753 |
+| rand_t12_x5_m20_s0 | 12 | 29.41 | 12.32 | 7.38 | 35.40 | 5.65 | 39.94 | 5.06 | 36.86 | 1.7% | 0.9% | 0.9% | 37.1 | 1.04 | 0.99 | 0.744 |
+| masses4_N3 | 8 | 32.61 | 12.59 | 3.75 | 47.18 | 1.84 | 11.30 | 1.37 | 9.65 | 4.0% | 1.8% | 2.3% | 23.2 | 0.42 | 0.43 | 2.362 |
