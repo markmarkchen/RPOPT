@@ -232,8 +232,24 @@ mod imp {
         CertExtra,
         AdjCertSkip,
         AdjCertSkipNanos,
+        /// `pivot_facet` leaf branches (the next basis is complementary): skipped without their
+        /// Chebyshev LP because the active set is already in the `Seen` map, and not skipped
+        LeafSkip,
+        LeafKept,
+        /// leaves returned with a hint of their own (the sub-facet Chebyshev centre) and, of the
+        /// returned leaves, those whose old hint (parent centre projected onto the row) lies inside /
+        /// outside the leaf's sub-facet
+        HintCentre,
+        HintInside,
+        HintOutside,
+        /// facet walks stopped by the exact cycle check or by the pivot budget, and the fallbacks
+        /// (QP just across the facet) that found / did not find a neighbour
+        WalkCycle,
+        WalkBudget,
+        FallbackAcross,
+        FallbackFail,
     }
-    pub const NC: usize = 69;
+    pub const NC: usize = 78;
 
     #[derive(Clone, Debug)]
     pub struct Stats {

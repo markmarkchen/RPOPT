@@ -362,6 +362,9 @@ struct Facet<'a> {
     /// per-variable magnitude of the row (set in `adjacent`, where the rows identically zero on
     /// the facet are found with a tolerance relative to it); `in_z` uses the same tolerance
     sc: &'a [f64],
+    /// active sets already known (built or rejected): a leaf branch that ends in one of them is
+    /// skipped without its Chebyshev LP, since `expand_candidates` would drop it anyway
+    seen: Option<&'a Seen>,
 }
 
 /// Algorithm 2 (`pivot`): from the ACLFB `tab` (α basic or entering as column `e`) returns the
@@ -509,6 +512,18 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
                 crate::census_bump!(PfLexCut, 1);
                 continue;
             }
+            // a leaf branch (alpha leaves: the next basis is complementary and the walk returns it)
+            // whose active set is known is dropped by the caller anyway: skip its Chebyshev LP
+            let leaf_z = if leaving == alpha { Some(z_after(tab, n, l, e)) } else { None };
+            if let (Some(z), Some(seen)) = (&leaf_z, fpoly.seen) {
+                if seen.contains_key(&p.active_set(z.iter().copied())) {
+                    crate::census_bump!(LeafSkip, 1);
+                    continue;
+                }
+            }
+            if leaf_z.is_some() {
+                crate::census_bump!(LeafKept, 1);
+            }
             if d1 > 0 {
                 crate::census_bump!(PfCheb, 1);
                 let ball = {
@@ -523,8 +538,8 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
                     }
                 }
             }
-            if leaving == alpha {
-                out.push(z_after(tab, n, l, e));
+            if let Some(z) = leaf_z {
+                out.push(z);
                 continue;
             }
             let mut next = tab.clone();
@@ -539,7 +554,7 @@ fn pivot_facet(p: &Plcp, tab: &mut Tab, e: usize, fpoly: Facet, depth: usize, ou
                     crate::census_bump!(PfRepeatBasis, 1);
                 }
             }
-            pivot_facet(p, &mut next, ne, Facet { ef: &ef, ff: &ff, sc: fpoly.sc }, depth + 1, out);
+            pivot_facet(p, &mut next, ne, Facet { ef: &ef, ff: &ff, sc: fpoly.sc, seen: fpoly.seen }, depth + 1, out);
         }
         return;
     }
@@ -616,7 +631,7 @@ enum Nbr {
 /// `cert` is asked only when the fast path has failed, that is, when the slow path (Case 2) would
 /// run: if it names a known region R that is the only one across the facet, the search is skipped
 /// (unless `audit`, which runs it anyway). The third result is that region.
-fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[f64], ws: &mut Option<Tab>, cert: Option<&dyn Fn() -> Option<usize>>, audit: bool) -> (Vec<Nbr>, Option<usize>) {
+fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[f64], ws: &mut Option<Tab>, cert: Option<&dyn Fn() -> Option<usize>>, audit: bool, seen: Option<&Seen>) -> (Vec<Nbr>, Option<usize>) {
     #[cfg(feature = "lp_census")]
     let _cen_t = std::time::Instant::now();
     crate::census_bump!(AdjCalls, 1);
@@ -709,7 +724,7 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
     let mut out = vec![];
     #[cfg(feature = "lp_census")]
     crate::census::basis_reset();
-    pivot_facet(p, &mut work, n, Facet { ef: &ef, ff: &ff, sc: &rowsc }, 0, &mut out);
+    pivot_facet(p, &mut work, n, Facet { ef: &ef, ff: &ff, sc: &rowsc, seen }, 0, &mut out);
     *ws = Some(work);
     crate::census_bump!(AdjCase2, 1);
     crate::census_bump!(AdjCase2Nanos, _cen_t.elapsed().as_nanos());
@@ -1040,7 +1055,7 @@ fn certify(cx: &CertCtx, cur: &CriticalRegion, k: usize) -> Option<usize> {
 }
 
 /// Neighbour candidates across every facet of region `cur` (tableau `tab`).
-fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>>, tab: &Tab, depth: usize, entry: Option<&(Vec<f64>, f64)>, cert: Option<&CertCtx>, ws: &mut Option<Tab>) -> Vec<Cand> {
+fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>>, tab: &Tab, depth: usize, entry: Option<&(Vec<f64>, f64)>, cert: Option<&CertCtx>, seen: Option<&Seen>, ws: &mut Option<Tab>) -> Vec<Cand> {
     let mut cands = vec![];
     // Entry facet skip. A child reached by a Case-1 Toggle pivot (principal pivot of one z row v with
     // its complement) shares with its parent the facet {parent e_k θ = f_k}. In Case 1 the neighbour
@@ -1077,7 +1092,7 @@ fn expand_candidates(plcp: &Plcp, cur: &CriticalRegion, center: Option<&Vec<f64>
             }
             r
         };
-        let (nbrs, certified) = adjacent(plcp, tab, cur.e.row(k), cur.f[k], &cur.e, &cur.f, ws, if cert.is_some() { Some(&cfun as &dyn Fn() -> Option<usize>) } else { None }, cert.map_or(false, |c| c.audit));
+        let (nbrs, certified) = adjacent(plcp, tab, cur.e.row(k), cur.f[k], &cur.e, &cur.f, ws, if cert.is_some() { Some(&cfun as &dyn Fn() -> Option<usize>) } else { None }, cert.map_or(false, |c| c.audit), seen);
         if nbrs.is_empty() {
             continue;
         }
@@ -1279,7 +1294,7 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
         let cur = &regions[idx];
         let Some(tab) = crate::census_timed!(MplcpTabNanos, tab.resolve(plcp, cur)) else { continue };
         let cx = CertCtx::new(cmode, verts.as_deref(), &known, &regions, plcp.nt, wave_limit);
-        let cands = crate::census_timed!(MplcpNbrNanos, expand_candidates(plcp, cur, center.as_ref(), &tab, depth, entry.as_ref(), cx.as_ref(), &mut ws));
+        let cands = crate::census_timed!(MplcpNbrNanos, expand_candidates(plcp, cur, center.as_ref(), &tab, depth, entry.as_ref(), cx.as_ref(), Some(&seen), &mut ws));
         for c in cands {
             if c.cert.is_some() {
                 AUDIT_CERTIFIED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -1362,7 +1377,7 @@ fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalR
             let cur = &regions[idx];
             let tab = tab.resolve(plcp, cur)?;
             let cx = CertCtx::new(cmode, verts.as_deref(), &known, &regions, plcp.nt, wave_limit);
-            let cands = expand_candidates(plcp, cur, center.as_ref(), &tab, depth, entry.as_ref(), cx.as_ref(), ws);
+            let cands = expand_candidates(plcp, cur, center.as_ref(), &tab, depth, entry.as_ref(), cx.as_ref(), Some(&seen), ws);
             Some((Arc::new(tab), depth, cands))
         };
         let nw = wave.len();
