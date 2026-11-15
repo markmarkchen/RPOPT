@@ -4,7 +4,7 @@
 //! cheaper vertex clipping: a row that clears the running bounding box of the clipped polytope is
 //! skipped without a pass over the vertices (it can neither cut a vertex nor be tight at one),
 //! and no interval propagation of the parameter box is done. Falls back to the shared builder when the clipping does not apply (more than 128
-//! rows, or nt outside 2..=6).
+//! rows, or nt outside 2..=5).
 
 use crate::critical_region::CriticalRegion;
 use crate::linalg::Mat;
@@ -169,7 +169,9 @@ fn clip_flags(e: &Mat, f: &[f64], order: &[usize], lo: &[f64], hi: &[f64]) -> Op
         3 => clip_n::<3>(e, f, order, lo, hi),
         4 => clip_n::<4>(e, f, order, lo, hi),
         5 => clip_n::<5>(e, f, order, lo, hi),
-        6 => clip_n::<6>(e, f, order, lo, hi),
+        // 6 parameters and more take the LP path: on 6 parameters the clip needs hundreds of vertices
+        // (up to 40 ms per region on masses3_N4, and as much again when it hits the 600-vertex guard
+        // and fails), while the LP path takes about 0.1 ms; at 5 parameters the clip is still faster.
         _ => {
             crate::census_bump!(ClipNtOut, 1);
             None
