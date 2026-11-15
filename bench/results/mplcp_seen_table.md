@@ -110,3 +110,64 @@ snap landed. On the merged tree:
 | rand_t12_x5_m20_s0 | 2715 | 0.929 (0.931, 0.923, 0.929) | 0.999 |
 
 The 7% to 9% gain on these four problems holds on top of the box chain.
+
+## Index-first lookup of Case-1 neighbours (second step), on main 1feb98b
+
+A facet from row i of E of a region R with active set A has the neighbour A xor {i}: a lambda row (constraint j) removes j,
+a regular row (inactive constraint g) adds g, and a Theta row has none. The builder now records, for every kept row, whether
+its hyperplane (either orientation, 1e-6) is shared with no other row of the unreduced system (`CriticalRegion::facet_single`,
+`utils::unique_hyperplane_flags`; no flag at all when a numerically zero row was dropped, since it may vanish identically).
+`expand_candidates` skips a facet, with no tableau, no classification and no `adjacent` call, when its row is flagged unique
+and either it is a Theta row, or the key of A xor {i} hits an entry of the flat Seen table that is a built region (not a
+claimed set), verified against the stored set. `pivot_solve` skips the tableau of a popped region altogether (no resolve,
+no rebuild) when all its facets, the entry facet included, are settled this way; a lazy tableau source that was the last
+holder of its parent releases it in the live count. `mplcp::set_index_first(0|1|2)` (off, on, audit; `RPOPT_INDEX_FIRST` in
+the `region_hash` example) switches it; in audit mode the search runs as before and each skip is checked against it.
+
+- **Region sets:** sorted active sets with rows rounded to 1e-6 are identical across main 1feb98b, the pre-check alone and
+  index-first (also with the audit run) on 63 of 63 problems (the 62 of the first step plus pop_002).
+- **Exactness audit:** 8,026,668 skips checked over the 63 problems: 0 returned an unknown candidate (the criterion that
+  matters: nothing the old search returned would have been new). In 7,265 of them (0.09%) the old search ended another way
+  without an unknown candidate, mostly a facet on which the tableau finds no vanishing row (zero-row test) although the
+  neighbour A xor {i} exists as a built region (pop_017 1, masses4_N3 2, pop_002 2,751); the neighbour was known, so the
+  skip loses nothing.
+- **Tests:** 146 passed, 0 failed, 3 ignored (CI gate, 149 tests).
+- **Skipped:** regions whose tableau is not resolved: 200,725 over the 63 problems; on pop_002 133,887 of 321,026 (42%).
+- **Paired timing** against the pre-check alone (3 alternations, shuffled, A/A pair of the pre-check against itself):
+
+| problem | pre-check ms | index-first / pre-check | A/A |
+|---|---:|---:|---:|
+| rand_t8_x5_m20_s0 | 570 | 0.998 | 1.000 |
+| rand_t10_x5_m20_s0 | 1361 | 0.989 | 1.001 |
+| rand_t12_x5_m20_s0 | 1887 | 0.987 | 1.005 |
+| pop_017 | 450 | 0.996 | 1.000 |
+| masses4_N3 | 1533 | 0.998 | 0.999 |
+| pop_002 | 77,264 | 0.935 | 1.003 |
+
+The gain is 0% to 1.3% on the small problems, far under the 3% to 6% the census ceilings suggested (the call it removes costs
+0.3 to 0.9 us, and the per-region lookup context and the all-facets pre-pass cost part of that), and 6.5% on pop_002, where
+42% of the regions never resolve their tableau and the hash table is large enough for the lookups to matter.
+
+### The statement the skip relies on (for the Lean teammate)
+
+Let R = R(A) be a full-dimensional critical region of the pLCP, E its facet rows, and row i a facet of R with hyperplane
+h_i = 0. Hypotheses:
+
+1. (hyperplane-unique) no other row of the unreduced system (every lambda_k, every slack s_h of an inactive constraint,
+   every Theta row, whether or not it was found redundant or duplicate) is, up to a positive or negative factor, the same
+   affine function as h_i, and no unreduced row vanishes identically;
+2. the active set A' = A xor {i} (i a lambda row of constraint j: A' = A - {j}; i a regular row of constraint g: A' =
+   A + {g}) is the active set of a full-dimensional region R(A') of the same pLCP.
+
+Conclusions: (a) every point in the relative interior of the facet F = R and h_i = 0 has a neighbourhood in which the only
+critical regions are R and R(A'); in particular R(A') contains F and is the only region across F (this is the Case-1
+toggle: the single vanishing tableau row v has a nonzero pivot, and `Case1.reverse_neighbour` gives the same from the other
+side); (b) if row i is a Theta row, and hypothesis 1 holds, nothing lies across F (no tableau row vanishes on it).
+The code uses (a) and (b) only to omit the search of F, which would have returned either nothing or the known region R(A').
+The skip of a whole region's tableau uses the same statement for every facet, so its expansion would have returned no
+candidate. Beyond `Case1.reverse_neighbour` the rule needs: a tableau row vanishes identically on the facet of row i exactly
+when its affine function is proportional to h_i (so hypothesis 1 is the same as "Z = {v}"), and that a nonzero pivot follows
+from R(A') being a region of the same pLCP (a zero pivot would make A + {g} dependent, which is not an active set of a region).
+One safeguard of the old path is bypassed on a settled region: if its tableau could not be resolved, `across_fallback`
+probes across all its facets; on a region with every facet settled these probes can only land in known regions (audit:
+0 unknown candidates).
