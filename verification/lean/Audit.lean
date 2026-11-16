@@ -183,3 +183,8 @@ import RpoptProofs
 -- Round 22: certified gap of the box chain (6cd2a18)
 #print axioms Rpopt.abs_sub_le_extent
 #print axioms Rpopt.box_gap_certified
+-- Round 23: gap-band pivots decided from the rows (308d384)
+#print axioms Rpopt.residual_zero_of_rho
+#print axioms Rpopt.dep_row_of
+#print axioms Rpopt.dep_col_of
+#print axioms Rpopt.depFacet_of_rho_zero

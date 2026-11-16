@@ -23,6 +23,7 @@ import RpoptProofs.Optimizations.SeenClaims
 import RpoptProofs.Optimizations.IndexFirst
 import RpoptProofs.Optimizations.SeenTable
 import RpoptProofs.Optimizations.WeaklyActive
+import RpoptProofs.Optimizations.PivotGap
 import RpoptProofs.MplpLex.Certificate
 import RpoptProofs.MplpLex.Pivot
 import RpoptProofs.MplpLex.LexUnique
