@@ -1385,7 +1385,7 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
         let in_band = |i: usize| {
             let j = tab.row_var[i] - n;
             let nu = tab.t[i * n + kk].abs() / (mcc / p.m[j * n + j].max(1e-300)).sqrt();
-            nu > ZERO_GUARD_MIN && nu <= MU_NONZERO
+            nu > (if TRIG_EXT.load(std::sync::atomic::Ordering::Relaxed) { ZERO_GUARD_MIN } else { MU_ZERO }) && nu <= MU_NONZERO
         };
         if forced || zrows_all.iter().any(|&i| in_band(i)) {
             let zj: Vec<usize> = zrows_all.iter().map(|&i| tab.row_var[i] - n).collect();
@@ -1954,8 +1954,12 @@ const RHO_ZERO: f64 = 1e-19;
 /// rho <= 1e-20 (structural zeros, the square of the rounding of the rows) and rho in 1e-18 .. 1e-12 (small but real pivots), with nothing between.
 const RHO_NONZERO: f64 = 1e-18;
 static ZCOL_RELAX: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+static TRIG_EXT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static BAND_REAL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 /// Switches for the two rank-1 relaxations after a structural zero (`MPLCP_ZCOL=0`, `MPLCP_BANDREAL=0` in the examples).
+pub fn set_trigger_extension(on: bool) {
+    TRIG_EXT.store(on, std::sync::atomic::Ordering::Relaxed);
+}
 pub fn set_rank1_relaxations(zcol: bool, band_real: bool) {
     ZCOL_RELAX.store(zcol, std::sync::atomic::Ordering::Relaxed);
     BAND_REAL.store(band_real, std::sync::atomic::Ordering::Relaxed);
