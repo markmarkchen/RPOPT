@@ -66,8 +66,71 @@ pub fn checksum(bytes: &[u8]) -> u64 {
     r
 }
 
+/// Incremental form of [`checksum`]: feeding a byte string in any chunking gives the same value.
+pub(crate) struct StreamHasher {
+    h: [u64; 4],
+    pending: Vec<u8>,
+    len: u64,
+}
+
+const HASH_K: u64 = 0x517c_c1b7_2722_0a95;
+
+impl StreamHasher {
+    pub fn new() -> Self {
+        StreamHasher { h: [0x9E37_79B9_7F4A_7C15u64, 0xC2B2_AE3D_27D4_EB4F, 0x1656_67B1_9E37_79F9, 0x27D4_EB2F_1656_67C5], pending: Vec::with_capacity(32), len: 0 }
+    }
+    fn block(&mut self, b: &[u8]) {
+        for l in 0..4 {
+            let w = u64::from_le_bytes(b[l * 8..l * 8 + 8].try_into().unwrap());
+            self.h[l] = (self.h[l].rotate_left(5) ^ w).wrapping_mul(HASH_K);
+        }
+    }
+    pub fn update(&mut self, mut bytes: &[u8]) {
+        self.len += bytes.len() as u64;
+        if !self.pending.is_empty() {
+            let take = (32 - self.pending.len()).min(bytes.len());
+            self.pending.extend_from_slice(&bytes[..take]);
+            bytes = &bytes[take..];
+            if self.pending.len() < 32 {
+                return;
+            }
+            let b = std::mem::take(&mut self.pending);
+            self.block(&b);
+            self.pending = b;
+            self.pending.clear();
+        }
+        let mut blocks = bytes.chunks_exact(32);
+        for b in &mut blocks {
+            self.block(b);
+        }
+        self.pending.extend_from_slice(blocks.remainder());
+    }
+    pub fn finish(&self) -> u64 {
+        let mut t = 0u64;
+        for (i, &x) in self.pending.iter().enumerate() {
+            t = (t.rotate_left(5) ^ (x as u64 + ((i as u64) << 8))).wrapping_mul(HASH_K);
+        }
+        let mut r = t ^ self.len;
+        for l in 0..4 {
+            r = (r.rotate_left(5) ^ self.h[l]).wrapping_mul(HASH_K);
+        }
+        r
+    }
+}
+
+/// Where a streaming [`Writer`] sends its full chunks.
+pub(crate) enum Sink {
+    /// Only counts the bytes (first pass: the payload length for the header).
+    Count(u64),
+    /// Writes the bytes to a file and hashes them.
+    File(std::io::BufWriter<std::fs::File>, StreamHasher),
+    /// Compares the bytes with an existing file instead of writing (verifies a saved file without a second in-memory copy).
+    Compare(std::io::BufReader<std::fs::File>, StreamHasher),
+}
+
 pub(crate) struct Writer {
     pub buf: Vec<u8>,
+    sink: Option<Sink>,
 }
 
 impl Writer {
@@ -76,7 +139,68 @@ impl Writer {
         buf.extend_from_slice(magic);
         buf.extend_from_slice(&version.to_le_bytes());
         buf.extend_from_slice(&0u64.to_le_bytes());
-        Writer { buf }
+        Writer { buf, sink: None }
+    }
+    /// A writer that hands its buffer to `sink` whenever [`Writer::spill`] sees a full chunk, so
+    /// memory stays small. `payload_len` goes into the header (use a `Sink::Count` pass to get it).
+    pub fn streaming(magic: &[u8; 8], version: u32, payload_len: u64, sink: Sink) -> Self {
+        let mut w = Writer::new(magic, version, 1 << 21);
+        w.buf[12..20].copy_from_slice(&payload_len.to_le_bytes());
+        w.sink = Some(sink);
+        w
+    }
+    /// For a streaming writer with a full chunk buffered: passes it to the sink. No-op otherwise.
+    pub fn spill(&mut self) -> Result<(), Error> {
+        if self.sink.is_some() && self.buf.len() >= 1 << 20 {
+            self.drain()?;
+        }
+        Ok(())
+    }
+    fn drain(&mut self) -> Result<(), Error> {
+        use std::io::Write;
+        match self.sink.as_mut() {
+            Some(Sink::Count(n)) => *n += self.buf.len() as u64,
+            Some(Sink::File(f, h)) => {
+                h.update(&self.buf);
+                f.write_all(&self.buf)?;
+            }
+            Some(Sink::Compare(f, h)) => {
+                use std::io::Read;
+                h.update(&self.buf);
+                let mut got = vec![0u8; self.buf.len()];
+                f.read_exact(&mut got)?;
+                if got != self.buf {
+                    return Err(Error::Corrupt("saved file differs from the encoding".into()));
+                }
+            }
+            None => return Ok(()),
+        }
+        self.buf.clear();
+        Ok(())
+    }
+    /// Ends a streaming writer. A counting sink returns the payload length (without header and
+    /// checksum); a file sink appends the checksum, flushes, and returns the file size.
+    pub fn finish_stream(mut self) -> Result<u64, Error> {
+        use std::io::Write;
+        self.drain()?;
+        match self.sink.take() {
+            Some(Sink::Count(n)) => Ok(n - HEADER_LEN as u64),
+            Some(Sink::File(mut f, h)) => {
+                f.write_all(&h.finish().to_le_bytes())?;
+                f.flush()?;
+                Ok(h_len(&h) + 8)
+            }
+            Some(Sink::Compare(mut f, h)) => {
+                use std::io::Read;
+                let mut tail = Vec::new();
+                f.read_to_end(&mut tail)?;
+                if tail != h.finish().to_le_bytes() {
+                    return Err(Error::Corrupt("saved file has a wrong checksum or trailing bytes".into()));
+                }
+                Ok(h_len(&h) + 8)
+            }
+            None => Err(Error::Unsupported("not a streaming writer".into())),
+        }
     }
     pub fn u8(&mut self, v: u8) {
         self.buf.push(v);
@@ -165,6 +289,10 @@ impl Writer {
         self.buf.extend_from_slice(&c.to_le_bytes());
         self.buf
     }
+}
+
+fn h_len(h: &StreamHasher) -> u64 {
+    h.len
 }
 
 pub(crate) struct Reader<'a> {
