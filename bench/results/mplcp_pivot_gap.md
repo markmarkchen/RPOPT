@@ -37,6 +37,40 @@ Walk share of the solve after the change: 14% and 28% (was 59% and 61%); what is
 
 Scaling by 1e6: sets unchanged on all four. Scaling by 1e-6: thousands of sets change (masses4_N3 row 21: 1598 removed, 1525 added; masses5_N3 row 35: 2604 / 2467; rand_t12 row 4: 4251 / 3054), identically on main 1cced96 and on this branch with the rule on or off. So the defect is not in the pivot decision; most differing sets do not contain the scaled row, which points at the preprocessing or a tolerance on the row norm, not at the neighbour search.
 
-## Not done
+## Gate on the rebased branch (big-cost 483f2d4 on main d832d8f)
 
-Suite, paired timing (new, main, main again), the symmetry-mismatch class, the multiplier-row rule |pivot| M_jj for vanishing multiplier rows.
+Region sets, all 158 problems against main (the sets of the main binary, `RPOPT_CANON=1`): identical on 157; pop_028 gains the two near-duplicate labels described above. masses5_N4 and masses4_N5 are not in the 158; their differences are listed above.
+
+Audit verdict, counting only genuine regions that border the facet (contact radius above the walk's 1e-9) and keeping the other classes visible. Six mismatch facets (masses3_N4 1, masses4_N3 1, rand_t12 2, pop_005 2):
+
+| class of the walk-only or enumeration-only set | sets |
+|---|---:|
+| dependent set (contains c and every row with recomputed nu above 1e-12) | 5 |
+| no full-dimensional region from the active set | 30 or more |
+| genuine region in the final solve, contact with the facet below 1e-9 | 6 |
+| genuine region bordering the facet (rand_t12 [1,11,15,16,17], contact radius 1.66e-9, in the final solve) | 1 |
+
+So: one negligible miss in six facets, no region lost. audit-search accepted the nonzero side after the switch comparison below.
+
+Nonzero side of the gap decision: with `MPLCP_GAPNZ=0` (pivots decided nonzero left to the old rule) the sorted active sets are identical on masses5_N4 and masses4_N5, and the solve is 22% and 7% slower (laptop: 87.3 s and 77.3 s with the decision, 106.7 s and 82.4 s without). The five boundary slivers masses4_N5 gains are present with the switch off too.
+
+Forced calls (a pivot decided zero from the rows) with a z-column entry of row c above 1e-8, counted per entry: masses5_N4 5536, masses4_N5 28684, masses3_N6 3450, pop_005 82, masses4_N3 0, rand_t12 0. The tableau of those calls is noisy (the cuts read lambda from it); a fresh `tableau_for` for them is a follow-up.
+
+Paired timing, one node (a244, load 94 to 101), new against main d832d8f; masses5_N4 and masses4_N5 as one task per (alternation, pair) with two solves each, 3 alternations, A/A pair main against main; the others 5 alternations, one solve each of new, main, main again in shuffled order:
+
+| problem | main (s) | new / main (median) | A/A (median) |
+|---|---:|---:|---:|
+| masses5_N4 | 351.9 | 0.460 | 0.998 |
+| masses4_N5 | 286.5 | 0.510 | 1.002 |
+| masses3_N6 | 11.48 | 0.914 | 1.000 |
+| pop_005 | 2.07 | 0.954 | 0.995 |
+| masses4_N3 | 1.59 | 0.999 | 0.997 |
+| rand_t12_x5_m20_s0 | 1.90 | 1.004 | 1.003 |
+
+Suite (`ci_build.sh c2cost_T full`, 158 tests): 155 passed, 0 failed, 3 ignored.
+
+## Open
+
+- Finding 3 of the review (tableau zeros not relative to the accepted members): the extension that recomputes whenever a tableau entry lies in (1e-12, 1e-9] loses masses5_N4 [7,34,36,69]; it stays off. masses3_N7 [1,4,5,6,17,49,61] needs the symmetry check kept. Both are genuine thin regions that main reaches through walk entries below any nonzero rule (walk-fix: raw 4.7e-10, scale-free 1.8e-12 on masses3_N7); one defect, still to be traced.
+- The symmetry-mismatch class (3682 and 6379 calls, 14% and 19% of the solve on the two big problems) and the |pivot| M_jj rule for vanishing multiplier rows.
+- The row-scaling defect (above) is a main defect.
