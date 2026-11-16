@@ -180,3 +180,6 @@ import RpoptProofs
 #print axioms Rpopt.verified_lookup_iff
 #print axioms Rpopt.weakly_active_same_rows
 #print axioms Rpopt.weakly_active_same_region
+-- Round 22: certified gap of the box chain (6cd2a18)
+#print axioms Rpopt.abs_sub_le_extent
+#print axioms Rpopt.box_gap_certified
