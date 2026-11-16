@@ -15,7 +15,7 @@ use std::cmp::Ordering;
 /// region polytope, flattened (nt coordinates each).
 pub(super) type Built = (CriticalRegion, Vec<f64>, Option<Vec<f64>>, Option<Vec<f64>>);
 
-pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Option<&[f64]>, law: Option<crate::program::ControlLaw>, want_verts: bool, parent_box: Option<&[f64]>, entry: Option<&(Vec<f64>, f64)>) -> Option<Built> {
+pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Option<&[f64]>, law: Option<crate::program::ControlLaw>, want_verts: bool, parent_box: Option<&[f64]>, entry: Option<&(Vec<f64>, f64)>, guard: &ChainGuard) -> Option<Built> {
     use crate::mpqp_utils::kkt_region_from_law;
     crate::census_purpose!(Chebyshev);
     #[cfg(feature = "lp_census")]
@@ -121,7 +121,7 @@ pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Opti
             #[cfg(feature = "lp_census")]
             let _tred = crate::census_diag::t0();
             let prep = crate::mpqp_utils::Prepared { law, n_lambda, inactive, pos, e, f, kept_rows_len: kept_rows.len(), center, cheb_radius, dropped_zero };
-            let r = if nt >= 6 && chain_on() { lp_path(program, active_set, prep, parent_box, entry) } else { crate::mpqp_utils::gen_cr_from_prepared(program, active_set, false, prep).map(|(cr, c)| (cr, c, None, None)) };
+            let r = if nt >= 6 && guard.chain_on() { lp_path(program, active_set, prep, parent_box, entry, guard) } else { crate::mpqp_utils::gen_cr_from_prepared(program, active_set, false, prep).map(|(cr, c)| (cr, c, None, None)) };
             #[cfg(feature = "lp_census")]
             {
                 crate::census_diag::lap(crate::census_diag::s::RED_NS, _tred);
@@ -192,42 +192,87 @@ pub(super) fn build_region(program: &MpProgram, active_set: &[usize], hint: Opti
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering as AO};
 
-static G_REG: AtomicU64 = AtomicU64::new(0);
-static G_FB: AtomicU64 = AtomicU64::new(0);
-static G_OFF: AtomicBool = AtomicBool::new(false);
-static G_ENG: AtomicU64 = AtomicU64::new(0);
-/// Switch for tests and comparisons: `false` sends every region to the shared builder.
+/// Switch for tests and comparisons: `false` sends every region to the shared builder. Read once at the start of a solve.
 static CHAIN: AtomicBool = AtomicBool::new(true);
 
 pub(super) fn set_chain(on: bool) {
     CHAIN.store(on, AO::Relaxed);
 }
 
-/// Starts a solve: the fallback guard counts afresh.
-pub(super) fn reset_guard() {
-    G_REG.store(0, AO::Relaxed);
-    G_FB.store(0, AO::Relaxed);
-    G_ENG.store(0, AO::Relaxed);
-    G_OFF.store(false, AO::Relaxed);
+/// Whether the fallback guard counts a chain that could not be started at a vertex (the engine optimum was not a vertex) as a fallback. Read once at
+/// the start of a solve. On (default): every objective that went to the engine for any reason counts towards the 20%.
+static GUARD_INIT: AtomicBool = AtomicBool::new(true);
+
+pub(super) fn set_guard_count_init(on: bool) {
+    GUARD_INIT.store(on, AO::Relaxed);
 }
 
-fn chain_on() -> bool {
-    CHAIN.load(AO::Relaxed) && !G_OFF.load(AO::Relaxed)
+/// Fallback guard of one solve: after 100 regions, a chain whose objectives fall back to the engine in more than 20% of the cases is
+/// switched off for the rest of that solve (the shared builder takes over). The state belongs to the solve (it is created in
+/// `pivot_solve` and `pivot_solve_par` and passed to the builder), so two solves, on one thread or on several, never steer each other.
+pub(super) struct ChainGuard {
+    on: bool,
+    count_init: bool,
+    reg: AtomicU64,
+    fb: AtomicU64,
+    eng: AtomicU64,
+    init: AtomicU64,
+    reb: AtomicU64,
+    off: AtomicBool,
+    /// the number of regions the chain had built when the guard switched it off
+    off_at: AtomicU64,
+    no_outer: AtomicU64,
 }
 
-/// Fallback guard: after 100 regions, a chain whose objectives fall back to the engine in more than
-/// 20% of the cases is switched off for the rest of the solve (the shared builder takes over).
-pub(super) fn chain_stats() -> (u64, u64, u64, bool) {
-    (G_REG.load(AO::Relaxed), G_FB.load(AO::Relaxed), G_ENG.load(AO::Relaxed), G_OFF.load(AO::Relaxed))
-}
-
-fn note_chain(regions: u64, fallbacks: u64, engine: u64, n: usize) {
-    G_ENG.fetch_add(engine, AO::Relaxed);
-    let r = G_REG.fetch_add(regions, AO::Relaxed) + regions;
-    let f = G_FB.fetch_add(fallbacks, AO::Relaxed) + fallbacks;
-    if r >= 100 && (f as f64) > 0.2 * (r as f64) * (2 * n) as f64 {
-        G_OFF.store(true, AO::Relaxed);
+impl ChainGuard {
+    pub(super) fn new() -> ChainGuard {
+        ChainGuard { on: CHAIN.load(AO::Relaxed), count_init: GUARD_INIT.load(AO::Relaxed), reg: AtomicU64::new(0), fb: AtomicU64::new(0), eng: AtomicU64::new(0), init: AtomicU64::new(0), reb: AtomicU64::new(0), off: AtomicBool::new(false), off_at: AtomicU64::new(0), no_outer: AtomicU64::new(0) }
     }
+
+    fn chain_on(&self) -> bool {
+        self.on && !self.off.load(AO::Relaxed)
+    }
+
+    fn note(&self, st: &crate::boxlp::Stats, n: usize) {
+        let regions = 1;
+        self.eng.fetch_add(st.engine_lps, AO::Relaxed);
+        self.init.fetch_add(st.init_failures, AO::Relaxed);
+        self.reb.fetch_add(st.rebuilt, AO::Relaxed);
+        self.no_outer.fetch_add(st.no_outer, AO::Relaxed);
+        let r = self.reg.fetch_add(regions, AO::Relaxed) + regions;
+        // an objective that went to the engine because the simplex failed, and a chain that could not be started at a vertex, both count
+        let fallbacks = st.fallbacks + if self.count_init { st.init_failures } else { 0 };
+        let f = self.fb.fetch_add(fallbacks, AO::Relaxed) + fallbacks;
+        if r >= 100 && (f as f64) > 0.2 * (r as f64) * (2 * n) as f64 && !self.off.swap(true, AO::Relaxed) {
+            self.off_at.store(r, AO::Relaxed);
+        }
+    }
+
+    /// Writes this solve's counters to the "last solve" record that `chain_stats` reports.
+    pub(super) fn publish(&self) {
+        LAST[0].store(self.reg.load(AO::Relaxed), AO::Relaxed);
+        LAST[1].store(self.fb.load(AO::Relaxed), AO::Relaxed);
+        LAST[2].store(self.eng.load(AO::Relaxed), AO::Relaxed);
+        LAST[3].store(self.off.load(AO::Relaxed) as u64, AO::Relaxed);
+        LAST[4].store(self.init.load(AO::Relaxed), AO::Relaxed);
+        LAST[5].store(self.reb.load(AO::Relaxed), AO::Relaxed);
+        LAST[6].store(self.off_at.load(AO::Relaxed), AO::Relaxed);
+        LAST[7].store(self.no_outer.load(AO::Relaxed), AO::Relaxed);
+    }
+}
+
+const LAST0: AtomicU64 = AtomicU64::new(0);
+/// Counters of the last finished solve, for reporting only (nothing reads them to decide anything).
+static LAST: [AtomicU64; 8] = [LAST0; 8];
+
+/// (regions built by the chain, objectives that fell back to the engine, engine LPs, chain switched off by the guard) of the last solve.
+/// (failed attempts to start a state at a vertex, failed checks resolved by the rebuild, the region count at which the guard switched the chain off (0 if it did not), regions built without a finite outer box, so without the chain) of the last solve.
+pub(super) fn chain_detail() -> (u64, u64, u64, u64) {
+    (LAST[4].load(AO::Relaxed), LAST[5].load(AO::Relaxed), LAST[6].load(AO::Relaxed), LAST[7].load(AO::Relaxed))
+}
+
+pub(super) fn chain_stats() -> (u64, u64, u64, bool) {
+    (LAST[0].load(AO::Relaxed), LAST[1].load(AO::Relaxed), LAST[2].load(AO::Relaxed), LAST[3].load(AO::Relaxed) != 0)
 }
 
 /// The redundancy step of `mpqp_utils::gen_cr_from_prepared` for 6 or more parameters, with the 2n
@@ -235,7 +280,7 @@ fn note_chain(regions: u64, fallbacks: u64, engine: u64, n: usize) {
 /// parent's box on the shared facet when there is one). Same rows, same flags up to ties at the
 /// box's optimal vertices; the box only screens rows and every later stage is exact. Returns the
 /// region, its centre and the box's 2n points (flattened) for the region's own children.
-fn lp_path(program: &MpProgram, active_set: &[usize], prep: crate::mpqp_utils::Prepared, parent_box: Option<&[f64]>, entry: Option<&(Vec<f64>, f64)>) -> Option<Built> {
+fn lp_path(program: &MpProgram, active_set: &[usize], prep: crate::mpqp_utils::Prepared, parent_box: Option<&[f64]>, entry: Option<&(Vec<f64>, f64)>, guard: &ChainGuard) -> Option<Built> {
     use crate::utils::remove_duplicate_rows;
     let crate::mpqp_utils::Prepared { law, n_lambda, inactive, pos, e, f, kept_rows_len, center, cheb_radius, dropped_zero } = prep;
     let nt = program.num_t();
@@ -273,10 +318,10 @@ fn lp_path(program: &MpProgram, active_set: &[usize], prep: crate::mpqp_utils::P
             let mut st = crate::boxlp::Stats::default();
             #[cfg(feature = "lp_census")]
             let _tbox = crate::census_diag::t0();
-            let r = crate::boxlp::box_chain(&el, &fl, &center, start.as_deref(), &mut st);
+            let r = crate::boxlp::box_chain_in(&el, &fl, &center, start.as_deref(), Some((&blo, &bhi)), &mut st);
             #[cfg(feature = "lp_census")]
             crate::census_diag::lap(crate::census_diag::s::PF_BOX_NS, _tbox);
-            note_chain(1, st.fallbacks, st.engine_lps, nt);
+            guard.note(&st, nt);
             if let Some((_, _, pts)) = &r {
                 boxflat = Some(pts.iter().flat_map(|p| p.iter().copied()).collect());
             }

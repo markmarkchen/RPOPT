@@ -2570,7 +2570,14 @@ struct DqState {
     calls: u32,
     empties: u32,
     pause: u32,
+    /// the solve epoch this state belongs to: a new solve resets the adaptive counters above
+    epoch: u64,
 }
+
+/// Bumped at the start of every solve; the DAQP filter's adaptive counters (per thread) restart when they see a new epoch, so a solve does not inherit
+/// the pause of the previous one. Two solves running at the same time only restart each other's counters, which changes which of two agreeing
+/// emptiness tests answers, not the answer.
+static DQ_EPOCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 thread_local! {
     static DQ_WS: std::cell::RefCell<DqState> = std::cell::RefCell::new(DqState::default());
@@ -2597,6 +2604,13 @@ fn daqp_certainly_empty(e: &Mat, f: &[f64], d1: usize, bound: f64) -> bool {
     crate::census_bump!(DqTests, 1);
     let empty = DQ_WS.with(|ws| {
         let st = &mut *ws.borrow_mut();
+        let ep = DQ_EPOCH.load(std::sync::atomic::Ordering::Relaxed);
+        if st.epoch != ep {
+            st.epoch = ep;
+            st.calls = 0;
+            st.empties = 0;
+            st.pause = 0;
+        }
         if st.pause > 0 {
             st.pause -= 1;
             return None;
@@ -2678,10 +2692,11 @@ const WITNESS_MARGIN: f64 = 1e-8;
 const WALK_BUDGET_PER_ROW: usize = 2;
 const WALK_BUDGET_MIN: usize = 64;
 
-/// Memory statistics and knobs of the serial exploration: parents whose tableau is shared by queued lazy children,
+/// Memory statistics (reporting only: written at the end or during a solve, never read to decide anything, so concurrent solves can only mix the numbers
+/// they report) and knobs of the serial exploration. The live count of shared parents that steers the budget is local to the solve (`live_parents` in
+/// `pivot_solve`). Parents whose tableau is shared by queued lazy children,
 /// the peak of that count, and the size of one tableau; `TAB_BUDGET` (bytes, 0 = no limit, default 512 MiB, shared by the live parents and the tableaux owned by queued items) is the limit on the tableaux of live parents beyond which a parent's children are queued without a
 /// tableau and rebuild it from their active set when popped.
-static LIVE_PARENTS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static PEAK_PARENTS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static TAB_BYTES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static TAB_BUDGET: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(512 << 20);
@@ -2743,21 +2758,21 @@ impl From<Option<Tab>> for TabSrc {
 impl TabSrc {
     /// Drops the tableau source of a region that is not expanded; a lazy source that was the last holder of its parent
     /// releases the parent in the live count, as `resolve` does.
-    fn discard(self) {
+    fn discard(self, live_parents: &std::sync::atomic::AtomicUsize) {
         if let TabSrc::Lazy(a, _, _) = self {
             if std::sync::Arc::try_unwrap(a).is_ok() {
-                LIVE_PARENTS.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+                live_parents.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
             }
         }
     }
 
     /// The tableau, rebuilt from the active set of `cr` when there is none.
-    fn resolve(self, plcp: &Plcp, cr: &CriticalRegion) -> Option<Tab> {
+    fn resolve(self, plcp: &Plcp, cr: &CriticalRegion, live_parents: &std::sync::atomic::AtomicUsize) -> Option<Tab> {
         match self {
             TabSrc::Ready(t) => Some(t),
             TabSrc::Lazy(a, v, kk) => Some(match std::sync::Arc::try_unwrap(a) {
                 Ok(mut t) => {
-                    LIVE_PARENTS.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+                    live_parents.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
                     t.pivot(v, kk);
                     t
                 }
@@ -3477,6 +3492,11 @@ pub fn box_chain_stats() -> (u64, u64, u64, bool) {
     build::chain_stats()
 }
 
+/// (failed attempts to start a state at a vertex, each followed by engine LPs; failed optimum checks that rebuilding the state resolved; the region count at which the guard switched the chain off, 0 if it did not; regions built without a finite outer box, so without the chain) of the last solve.
+pub fn box_chain_detail() -> (u64, u64, u64, u64) {
+    build::chain_detail()
+}
+
 /// Default work budget of one vertex clip (see `mplcp_build.rs`): 2^18 units, about 0.4 ms.
 pub const DEFAULT_CLIP_BUDGET: u64 = 1 << 18;
 
@@ -3484,6 +3504,11 @@ pub const DEFAULT_CLIP_BUDGET: u64 = 1 << 18;
 /// the region takes the LP path. `u64::MAX` switches the budget off.
 pub fn set_clip_budget(budget: u64) {
     build::set_clip_budget(budget);
+}
+
+/// Whether the box chain's fallback guard counts the chains that could not be started at a vertex (default true).
+pub fn set_guard_count_init(on: bool) {
+    build::set_guard_count_init(on);
 }
 
 /// Switches the chained bounding-box LPs of the LP-path region builder (6 or more parameters; default on).
@@ -3705,7 +3730,7 @@ fn diag_tab_rows(plcp: &Plcp, parent: &Tab, c: &Cand) {
     crate::census_diag::set_tab_rows(Some(m));
 }
 
-fn build_cand(program: &MpProgram, plcp: &Plcp, parent: &Tab, c: &Cand, want_verts: bool, parent_box: Option<&[f64]>) -> Option<(CriticalRegion, Option<Vec<f64>>, Option<Tab>, Option<Vec<f64>>, Option<Vec<f64>>)> {
+fn build_cand(program: &MpProgram, plcp: &Plcp, parent: &Tab, c: &Cand, want_verts: bool, parent_box: Option<&[f64]>, guard: &build::ChainGuard) -> Option<(CriticalRegion, Option<Vec<f64>>, Option<Tab>, Option<Vec<f64>>, Option<Vec<f64>>)> {
     if program.num_t() > 1 {
         #[cfg(feature = "lp_census")]
         if crate::census_diag::on() {
@@ -3724,7 +3749,7 @@ fn build_cand(program: &MpProgram, plcp: &Plcp, parent: &Tab, c: &Cand, want_ver
         };
         #[cfg(feature = "lp_census")]
         crate::census_diag::lap(crate::census_diag::s::LAW_NS, _tlaw);
-        let (cr, ce, verts, boxpts) = build::build_region(program, &c.aset, c.hint.as_deref(), law, want_verts, parent_box, c.entry.as_ref())?;
+        let (cr, ce, verts, boxpts) = build::build_region(program, &c.aset, c.hint.as_deref(), law, want_verts, parent_box, c.entry.as_ref(), guard)?;
         // A basis that is singular in exact arithmetic (parallel rows both active) can pass every
         // other test with a garbage law; its region then overlaps the true ones (pop_005, pop_007,
         // pop_011). Legitimate regions have residuals up to 1e-5 (masses5_N3), garbage ones 1e-1. The
@@ -3755,7 +3780,9 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
     crate::census_diag::lap(crate::census_diag::s::PF_INIT_NS, _tinit);
     #[cfg(feature = "lp_census")]
     let _tloop = crate::census_diag::t0();
-    build::reset_guard();
+    DQ_EPOCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let guard = build::ChainGuard::new();
+    let live_parents = std::sync::atomic::AtomicUsize::new(0);
     let mut seen: Seen = new_seen(plcp);
     seen.insert(&initial.active_set, Slot::Built(0));
     let mut regions = vec![initial];
@@ -3769,7 +3796,6 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
     let mut ws: Option<Tab> = None;
     let mut pending: Vec<(CriticalRegion, Option<Vec<f64>>, Option<(usize, usize)>, Option<Tab>, Option<(Vec<f64>, f64)>, Option<Vec<f64>>, Option<Vec<f64>>)> = vec![];
     let mut wave_limit = 1usize;
-    LIVE_PARENTS.store(0, std::sync::atomic::Ordering::Relaxed);
     PEAK_PARENTS.store(0, std::sync::atomic::Ordering::Relaxed);
     let budget = TAB_BUDGET.load(std::sync::atomic::Ordering::Relaxed);
     PEAK_QUEUE_LEN.store(0, std::sync::atomic::Ordering::Relaxed);
@@ -3794,13 +3820,13 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
                 if mode == 1 {
                     // every facet is settled: the region has no new neighbour, its tableau is never needed
                     INDEX_STATS[3].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    tab.discard();
+                    tab.discard(&live_parents);
                     continue;
                 }
                 INDEX_STATS[4].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             }
         }
-        let (tab, cands) = match crate::census_timed!(MplcpTabNanos, tab.resolve(plcp, cur)) {
+        let (tab, cands) = match crate::census_timed!(MplcpTabNanos, tab.resolve(plcp, cur, &live_parents)) {
             Some(tab) => {
                 let cx = CertCtx::new(cmode, verts.as_deref(), &known, &regions, plcp.nt, wave_limit);
                 #[cfg(feature = "lp_census")]
@@ -3841,7 +3867,7 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
                 continue;
             }
             crate::census_bump!(CandGen, 1);
-            let built = crate::census_timed!(MplcpBuildNanos, build_cand(program, plcp, &tab, &c, cert_active(cmode, plcp.nt), parent_box.as_deref()));
+            let built = crate::census_timed!(MplcpBuildNanos, build_cand(program, plcp, &tab, &c, cert_active(cmode, plcp.nt), parent_box.as_deref(), &guard));
             if let Some((cr, ce, own, vt, bp)) = built {
                 if c.cert.is_some() {
                     // audit: the search across a certified facet also reached a new region (it
@@ -3858,7 +3884,7 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
         let tbytes = tab_len_bytes(&tab);
         TAB_BYTES.store(tbytes, std::sync::atomic::Ordering::Relaxed);
         // beyond the budget for live parent tableaux the children are queued without one and rebuild it when popped
-        let over = budget > 0 && (LIVE_PARENTS.load(std::sync::atomic::Ordering::Relaxed) + 1) * tbytes + ready_bytes > budget;
+        let over = budget > 0 && (live_parents.load(std::sync::atomic::Ordering::Relaxed) + 1) * tbytes + ready_bytes > budget;
         let tab = std::sync::Arc::new(tab);
         let mut lazy_children = 0usize;
         for (cr, ce, piv, own, ent, vt, bp) in pending.drain(..) {
@@ -3870,7 +3896,7 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
                 Some(_) => (TabSrc::None, 0),
                 None => match own {
                     // an owned tableau is kept while the live parents and the owned tableaux fit in the budget
-                    Some(t) if budget == 0 || (LIVE_PARENTS.load(std::sync::atomic::Ordering::Relaxed) + 1) * tbytes + ready_bytes + tab_len_bytes(&t) <= budget => {
+                    Some(t) if budget == 0 || (live_parents.load(std::sync::atomic::Ordering::Relaxed) + 1) * tbytes + ready_bytes + tab_len_bytes(&t) <= budget => {
                         ready_bytes += tab_len_bytes(&t);
                         (TabSrc::Ready(t), 0)
                     }
@@ -3898,7 +3924,7 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
             crate::census_diag::conn_region_done(idx);
         }
         if lazy_children > 0 {
-            let live = LIVE_PARENTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+            let live = live_parents.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
             PEAK_PARENTS.fetch_max(live, std::sync::atomic::Ordering::Relaxed);
         }
     }
@@ -3907,6 +3933,7 @@ fn pivot_solve(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalRegio
     SEEN_LEN.store(seen.len(), std::sync::atomic::Ordering::Relaxed);
     // hashbrown: one control byte per bucket and (key header + slot) per bucket, at the load factor 7/8
     SEEN_BYTES.store(seen.bytes(), std::sync::atomic::Ordering::Relaxed);
+    guard.publish();
     regions
 }
 
@@ -3930,7 +3957,9 @@ fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalR
         return pivot_solve(program, plcp, seed);
     }
     let Some((initial, init_center)) = initial_region(program, seed) else { return vec![] };
-    build::reset_guard();
+    DQ_EPOCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let guard = build::ChainGuard::new();
+    let live_parents = std::sync::atomic::AtomicUsize::new(0);
     let mut seen: Seen = new_seen(plcp);
     seen.insert(&initial.active_set, Slot::Built(0));
     let mut regions = vec![initial];
@@ -3948,7 +3977,7 @@ fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalR
         let expand = |ws: &mut Option<Tab>, item: Item| -> Option<(Arc<Tab>, usize, Vec<Cand>)> {
             let Item { idx, center, tab, depth, entry, verts, .. } = item;
             let cur = &regions[idx];
-            let (tab, cands) = match tab.resolve(plcp, cur) {
+            let (tab, cands) = match tab.resolve(plcp, cur, &live_parents) {
                 Some(tab) => {
                     let cx = CertCtx::new(cmode, verts.as_deref(), &known, &regions, plcp.nt, wave_limit);
                     let cands = expand_candidates(plcp, cur, center.as_ref(), &tab, depth, entry.as_ref(), cx.as_ref(), Some(&seen), program, ws);
@@ -3984,7 +4013,7 @@ fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalR
             }
         }
         let build = |(tab, depth, c): &(Arc<Tab>, usize, Cand)| -> Option<(CriticalRegion, Option<Vec<f64>>, Option<Tab>, usize, Option<(Vec<f64>, f64)>, Option<Vec<f64>>)> {
-            let (cr, center, own, vt, _) = build_cand(program, plcp, tab, c, cert_active(cmode, plcp.nt), None)?;
+            let (cr, center, own, vt, _) = build_cand(program, plcp, tab, c, cert_active(cmode, plcp.nt), None, &guard)?;
             let (ntab, nd) = match c.piv {
                 Some((v, kk)) => {
                     (Some(tab.pivoted(v, kk)), depth + 1)
@@ -4011,6 +4040,7 @@ fn pivot_solve_par(program: &MpProgram, plcp: &Plcp, seed: u64) -> Vec<CriticalR
             wave.push(Item { idx: regions.len() - 1, center, tab: tab.into(), depth, entry, verts, boxpts: None });
         }
     }
+    guard.publish();
     regions
 }
 
