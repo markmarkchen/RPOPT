@@ -1369,6 +1369,10 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
         if cv >= n && cv < 2 * n {
             // after a structural zero was decided from the original rows the entries of row c on the z columns are rounding of the tableau (up to
             // 1e-6 on masses4_N5), not a different structure
+            #[cfg(feature = "lp_census")]
+            if forced && tab.t[c * n + col].abs() > 1e-8 {
+                crate::census::bump_slot(crate::census::PG_BASE + 80, 1);
+            }
             if tab.t[c * n + col].abs() > if forced && ZCOL_RELAX.load(std::sync::atomic::Ordering::Relaxed) { 1e-5 } else { 1e-8 } {
                 { crate::census_reason!(4); return None; }
             }
@@ -1389,9 +1393,19 @@ fn rank1_case2(p: &Plcp, tab: &Tab, g: &[f64], b: f64, gam: &[f64], zrows: &[usi
         };
         if forced || zrows_all.iter().any(|&i| in_band(i)) {
             let zj: Vec<usize> = zrows_all.iter().map(|&i| tab.row_var[i] - n).collect();
-            mu_ref = refined_multipliers(p, &zj, var);
-            if forced && mu_ref.is_none() {
-                { crate::census_reason!(3); return None; }
+            match refined_dependency(p, &zj, var) {
+                Some((mu, rho)) => {
+                    // a call trusted on the tableau measure alone (not decided from the rows) must still verify the dependency: the rows decide, not the tableau
+                    if !forced && rho > RHO_ZERO && RHO_CHECK.load(std::sync::atomic::Ordering::Relaxed) {
+                        { crate::census_reason!(3); return None; }
+                    }
+                    mu_ref = Some(mu);
+                }
+                None => {
+                    if forced {
+                        { crate::census_reason!(3); return None; }
+                    }
+                }
             }
         }
     }
@@ -1949,11 +1963,22 @@ fn dependent_set(p: &Plcp, aset: &[usize]) -> bool {
 const ZERO_GUARD_MIN: f64 = 1e-12;
 const REFINE_STEPS: usize = 2;
 /// The pivot of a gap-band exchange is zero when the dependency residual rho (`refined_dependency`) is at most this (a relative residual of 3e-10).
+/// Both thresholds (this and `RHO_NONZERO`) were measured on the masses problems and pop_005 only (census table 3v keeps the decade histogram, so another
+/// family can be checked before the thresholds are trusted there).
 const RHO_ZERO: f64 = 1e-19;
 /// A pivot in the undecided band is nonzero when rho is at least this. Measured on the masses problems: the gap-band calls fall in two clusters,
 /// rho <= 1e-20 (structural zeros, the square of the rounding of the rows) and rho in 1e-18 .. 1e-12 (small but real pivots), with nothing between.
 const RHO_NONZERO: f64 = 1e-18;
 static ZCOL_RELAX: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+static RHO_CHECK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+pub fn set_rho_check(on: bool) {
+    RHO_CHECK.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+static GAP_NONZERO: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+/// Switch for the nonzero side of the gap-band pivot decision (`MPLCP_GAPNZ=0` in region_hash): a pivot decided nonzero is then left to the old rule.
+pub fn set_gap_nonzero(on: bool) {
+    GAP_NONZERO.store(on, std::sync::atomic::Ordering::Relaxed);
+}
 static TRIG_EXT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static BAND_REAL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 /// Switches for the two rank-1 relaxations after a structural zero (`MPLCP_ZCOL=0`, `MPLCP_BANDREAL=0` in the examples).
@@ -2119,7 +2144,7 @@ fn adjacent(p: &Plcp, tab: &Tab, erow: &[f64], frhs: f64, e_all: &Mat, f_all: &[
             let zj: Vec<usize> = (0..n).filter(|&i| tab.row_var[i] >= n && tab.row_var[i] < 2 * n).map(|i| tab.row_var[i] - n).collect();
             if let Some((_, rho)) = refined_dependency(p, &zj, var) {
                 gap_zero = rho <= RHO_ZERO;
-                gap_nonzero = rho >= RHO_NONZERO;
+                gap_nonzero = rho >= RHO_NONZERO && GAP_NONZERO.load(std::sync::atomic::Ordering::Relaxed);
                 #[cfg(feature = "lp_census")]
                 {
                     use crate::census::{bump_slot, PG_BASE};

@@ -42,6 +42,8 @@ fn main() {
     }
     rpopt::algorithms::mplcp::set_rank1_relaxations(std::env::var("MPLCP_ZCOL").map_or(true, |v| v != "0"), std::env::var("MPLCP_BANDREAL").map_or(true, |v| v != "0"));
     rpopt::algorithms::mplcp::set_trigger_extension(std::env::var("MPLCP_TRIGEXT").map_or(false, |v| v == "1"));
+    rpopt::algorithms::mplcp::set_gap_nonzero(std::env::var("MPLCP_GAPNZ").map_or(true, |v| v != "0"));
+    rpopt::algorithms::mplcp::set_rho_check(std::env::var("MPLCP_RHOCHECK").map_or(true, |v| v != "0"));
     // MPLCP_NO_DEDUPE=1: solve with the duplicated constraints (no removal)
     if std::env::var("MPLCP_NO_DEDUPE").is_ok() {
         rpopt::algorithms::mplcp::set_dedupe(false);
