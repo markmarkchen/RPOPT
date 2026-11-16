@@ -107,6 +107,13 @@ The chain is sound now (the bound is certified from the data for any conditionin
 masses4_N3, equal or 1% to 2% faster on the rest of the timing set (rand_t12 2.1% faster). The 5% to 6% that the chain was worth on masses4_N3 and masses5_N3 is given back
 by the guard firing earlier together with the widened box.
 
-Not done, noted: outcome (iii) of the rebuild (34% to 49% of the failed checks) points at the 50-pivot refresh period being too long for ill-conditioned bases; a refresh
-every 8 pivots or when max|W| passes 1e4 is the obvious test (at most a few thousand engine LPs per solve at 2.5 us, so well under 1%). A crossover from a non-vertex
-engine optimum (94% of the state failures) would remove 4,000 to 15,000 engine LPs per solve, also under 1%.
+Two ideas that were not built, each under 1% of the solve:
+
+- **A shorter refresh period.** Outcome (iii) of the rebuild (34% to 49% of the failed checks) points at the 50-pivot refresh period being too long for
+  ill-conditioned bases. A refresh every 8 pivots, or whenever max|W| passes 1e4, is the obvious test; it could save at most a few thousand engine LPs per
+  solve at 2.5 us each.
+- **A crossover from a non-vertex engine optimum.** 94% of the failures to form a state are an engine optimum inside a face. Walking to a vertex inside the
+  optimal face would remove 4,000 to 15,000 engine LPs per solve at 2.5 us each.
+
+A third, from the review: send an objective whose gap is above about 1e-8 to the engine instead of accepting a loose bound, and time masses4_N3 once (the 2%
+there is the widened box).
