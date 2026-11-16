@@ -1750,6 +1750,9 @@ pub(crate) enum PivotClass {
 /// `pivot_measure` decides outside the band (MEASURE_ZERO, MEASURE_NONZERO]; inside it the dependency residual rho of the original rows
 /// (`refined_dependency`) decides: rho <= RHO_ZERO is zero, rho >= RHO_NONZERO nonzero. The tableau pivot itself, a difference of Gram entries,
 /// resolves only about 1e-9 and must not be compared with an absolute tolerance.
+/// Asymmetry: a measure at or below MEASURE_ZERO is zero without looking at rho, so the same true pivot is classed differently depending on the rounding
+/// of the tableau (clean: zero, noisy and lifted into the band: decided by rho). This was measured harmless on masses5_N4 and masses4_N5 only; rho is not
+/// the single rule.
 pub(crate) fn classify_pivot(p: &Plcp, tab: &Tab, c: usize, kk: usize) -> PivotClass {
     let m = pivot_measure(p, tab, c, kk);
     if m <= MEASURE_ZERO {
