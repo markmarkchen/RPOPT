@@ -74,3 +74,5 @@ Suite (`ci_build.sh c2cost_T full`, 158 tests): 155 passed, 0 failed, 3 ignored.
 - Finding 3 of the review (tableau zeros not relative to the accepted members): the extension that recomputes whenever a tableau entry lies in (1e-12, 1e-9] loses masses5_N4 [7,34,36,69]; it stays off. masses3_N7 [1,4,5,6,17,49,61] needs the symmetry check kept. Both are genuine thin regions that main reaches through walk entries below any nonzero rule (walk-fix: raw 4.7e-10, scale-free 1.8e-12 on masses3_N7); one defect, still to be traced.
 - The symmetry-mismatch class (3682 and 6379 calls, 14% and 19% of the solve on the two big problems) and the |pivot| M_jj rule for vanishing multiplier rows.
 - The row-scaling defect (above) is a main defect.
+
+Against the fresh main b57d52d sets of mplcp-audit (no `RPOPT_CANON`, `~/rpopt/mplcp-audit/gate_lp/main`): 155 problems compared, 1 differing (pop_028, the same two labels), 3 problems without a main file.
