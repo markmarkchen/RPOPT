@@ -587,6 +587,350 @@ fn solution_of(obj: &Bound<'_, PyAny>) -> PyResult<Arc<rpopt::Solution>> {
     Ok(b.borrow().sol.clone())
 }
 
+// ---------------------------------------------------------------------------------------------
+// event-triggered mp
+// ---------------------------------------------------------------------------------------------
+
+use rpopt::event_triggered as et;
+
+fn check_finite(v: &[f64]) -> PyResult<()> {
+    if v.iter().any(|x| !x.is_finite()) {
+        return Err(PyValueError::new_err("theta contains NaN or infinite entries"));
+    }
+    Ok(())
+}
+
+fn build_error_text(e: et::BuildError) -> &'static str {
+    match e {
+        et::BuildError::Rank => "not a set of linearly independent rows (for an mpLP: n_x of them, a basis)",
+        et::BuildError::Empty => "its critical region is empty",
+        et::BuildError::NotContaining => "the parameter point lies outside its critical region",
+        et::BuildError::LowerDimensional => "its critical region is lower dimensional (pass check_full_dim=False to keep such regions)",
+    }
+}
+
+/// Answer to one `EventTriggered.query`.
+#[pyclass(module = "rpopt._rpopt", frozen, name = "QueryResult")]
+pub struct QueryResult {
+    /// "hit", "built", "solved", "approx", "miss" or "infeasible"
+    #[pyo3(get)]
+    status: String,
+    /// True if a cached region answered (no solve)
+    #[pyo3(get)]
+    hit: bool,
+    /// id of the region that answered (None for solved, miss, infeasible)
+    #[pyo3(get)]
+    region: Option<u64>,
+    #[pyo3(get)]
+    x: Py<PyArray1<f64>>,
+    /// one multiplier per constraint of the program (0 for inactive rows)
+    #[pyo3(get)]
+    duals: Py<PyArray1<f64>>,
+    #[pyo3(get)]
+    objective: f64,
+}
+
+#[pymethods]
+impl QueryResult {
+    fn __repr__(&self) -> String {
+        format!("QueryResult(status={:?}, region={:?}, objective={})", self.status, self.region, self.objective)
+    }
+}
+
+/// Event-triggered multiparametric solver: an explicit solution built on demand.
+///
+/// Each query θ is located among the critical regions built so far; a hit is answered by the
+/// region's affine law. A miss is handled by `miss`:
+///   "exact"      solve, build and cache the region, return the exact answer (default)
+///   "solve_only" solve and return the exact answer, never cache (a frozen cache)
+///   "deferred"   return the nearest cached region's law at once (status "approx"), queue θ;
+///                `flush()` builds the queued regions later
+///   "report"     return status "miss" without solving; `insert_active_set` / `insert_theta`
+///                add regions from outside
+/// `max_regions` bounds the cache (eviction "lru" or "lfu"); `parallel` uses all cores for
+/// batch lookups, the solves of a batch's misses and the row reductions; `stream` ids (a scenario,
+/// a controller) let a sequence of slowly changing θ skip most of the work.
+#[pyclass(module = "rpopt._rpopt", name = "EventTriggered")]
+pub struct EventTriggered {
+    inner: et::EtCache,
+    program: Py<PyAny>,
+}
+
+#[pymethods]
+impl EventTriggered {
+    /// `basis`: which optimal basis a degenerate theta gets. "auto" (default): "lex" for an mpLP,
+    /// "solver" for an mpQP. "lex" (mpLP): the lexicographically optimal basis, unique at every
+    /// theta. "solver": the solver's. "pareto": the Pareto-optimal (Magnanti-Wong) multipliers for
+    /// cuts in the parameters `cut_coords` (right hand side parameters, e.g. the master variables
+    /// of a Benders subproblem), scored at `core` (one value per cut coordinate, inside the range
+    /// those parameters can take). The `basis` attribute reports the rule in effect.
+    #[new]
+    #[pyo3(signature = (program, miss="exact", max_regions=None, eviction="lru", parallel=true, tol=1e-8, reduce_after=Some(16), check_full_dim=true, basis="auto", cut_coords=None, core=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        py: Python<'_>,
+        program: &Bound<'_, PyAny>,
+        miss: &str,
+        max_regions: Option<usize>,
+        eviction: &str,
+        parallel: bool,
+        tol: f64,
+        reduce_after: Option<u64>,
+        check_full_dim: bool,
+        basis: &str,
+        cut_coords: Option<Vec<usize>>,
+        core: Option<V<'_>>,
+    ) -> PyResult<Self> {
+        let p = program_of(program)?;
+        let miss = et::MissPolicy::from_name(miss).ok_or_else(|| PyValueError::new_err(format!("unknown miss policy {miss:?}; use exact, solve_only, deferred or report")))?;
+        let eviction = et::Eviction::from_name(eviction).ok_or_else(|| PyValueError::new_err(format!("unknown eviction {eviction:?}; use lru or lfu")))?;
+        if max_regions == Some(0) {
+            return Err(PyValueError::new_err("max_regions must be at least 1 (None: unbounded)"));
+        }
+        if !(tol >= 0.0) {
+            return Err(PyValueError::new_err("tol must be nonnegative"));
+        }
+        let basis = match basis.to_ascii_lowercase().as_str() {
+            "auto" => et::BasisRule::Auto,
+            "solver" => et::BasisRule::Solver,
+            "lex" | "lexicographic" => et::BasisRule::Lex,
+            "pareto" | "magnanti_wong" => {
+                let coords = cut_coords.ok_or_else(|| PyValueError::new_err("basis='pareto' needs cut_coords"))?;
+                let core = core.map(|c| vec_from(&c)).ok_or_else(|| PyValueError::new_err("basis='pareto' needs core"))?;
+                et::BasisRule::Pareto { coords, core }
+            }
+            other => return Err(PyValueError::new_err(format!("unknown basis rule {other:?}; use auto, lex, solver or pareto"))),
+        };
+        let opts = et::EtOptions { miss, max_regions, eviction, parallel, tol, reduce_after, check_full_dim, basis };
+        let inner = py.detach(|| et::EtCache::try_new(p, opts)).map_err(PyValueError::new_err)?;
+        Ok(EventTriggered { inner, program: program.clone().unbind() })
+    }
+
+    /// Answer for one parameter point; `stream` names the sequence it belongs to.
+    #[pyo3(signature = (theta, stream=None))]
+    fn query(&mut self, py: Python<'_>, theta: V<'_>, stream: Option<u64>) -> PyResult<QueryResult> {
+        let t = vec_from(&theta);
+        check_dim(t.len(), self.inner.program().num_t())?;
+        check_finite(&t)?;
+        let inner = &mut self.inner;
+        let a = py.detach(|| inner.query(&t, stream));
+        Ok(QueryResult {
+            status: a.status.name().to_string(),
+            hit: a.status == et::Status::Hit,
+            region: a.region,
+            x: flat_to(py, &a.x).unbind(),
+            duals: flat_to(py, &a.duals).unbind(),
+            objective: a.objective,
+        })
+    }
+
+    /// Answers for the rows of `thetas` (n, n_theta), with the GIL released. `streams`: one
+    /// nonnegative int per row, or None. Returns a dict of arrays: "x" (n, n_x), "duals" (n, m),
+    /// "objective" (n,), "region" (n,) int64 (-1: none), "status" (n,) uint8 codes into
+    /// `EventTriggered.STATUS_NAMES`, "hit" (n,) bool.
+    #[pyo3(signature = (thetas, streams=None))]
+    fn query_batch<'py>(&mut self, py: Python<'py>, thetas: M<'_>, streams: Option<Vec<u64>>) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
+        let nt = self.inner.program().num_t();
+        let (nx, m) = (self.inner.program().num_x(), self.inner.program().num_constraints());
+        let v = thetas.as_array();
+        let (n, cols) = v.dim();
+        check_dim(cols, nt)?;
+        if let Some(s) = &streams {
+            if s.len() != n {
+                return Err(PyValueError::new_err(format!("{} stream ids for {n} parameter points", s.len())));
+            }
+        }
+        let data: Vec<f64> = v.iter().cloned().collect();
+        check_finite(&data)?;
+        let inner = &mut self.inner;
+        let ans = py.detach(|| inner.query_batch(&data, streams.as_deref()));
+        let mut x = Vec::with_capacity(n * nx);
+        let mut duals = Vec::with_capacity(n * m);
+        let mut obj = Vec::with_capacity(n);
+        let mut region = Vec::with_capacity(n);
+        let mut status = Vec::with_capacity(n);
+        let mut hit = Vec::with_capacity(n);
+        for a in &ans {
+            x.extend_from_slice(&a.x);
+            duals.extend_from_slice(&a.duals);
+            obj.push(a.objective);
+            region.push(a.region.map(|r| r as i64).unwrap_or(-1));
+            status.push(a.status as u8);
+            hit.push(a.status == et::Status::Hit);
+        }
+        let d = pyo3::types::PyDict::new(py);
+        d.set_item("x", Array2::from_shape_vec((n, nx), x).unwrap().into_pyarray(py))?;
+        d.set_item("duals", Array2::from_shape_vec((n, m), duals).unwrap().into_pyarray(py))?;
+        d.set_item("objective", Array1::from(obj).into_pyarray(py))?;
+        d.set_item("region", Array1::from(region).into_pyarray(py))?;
+        d.set_item("status", Array1::from(status).into_pyarray(py))?;
+        d.set_item("hit", Array1::from(hit).into_pyarray(py))?;
+        Ok(d)
+    }
+
+    /// Status names, indexed by the codes of `query_batch(...)["status"]`.
+    #[classattr]
+    #[allow(non_snake_case)]
+    fn STATUS_NAMES() -> Vec<&'static str> {
+        et::Status::NAMES.to_vec()
+    }
+
+    /// Solves the queue of the "deferred" policy and caches the regions; returns how many were added.
+    fn flush(&mut self, py: Python<'_>) -> usize {
+        let inner = &mut self.inner;
+        py.detach(|| inner.flush())
+    }
+
+    /// Solves at theta and caches its region whatever the miss policy; returns the region id, or
+    /// None if theta is infeasible or the region could not be built.
+    fn insert_theta(&mut self, py: Python<'_>, theta: V<'_>) -> PyResult<Option<u64>> {
+        let t = vec_from(&theta);
+        check_dim(t.len(), self.inner.program().num_t())?;
+        check_finite(&t)?;
+        let inner = &mut self.inner;
+        Ok(py.detach(|| inner.insert_theta(&t)))
+    }
+
+    /// Caches the region of an active set found elsewhere (e.g. the optimal basis reported by an
+    /// external LP solver; constraint indices of this program, equalities added if missing). For
+    /// an mpLP it must be a basis: n_x linearly independent rows. Returns the region id; raises
+    /// ValueError if the region cannot be built.
+    fn insert_active_set(&mut self, py: Python<'_>, active_set: Vec<usize>) -> PyResult<u64> {
+        let inner = &mut self.inner;
+        py.detach(|| inner.insert_active_set(&active_set)).map_err(|e| PyValueError::new_err(format!("cannot build the region of {active_set:?}: {}", build_error_text(e))))
+    }
+
+    /// Counters: queries, hits (and how they were found), regions built, evictions, ...
+    fn stats(&self) -> std::collections::HashMap<&'static str, u64> {
+        let s = self.inner.stats();
+        [
+            ("queries", s.queries),
+            ("hits", s.hits),
+            ("ball_hits", s.ball_hits),
+            ("stream_hits", s.stream_hits),
+            ("successor_hits", s.successor_hits),
+            ("scan_hits", s.scan_hits),
+            ("regions_tested", s.regions_tested),
+            ("built", s.built),
+            ("duplicates", s.duplicates),
+            ("solved", s.solved),
+            ("approx", s.approx),
+            ("reported", s.reported),
+            ("infeasible", s.infeasible),
+            ("build_failures", s.build_failures),
+            ("evictions", s.evictions),
+            ("reductions", s.reductions),
+            ("rule_fallbacks", s.rule_fallbacks),
+            ("pareto_switches", s.pareto_switches),
+            ("regions", self.inner.len() as u64),
+            ("rows", self.inner.total_rows() as u64),
+            ("pending", self.inner.num_pending() as u64),
+        ]
+        .into_iter()
+        .collect()
+    }
+
+    /// The cached critical regions, in id order.
+    fn regions(&self, py: Python<'_>) -> PyResult<Py<PyList>> {
+        let items: Vec<Py<CriticalRegion>> = self.inner.regions().iter().map(|(_, r)| Py::new(py, wrap_region(py, r))).collect::<PyResult<_>>()?;
+        Ok(PyList::new(py, items)?.unbind())
+    }
+
+    /// Ids of the cached regions (same order as `regions()`).
+    fn region_ids(&self) -> Vec<u64> {
+        self.inner.regions().into_iter().map(|(u, _)| u).collect()
+    }
+
+    /// Hit count of every cached region, by id.
+    fn region_hits(&self) -> std::collections::HashMap<u64, u64> {
+        self.inner.region_hits().into_iter().collect()
+    }
+
+    /// The cached regions as a `Solution` (usable with the point location classes and `save`).
+    fn to_solution(&self, py: Python<'_>) -> PyResult<Solution> {
+        let regions = self.inner.regions().into_iter().map(|(_, r)| r).collect();
+        let mut sol = rpopt::Solution::new(self.inner.program().clone(), regions);
+        sol.is_overlapping = self.inner.program().q.is_none();
+        make_solution(py, self.program.bind(py), sol)
+    }
+
+    /// Forgets every region, stream memory and queued point (statistics are kept).
+    fn clear(&mut self) {
+        self.inner.clear();
+    }
+
+    /// Forgets the stream memories only.
+    fn clear_streams(&mut self) {
+        self.inner.clear_streams();
+    }
+
+    #[getter]
+    fn program(&self, py: Python<'_>) -> Py<PyAny> {
+        self.program.clone_ref(py)
+    }
+
+    #[getter]
+    fn miss(&self) -> &'static str {
+        self.inner.options().miss.name()
+    }
+
+    #[setter]
+    fn set_miss(&mut self, miss: &str) -> PyResult<()> {
+        let m = et::MissPolicy::from_name(miss).ok_or_else(|| PyValueError::new_err(format!("unknown miss policy {miss:?}")))?;
+        self.inner.set_miss_policy(m);
+        Ok(())
+    }
+
+    #[getter]
+    fn parallel(&self) -> bool {
+        self.inner.options().parallel
+    }
+
+    #[setter]
+    fn set_parallel(&mut self, parallel: bool) {
+        self.inner.set_parallel(parallel);
+    }
+
+    #[getter]
+    fn max_regions(&self) -> Option<usize> {
+        self.inner.options().max_regions
+    }
+
+    /// A smaller limit evicts at once.
+    #[setter]
+    fn set_max_regions(&mut self, max_regions: Option<usize>) -> PyResult<()> {
+        if max_regions == Some(0) {
+            return Err(PyValueError::new_err("max_regions must be at least 1 (None: unbounded)"));
+        }
+        self.inner.set_max_regions(max_regions);
+        Ok(())
+    }
+
+    #[getter]
+    fn eviction(&self) -> &'static str {
+        self.inner.options().eviction.name()
+    }
+
+    #[getter]
+    fn basis(&self) -> &'static str {
+        self.inner.options().basis.name()
+    }
+
+    #[getter]
+    fn num_pending(&self) -> usize {
+        self.inner.num_pending()
+    }
+
+    fn __len__(&self) -> usize {
+        self.inner.len()
+    }
+
+    fn __repr__(&self) -> String {
+        let s = self.inner.stats();
+        format!("EventTriggered({} regions, miss={:?}, {} queries, {} hits)", self.inner.len(), self.inner.options().miss.name(), s.queries, s.hits)
+    }
+}
+
 /// Algorithm names accepted by `solve_mpqp`.
 #[pyfunction]
 fn algorithm_names() -> Vec<&'static str> {
@@ -847,6 +1191,8 @@ fn _rpopt(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<DescriptorFunction>()?;
     m.add_class::<HashTable>()?;
     m.add_class::<Yann>()?;
+    m.add_class::<EventTriggered>()?;
+    m.add_class::<QueryResult>()?;
     m.add_function(wrap_pyfunction!(solve, m)?)?;
     m.add_function(wrap_pyfunction!(algorithm_names, m)?)?;
     Ok(())

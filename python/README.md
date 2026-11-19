@@ -46,6 +46,38 @@ x = sol.critical_regions[i].evaluate(theta)
 ht = HashTable.with_storage_limit(sol, 1 << 20)         # hash table capped at 1 MB
 ```
 
+### Event-triggered (on-demand) solutions
+
+`EventTriggered` builds the explicit solution only where it is queried: a θ inside a cached critical region is
+answered by that region's affine law, a θ outside every cached region solves the program once and caches the new
+region. Works for `MPLP_Program` and `MPQP_Program`.
+
+```python
+from rpopt import EventTriggered
+
+et = EventTriggered(prog, miss="exact", max_regions=None, eviction="lru", parallel=True)
+r = et.query(theta, stream=7)          # r.status, r.hit, r.x, r.duals (one per constraint), r.objective, r.region
+out = et.query_batch(thetas, streams)  # dict of arrays: x, duals, objective, region, status (codes), hit
+et.stats()                             # hits by path, regions built, evictions, ...
+sol = et.to_solution()                 # the cached regions as a Solution
+```
+
+* `miss`: `"exact"` (solve, cache, exact answer), `"solve_only"` (solve, never cache), `"deferred"` (nearest
+  cached region's law now, status `"approx"`; `et.flush()` builds the queued regions later), `"report"` (status
+  `"miss"`; add regions with `et.insert_theta(theta)` or `et.insert_active_set(basis)`, e.g. from Gurobi). The
+  policy, `parallel` and `max_regions` can be changed on a live object.
+* `stream`: an id per sequence of related queries (a Benders scenario, a controller). The stream remembers its last
+  region and the distance to each facet, so a small move is accepted with O(n_θ) work and coordinates that did
+  not change cost nothing. Without stream ids every lookup scans the regions in order of hit count.
+* `query_batch` releases the GIL, looks up in parallel, and solves a batch's misses in rounds, re-testing the rest
+  of the batch against each round's new regions.
+* `basis`: which optimal basis a degenerate θ gets (several are optimal; they give the same objective but different
+  multipliers, and the cache reuses the first one for every query in its region). `"auto"` (default) is `"lex"` for an
+  mpLP and `"solver"` for an mpQP; `"lex"` (mpLP) takes the lexicographically optimal basis, unique at every θ;
+  `"solver"` the solver's; `"pareto"` the Magnanti–Wong multipliers for cuts in the parameters `cut_coords`
+  (right-hand-side parameters such as the master variables of a Benders subproblem), scored at `core`. On the FOCAPO
+  capacity-expansion Benders case, `"lex"` reproduces Gurobi's dual-simplex cuts; see `bench/et_benders_focapo.py`.
+
 Existing PPOPT scripts can run unchanged: call `rpopt.install_as_ppopt()` first and `import ppopt...` resolves to
 RPOPT (for the modules RPOPT provides). PPOPT's documentation example (`doc/mpc.rst`) is exercised that way in
 `tests/test_ppopt_compat.py`; on it RPOPT and PPOPT return the same 7 regions, the same active sets and the same
@@ -60,6 +92,7 @@ RPOPT (for the modules RPOPT provides). PPOPT's documentation example (`doc/mpc.
 | `solve_mpqp(program, algorithm=mpqp_algorithm.combinatorial, seed=0, graph_samples=100)` | `algorithm` is an `mpqp_algorithm` member or its name as a string |
 | `Solution` | `critical_regions`, `program`, `evaluate`, `evaluate_objective`, `get_region`, `get_region_index`, `verify_solution`, `verify_theta`, `evaluate_many`, `len()` |
 | `CriticalRegion` | `A, b, C, d, E, f, active_set, omega_set, lambda_set, regular_set, y_fixation, y_indices, x_indices`, `evaluate`, `lagrange_multipliers`, `is_inside`, `is_full_dimension`, `get_constraints` |
+| `EventTriggered(program, miss="exact", max_regions=None, eviction="lru", parallel=True, tol=1e-8, reduce_after=16, check_full_dim=True, basis="auto", cut_coords=None, core=None)` | `query(theta, stream=None) -> QueryResult`, `query_batch(thetas, streams=None) -> dict`, `flush()`, `insert_theta`, `insert_active_set`, `stats()`, `regions()`, `region_ids()`, `region_hits()`, `to_solution()`, `clear()`, `clear_streams()`, `STATUS_NAMES`, `len()`; settable `miss`, `parallel`, `max_regions` |
 | `SequentialSearch`, `BinarySearchTree`, `MultiwayTree(solution, levels=3)`, `LinearMachine`, `DescriptorFunction(solution, seed=7)`, `HashTable(solution, target_cells=None)`, `HashTable.with_storage_limit(solution, max_bytes)`, `Yann` | each: `locate(theta) -> int`, `locate_many(thetas, parallel=True) -> ndarray`, `storage_floats()`, `info` |
 
 Algorithms: `combinatorial`, `combinatorial_parallel`, `graph`, `graph_exp`, `graph_parallel`, `combinatorial_graph`,
