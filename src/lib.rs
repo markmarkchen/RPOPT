@@ -21,6 +21,7 @@ pub mod boxlp;
 #[cfg(feature = "lp_census")]
 pub mod census_diag;
 pub mod critical_region;
+pub mod event_triggered;
 pub mod fxhash;
 pub mod io;
 pub mod linalg;

@@ -9,6 +9,7 @@ mod approx_methods;
 mod combinatorial_kp;
 mod dependent_start;
 mod dp_mpc;
+mod event_triggered;
 mod geometric_degenerate;
 mod incremental_kkt;
 mod mplcp;

@@ -264,6 +264,30 @@ integrator problems of the 12 benchmarks, and none of 15 random and mass-chain m
 facet-to-facet. Where it applies, the exact k-d search still scores 25% to 40% of the regions per query and is 5x to
 250x slower than the hash table, so it is kept as a tested research locator with the hash table as exact fallback.
 
+## Event-triggered solutions
+
+`event_triggered::EtCache` (Python: `rpopt.EventTriggered`) skips the offline enumeration: regions are built only
+where queries land and are cached for the next queries, as in event-triggered mp Benders (Tsai, Brahmbhatt &
+Avraamidou) and partial enumeration MPC (Pannocchia, Rawlings & Wright, Automatica 2007). mpLP and mpQP. Switches:
+the miss policy (`Exact`, `SolveOnly`, `Deferred` with `flush`, `Report`), a region limit with LRU or LFU eviction,
+and parallel batches. A query may carry a stream id: the stream keeps its last region and the slack of every facet,
+so a small move passes a safe-ball test in O(n_θ), and only the coordinates that changed update the slacks. Regions
+are cached with unreduced rows (no LP) and reduced exactly once they are hit `reduce_after` times.
+
+At a degenerate θ several bases are optimal; they agree on the objective (and, for an mpQP, on x) but not on the
+multipliers, and the cache answers every later query in a region with the basis it was built from. The basis rule
+fixes the choice: for an mpLP the default is the lexicographically optimal basis (`mplp_lex::lex_optimal_basis`,
+unique at every θ, independent of how a solver breaks ties), for an mpQP the solver's active set. `BasisRule::Pareto`
+picks Magnanti–Wong multipliers for Benders-type cuts at a user-given core point. `bench/et_benders_focapo.py` runs
+the FOCAPO capacity-expansion Benders case study (Gurobi master, RPOPT subproblems; the case study code is not part
+of this repository): there the lexicographic basis reproduces the root bound of Gurobi's own dual-simplex cuts on 6
+of 6 scenario seeds, and over those 6 seeds at 1,000 scenarios the Benders run took 7.1 s on average against 12.6 s
+with the solver's basis, whose cuts left the master up to 11 times as many branch-and-bound nodes.
+
+`cargo run --profile gate --example event_triggered` runs a Benders-like pattern (a drifting master part of θ shared
+by 200 scenarios with fixed scenario parts, 50 iterations): 97% to 99.9% of the queries are cache hits, 78% to 95%
+of those are settled by the stream memory, and 7 to 230 regions are built.
+
 ## Saving and loading
 
 `Solution::save(path, Format::Binary | Format::Json)` and `Solution::load(path)` (the format is detected).
@@ -658,6 +682,7 @@ src/
   solver/               LP (lp_core dense dual simplex, lp_rev revised, lp_small fixed size), QP
                         (Goldfarb-Idnani), MILP/MIQP branch and bound, sparse LP via Clarabel
   point_location/       all locators, PartitionGeometry (facets, adjacency)
+  event_triggered.rs    on-demand (event-triggered) region cache with streams, eviction and miss policies
   solution.rs, critical_region.rs, solution_io.rs, io.rs   results and binary/JSON persistence
   mpc.rs, problem_generator.rs, reduction/lowrank/trimming  MPC models, test problems, extras
   bin/ppopt_bench.rs    the benchmark and correctness harness
