@@ -196,9 +196,7 @@ fn main() {
                 if !resume {
                     a.push("--resume".into());
                 }
-                use std::os::unix::process::CommandExt;
-                let err = std::process::Command::new(std::env::current_exe().unwrap()).args(&a).exec();
-                panic!("re-exec failed: {err}");
+                reexec(&a);
             }
             times.sort_by(|a, b| a.partial_cmp(b).unwrap());
             let med = times[times.len() / 2];
@@ -283,9 +281,7 @@ fn main() {
                     if !resume {
                         a.push("--resume".into());
                     }
-                    use std::os::unix::process::CommandExt;
-                    let err = std::process::Command::new(std::env::current_exe().unwrap()).args(&a).exec();
-                    panic!("re-exec failed: {err}");
+                    reexec(&a);
                 }
             }
         };
@@ -426,6 +422,21 @@ fn main() {
 
 /// Sampled solution quality: (feasible points in no region, points strictly inside >= 2 regions,
 /// points whose region law disagrees with a direct QP solve).
+/// Restart this process with `args` (a stuck solver thread cannot be cancelled). Unix replaces the process image;
+/// other platforms (Windows has no `exec`) run the restart as a child, wait for it, and exit with its status.
+#[cfg(unix)]
+fn reexec(args: &[String]) -> ! {
+    use std::os::unix::process::CommandExt;
+    let err = std::process::Command::new(std::env::current_exe().unwrap()).args(args).exec();
+    panic!("re-exec failed: {err}");
+}
+
+#[cfg(not(unix))]
+fn reexec(args: &[String]) -> ! {
+    let status = std::process::Command::new(std::env::current_exe().unwrap()).args(args).status().expect("re-exec failed");
+    std::process::exit(status.code().unwrap_or(1));
+}
+
 fn quality(prog: &MpProgram, sol: &rpopt::Solution, n: usize) -> (usize, usize, usize) {
     let nt = prog.num_t();
     let (lo, hi) = theta_box(prog);

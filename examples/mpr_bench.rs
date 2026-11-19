@@ -7,15 +7,25 @@ use rpopt::algorithms::mpr::{solve_mpr_with, MprOptions};
 use rpopt::algorithms::{solve_mpqp, MpqpAlgorithm};
 use rpopt::program::MpProgram;
 use std::sync::Arc;
+#[cfg(unix)]
 unsafe extern "C" {
     fn clock() -> i64;
 }
+#[cfg(windows)]
+#[path = "common/win_cpu.rs"]
+mod win_cpu;
 
 /// Process CPU time in seconds (the machine is shared, so wall time is not comparable).
 struct Instant(f64);
 impl Instant {
+    #[cfg(unix)]
     fn now() -> Self {
         Instant(unsafe { clock() } as f64 / 1e6)
+    }
+    /// Windows: process CPU seconds from the cycle counter (see `common/win_cpu.rs`), as `clock()` on Unix.
+    #[cfg(windows)]
+    fn now() -> Self {
+        Instant(win_cpu::process_cpu_seconds())
     }
     fn elapsed(&self) -> Dur {
         Dur(Instant::now().0 - self.0)
