@@ -16,23 +16,36 @@ use std::sync::Arc;
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+#[cfg(unix)]
 #[repr(C)]
 struct Rusage {
     utime: [i64; 2],
     stime: [i64; 2],
     rest: [i64; 14],
 }
+#[cfg(unix)]
 unsafe extern "C" {
     fn getrusage(who: i32, usage: *mut Rusage) -> i32;
 }
 
 /// user + system CPU seconds of this process (the benchmark is single threaded, so this is the
 /// solve's CPU time and excludes time spent waiting on a loaded machine)
+#[cfg(unix)]
 fn cpu_seconds() -> f64 {
     let mut u = Rusage { utime: [0; 2], stime: [0; 2], rest: [0; 14] };
     unsafe { getrusage(0, &mut u) };
     let tv = |t: [i64; 2]| t[0] as f64 + ((t[1] & 0xFFFF_FFFF) as f64) * 1e-6;
     tv(u.utime) + tv(u.stime)
+}
+
+#[cfg(windows)]
+#[path = "common/win_cpu.rs"]
+mod win_cpu;
+
+/// Windows: CPU seconds of this process from the cycle counter (see `common/win_cpu.rs`).
+#[cfg(windows)]
+fn cpu_seconds() -> f64 {
+    win_cpu::process_cpu_seconds()
 }
 
 /// Median CPU time of `reps` runs (the machine is shared, wall time is not meaningful under load).

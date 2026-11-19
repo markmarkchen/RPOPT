@@ -19,16 +19,29 @@ use std::time::Instant;
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+#[cfg(unix)]
 #[repr(C)]
 struct Timespec {
     sec: i64,
     nsec: i64,
 }
+#[cfg(unix)]
 unsafe extern "C" {
     fn clock_gettime(clk: i32, ts: *mut Timespec) -> i32;
 }
 
+#[cfg(windows)]
+#[path = "common/win_cpu.rs"]
+mod win_cpu;
+
+/// Windows: CPU seconds of the calling thread from the cycle counter (see `common/win_cpu.rs`).
+#[cfg(windows)]
+fn thread_cpu() -> f64 {
+    win_cpu::thread_cpu_seconds()
+}
+
 /// CPU time of the calling thread (the machine is shared and loaded; wall time is noisy).
+#[cfg(unix)]
 fn thread_cpu() -> f64 {
     let mut ts = Timespec { sec: 0, nsec: 0 };
     #[cfg(target_os = "macos")]
