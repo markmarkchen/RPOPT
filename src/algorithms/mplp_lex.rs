@@ -436,6 +436,43 @@ fn initial_basis(a: &Mat, neq: usize) -> Option<Vec<usize>> {
     (b.len() == nx).then_some(b)
 }
 
+/// The lex-optimal basis at θ: the unique optimal basis of the lexicographically perturbed program
+/// (Section 3), the same at every θ of its region R_B. The lex simplex starts from `start` (sorted,
+/// equality rows first; an optimal basis at θ needs only a few pivots) or from a greedy basis.
+/// Returns the basis sorted, or None for an mpQP, an infeasible or unbounded θ, or a failed pivot.
+pub fn lex_optimal_basis(program: &MpProgram, theta: &[f64], start: Option<&[usize]>) -> Option<Vec<usize>> {
+    if program.q.is_some() {
+        return None;
+    }
+    let (nx, m) = (program.num_x(), program.num_constraints());
+    let neq = program.num_equality_constraints();
+    if nx == 0 || m < nx {
+        return None;
+    }
+    let b0 = match start {
+        Some(s) if s.len() == nx && s[..neq].iter().enumerate().all(|(i, &r)| i == r) => s.to_vec(),
+        _ => initial_basis(&program.a, neq)?,
+    };
+    let lex = Lex::new(&program.a, neq);
+    let mut sc = Scratch::new(m, nx);
+    let mut w = Work { b: vec![], binv: vec![], t: vec![] };
+    lex.fresh(&b0, &mut w).ok()?;
+    // artificial cost c' = -A_B' λ' with λ' > 0 makes the start dual feasible (Remark 9); fixed seed
+    let mut rng = StdRng::seed_from_u64(0x1E5);
+    let mut cp = vec![0.0; nx];
+    for &row in &b0 {
+        let l: f64 = rng.gen_range(0.5..1.5);
+        for k in 0..nx {
+            cp[k] -= program.a[(row, k)] * l;
+        }
+    }
+    let (q0, d0) = (rhs_at(program, theta), cost_at(program, theta));
+    lex.solve(&mut w, &mut sc, &q0, &vec![0.0; m], &d0, &vec![0.0; nx], &cp).ok()?;
+    let mut b = w.b;
+    b.sort_unstable();
+    Some(b)
+}
+
 /// Facet-to-facet enumeration of the lex-optimal bases (Section 4.2).
 pub fn solve(program: &MpProgram, seed: u64) -> Result<Vec<CriticalRegion>, String> {
     if program.q.is_some() {
