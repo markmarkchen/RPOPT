@@ -290,13 +290,13 @@ write("tab_scaling.tex", "\n".join(t))
 
 # ------------------------------------------------------------------ large suite summary
 lg = read("large.md")
-rows = rows_of(lg.split("## Summary by algorithm")[1], 4)
-t = [r"\begin{tabular}{@{}lrrr@{}}", r"\toprule",
-     r"algorithm & solved & timed out & geometric mean time vs \texttt{graph} \\", r"\midrule"]
+rows = rows_of(lg.split("## Summary by algorithm")[1], 5)  # algorithm | solved | timed out | returned no regions | time vs graph
+t = [r"\begin{tabular}{@{}lrrrr@{}}", r"\toprule",
+     r"algorithm & solved & timed out & no regions & time vs \texttt{graph} \\", r"\midrule"]
 for p in rows:
     if p[0] == "algorithm":
         continue
-    t.append(f"{tt(p[0])} & {p[1]} & {p[2]} & {p[3]} \\\\")
+    t.append(f"{tt(p[0])} & {p[1]} & {p[2]} & {p[3]} & {p[4]} \\\\")
 t += [r"\bottomrule", r"\end{tabular}"]
 write("tab_large.tex", "\n".join(t))
 
