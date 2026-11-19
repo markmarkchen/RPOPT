@@ -1,30 +1,30 @@
-\begin{tabular}{@{}llrrrrrrr@{}}
+\begin{tabular}{@{}lrlrrrrrrr@{}}
 \toprule
-problem & algorithm & serial & 1 & 2 & 4 & 8 & 16 & 16 vs 1 \\
+problem & $n_\theta/n_x/m$ & algorithm & serial & 1 & 2 & 4 & 8 & 16 & 16 vs 1 \\
 \midrule
-\code{di\_N8} & \code{combinatorial} & 957.6 & 966.9 & 504.7 & 263.6 & 146.1 & 102.0 & 9.5$\times$ \\
-\code{di\_N8} & \code{graph} & 0.3 & 0.4 & 0.3 & 0.3 & 0.5 & 0.7 & 0.6$\times$ \\
-\code{di\_N8} & \code{combinatorial\_graph} & 0.6 & 0.6 & 0.5 & 0.3 & 0.5 & 0.7 & 1.0$\times$ \\
-\code{di\_N8} & \code{geometric} & 0.1 & 0.2 & 0.2 & 0.2 & 0.3 & 0.4 & 0.5$\times$ \\
+\code{di\_N8} & 2/8/34 & \code{combinatorial} & 957.6 & 966.9 & 504.7 & 263.6 & 146.1 & 102.0 & 9.5$\times$ \\
+\code{di\_N8} & 2/8/34 & \code{graph} & 0.3 & 0.4 & 0.3 & 0.3 & 0.5 & 0.7 & 0.6$\times$ \\
+\code{di\_N8} & 2/8/34 & \code{combinatorial\_graph} & 0.6 & 0.6 & 0.5 & 0.3 & 0.5 & 0.7 & 1.0$\times$ \\
+\code{di\_N8} & 2/8/34 & \code{geometric} & 0.1 & 0.2 & 0.2 & 0.2 & 0.3 & 0.4 & 0.5$\times$ \\
 \addlinespace[2pt]
-\code{masses2\_N4} & \code{combinatorial} & 29.6 & 29.4 & 15.4 & 8.1 & 5.3 & 4.8 & 6.2$\times$ \\
-\code{masses2\_N4} & \code{graph} & 12.8 & 13.5 & 7.4 & 4.5 & 3.4 & 3.5 & 3.9$\times$ \\
-\code{masses2\_N4} & \code{combinatorial\_graph} & 22.6 & 23.0 & 12.4 & 7.2 & 4.9 & 4.9 & 4.7$\times$ \\
-\code{masses2\_N4} & \code{geometric} & 15.6 & 15.5 & 8.3 & 4.8 & 3.6 & 3.5 & 4.5$\times$ \\
+\code{masses2\_N4} & 4/4/40 & \code{combinatorial} & 29.6 & 29.4 & 15.4 & 8.1 & 5.3 & 4.8 & 6.2$\times$ \\
+\code{masses2\_N4} & 4/4/40 & \code{graph} & 12.8 & 13.5 & 7.4 & 4.5 & 3.4 & 3.5 & 3.9$\times$ \\
+\code{masses2\_N4} & 4/4/40 & \code{combinatorial\_graph} & 22.6 & 23.0 & 12.4 & 7.2 & 4.9 & 4.9 & 4.7$\times$ \\
+\code{masses2\_N4} & 4/4/40 & \code{geometric} & 15.6 & 15.5 & 8.3 & 4.8 & 3.6 & 3.5 & 4.5$\times$ \\
 \addlinespace[2pt]
-\code{masses2\_N6} & \code{combinatorial} & 936.3 & 935.8 & 483.9 & 248.9 & 132.3 & 89.9 & 10.4$\times$ \\
-\code{masses2\_N6} & \code{graph} & 75.2 & 94.3 & 50.4 & 29.0 & 19.1 & 16.9 & 5.6$\times$ \\
-\code{masses2\_N6} & \code{combinatorial\_graph} & 249.8 & 253.0 & 137.0 & 76.3 & 47.5 & 38.2 & 6.6$\times$ \\
-\code{masses2\_N6} & \code{geometric} & 62.8 & 65.3 & 34.4 & 18.8 & 11.7 & 10.0 & 6.5$\times$ \\
+\code{masses2\_N6} & 4/6/60 & \code{combinatorial} & 936.3 & 935.8 & 483.9 & 248.9 & 132.3 & 89.9 & 10.4$\times$ \\
+\code{masses2\_N6} & 4/6/60 & \code{graph} & 75.2 & 94.3 & 50.4 & 29.0 & 19.1 & 16.9 & 5.6$\times$ \\
+\code{masses2\_N6} & 4/6/60 & \code{combinatorial\_graph} & 249.8 & 253.0 & 137.0 & 76.3 & 47.5 & 38.2 & 6.6$\times$ \\
+\code{masses2\_N6} & 4/6/60 & \code{geometric} & 62.8 & 65.3 & 34.4 & 18.8 & 11.7 & 10.0 & 6.5$\times$ \\
 \addlinespace[2pt]
-\code{sys3x2\_N3} & \code{combinatorial} & 52.3 & 51.6 & 27.2 & 14.5 & 10.5 & 9.4 & 5.5$\times$ \\
-\code{sys3x2\_N3} & \code{graph} & 4.9 & 5.8 & 3.4 & 2.2 & 2.3 & 2.7 & 2.1$\times$ \\
-\code{sys3x2\_N3} & \code{combinatorial\_graph} & 11.1 & 11.4 & 6.2 & 3.7 & 3.0 & 3.5 & 3.2$\times$ \\
-\code{sys3x2\_N3} & \code{geometric} & 4.7 & 4.8 & 2.9 & 1.8 & 2.0 & 2.2 & 2.2$\times$ \\
+\code{sys3x2\_N3} & 3/6/30 & \code{combinatorial} & 52.3 & 51.6 & 27.2 & 14.5 & 10.5 & 9.4 & 5.5$\times$ \\
+\code{sys3x2\_N3} & 3/6/30 & \code{graph} & 4.9 & 5.8 & 3.4 & 2.2 & 2.3 & 2.7 & 2.1$\times$ \\
+\code{sys3x2\_N3} & 3/6/30 & \code{combinatorial\_graph} & 11.1 & 11.4 & 6.2 & 3.7 & 3.0 & 3.5 & 3.2$\times$ \\
+\code{sys3x2\_N3} & 3/6/30 & \code{geometric} & 4.7 & 4.8 & 2.9 & 1.8 & 2.0 & 2.2 & 2.2$\times$ \\
 \addlinespace[2pt]
-\code{sys3x2\_N5} & \code{combinatorial} & 23,580.0 & 23,721.8 & 12,491.1 & 6,357.6 & 3,386.4 & 2,309.9 & 10.3$\times$ \\
-\code{sys3x2\_N5} & \code{graph} & 143.4 & 351.6 & 191.1 & 105.5 & 68.7 & 55.7 & 6.3$\times$ \\
-\code{sys3x2\_N5} & \code{combinatorial\_graph} & 629.1 & 646.4 & 357.9 & 209.5 & 137.8 & 110.2 & 5.9$\times$ \\
-\code{sys3x2\_N5} & \code{geometric} & 37.6 & 39.9 & 22.0 & 11.9 & 9.2 & 8.3 & 4.8$\times$ \\
+\code{sys3x2\_N5} & 3/10/50 & \code{combinatorial} & 23,580.0 & 23,721.8 & 12,491.1 & 6,357.6 & 3,386.4 & 2,309.9 & 10.3$\times$ \\
+\code{sys3x2\_N5} & 3/10/50 & \code{graph} & 143.4 & 351.6 & 191.1 & 105.5 & 68.7 & 55.7 & 6.3$\times$ \\
+\code{sys3x2\_N5} & 3/10/50 & \code{combinatorial\_graph} & 629.1 & 646.4 & 357.9 & 209.5 & 137.8 & 110.2 & 5.9$\times$ \\
+\code{sys3x2\_N5} & 3/10/50 & \code{geometric} & 37.6 & 39.9 & 22.0 & 11.9 & 9.2 & 8.3 & 4.8$\times$ \\
 \bottomrule
 \end{tabular}
