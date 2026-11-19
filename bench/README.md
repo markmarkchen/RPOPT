@@ -11,6 +11,12 @@
 
 θ = x0 in every case. Both implementations read the same JSON matrices.
 
+The constraints column counts the rows in the JSON file. Loading a problem merges duplicate rows and drops redundant ones,
+so the solvers see fewer (`di_N4`: 24 rows in the file, 18 after loading; the `<name>/info` record in the result files
+holds the count the solvers see). The size of every one of the 204 benchmark problems (parameters, variables, constraints
+before and after loading, regions) is in `results/problem_sizes.md` and `results/problem_sizes.csv`, written by
+`cargo run --profile gate --example problem_sizes` without solving anything.
+
 ## How the comparison is made
 
 Both sides are measured on the same machine and the same JSON problems:
@@ -96,28 +102,30 @@ run below 200x at 90% coverage (masses2_N4 combinatorial graph, 179x, a visit-or
 
 ### Multi-threading (16 threads vs 1)
 
-| problem | algorithm | serial (1 thread, serial code) | 1 thr | 2 thr | 4 thr | 8 thr | 12 thr | 16 thr | speedup 16 vs 1 | speedup 16 vs serial | regions ok |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| di_N8 | combinatorial_parallel | 957.6 ms | 966.9 | 504.7 | 263.6 | 146.1 | 107.7 | 102.0 | 9.5x | 9.4x | yes |
-| di_N8 | graph_parallel | 0.3 ms | 0.4 | 0.3 | 0.3 | 0.5 | 0.8 | 0.7 | 0.6x | 0.5x | yes |
-| di_N8 | combinatorial_graph_parallel | 0.6 ms | 0.6 | 0.5 | 0.3 | 0.5 | 0.8 | 0.7 | 1.0x | 0.9x | yes |
-| di_N8 | geometric_parallel | 0.1 ms | 0.2 | 0.2 | 0.2 | 0.3 | 0.5 | 0.4 | 0.5x | 0.3x | yes |
-| masses2_N4 | combinatorial_parallel | 29.6 ms | 29.4 | 15.4 | 8.1 | 5.3 | 4.6 | 4.8 | 6.2x | 6.2x | yes |
-| masses2_N4 | graph_parallel | 12.8 ms | 13.5 | 7.4 | 4.5 | 3.4 | 3.5 | 3.5 | 3.9x | 3.7x | yes |
-| masses2_N4 | combinatorial_graph_parallel | 22.6 ms | 23.0 | 12.4 | 7.2 | 4.9 | 5.0 | 4.9 | 4.7x | 4.6x | yes |
-| masses2_N4 | geometric_parallel | 15.6 ms | 15.5 | 8.3 | 4.8 | 3.6 | 3.9 | 3.5 | 4.5x | 4.5x | yes |
-| masses2_N6 | combinatorial_parallel | 936.3 ms | 935.8 | 483.9 | 248.9 | 132.3 | 97.1 | 89.9 | 10.4x | 10.4x | yes |
-| masses2_N6 | graph_parallel | 75.2 ms | 94.3 | 50.4 | 29.0 | 19.1 | 16.9 | 16.9 | 5.6x | 4.4x | yes |
-| masses2_N6 | combinatorial_graph_parallel | 249.8 ms | 253.0 | 137.0 | 76.3 | 47.5 | 39.3 | 38.2 | 6.6x | 6.5x | yes |
-| masses2_N6 | geometric_parallel | 62.8 ms | 65.3 | 34.4 | 18.8 | 11.7 | 10.4 | 10.0 | 6.5x | 6.3x | yes |
-| sys3x2_N3 | combinatorial_parallel | 52.3 ms | 51.6 | 27.2 | 14.5 | 10.5 | 9.2 | 9.4 | 5.5x | 5.5x | yes |
-| sys3x2_N3 | graph_parallel | 4.9 ms | 5.8 | 3.4 | 2.2 | 2.3 | 2.9 | 2.7 | 2.1x | 1.8x | yes |
-| sys3x2_N3 | combinatorial_graph_parallel | 11.1 ms | 11.4 | 6.2 | 3.7 | 3.0 | 3.7 | 3.5 | 3.2x | 3.1x | yes |
-| sys3x2_N3 | geometric_parallel | 4.7 ms | 4.8 | 2.9 | 1.8 | 2.0 | 2.8 | 2.2 | 2.2x | 2.1x | yes |
-| sys3x2_N5 | combinatorial_parallel | 23580.0 ms | 23721.8 | 12491.1 | 6357.6 | 3386.4 | 2485.0 | 2309.9 | 10.3x | 10.2x | yes |
-| sys3x2_N5 | graph_parallel | 143.4 ms | 351.6 | 191.1 | 105.5 | 68.7 | 57.4 | 55.7 | 6.3x | 2.6x | yes |
-| sys3x2_N5 | combinatorial_graph_parallel | 629.1 ms | 646.4 | 357.9 | 209.5 | 137.8 | 113.8 | 110.2 | 5.9x | 5.7x | yes |
-| sys3x2_N5 | geometric_parallel | 37.6 ms | 39.9 | 22.0 | 11.9 | 9.2 | 9.8 | 8.3 | 4.8x | 4.5x | yes |
+Size is theta/x/m: parameters, variables and constraints the solvers see (the same in the other tables below).
+
+| problem | size (theta/x/m) | algorithm | serial (1 thread, serial code) | 1 thr | 2 thr | 4 thr | 8 thr | 12 thr | 16 thr | speedup 16 vs 1 | speedup 16 vs serial | regions ok |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| di_N8 | 2/8/34 | combinatorial_parallel | 957.6 ms | 966.9 | 504.7 | 263.6 | 146.1 | 107.7 | 102.0 | 9.5x | 9.4x | yes |
+| di_N8 | 2/8/34 | graph_parallel | 0.3 ms | 0.4 | 0.3 | 0.3 | 0.5 | 0.8 | 0.7 | 0.6x | 0.5x | yes |
+| di_N8 | 2/8/34 | combinatorial_graph_parallel | 0.6 ms | 0.6 | 0.5 | 0.3 | 0.5 | 0.8 | 0.7 | 1.0x | 0.9x | yes |
+| di_N8 | 2/8/34 | geometric_parallel | 0.1 ms | 0.2 | 0.2 | 0.2 | 0.3 | 0.5 | 0.4 | 0.5x | 0.3x | yes |
+| masses2_N4 | 4/4/40 | combinatorial_parallel | 29.6 ms | 29.4 | 15.4 | 8.1 | 5.3 | 4.6 | 4.8 | 6.2x | 6.2x | yes |
+| masses2_N4 | 4/4/40 | graph_parallel | 12.8 ms | 13.5 | 7.4 | 4.5 | 3.4 | 3.5 | 3.5 | 3.9x | 3.7x | yes |
+| masses2_N4 | 4/4/40 | combinatorial_graph_parallel | 22.6 ms | 23.0 | 12.4 | 7.2 | 4.9 | 5.0 | 4.9 | 4.7x | 4.6x | yes |
+| masses2_N4 | 4/4/40 | geometric_parallel | 15.6 ms | 15.5 | 8.3 | 4.8 | 3.6 | 3.9 | 3.5 | 4.5x | 4.5x | yes |
+| masses2_N6 | 4/6/60 | combinatorial_parallel | 936.3 ms | 935.8 | 483.9 | 248.9 | 132.3 | 97.1 | 89.9 | 10.4x | 10.4x | yes |
+| masses2_N6 | 4/6/60 | graph_parallel | 75.2 ms | 94.3 | 50.4 | 29.0 | 19.1 | 16.9 | 16.9 | 5.6x | 4.4x | yes |
+| masses2_N6 | 4/6/60 | combinatorial_graph_parallel | 249.8 ms | 253.0 | 137.0 | 76.3 | 47.5 | 39.3 | 38.2 | 6.6x | 6.5x | yes |
+| masses2_N6 | 4/6/60 | geometric_parallel | 62.8 ms | 65.3 | 34.4 | 18.8 | 11.7 | 10.4 | 10.0 | 6.5x | 6.3x | yes |
+| sys3x2_N3 | 3/6/30 | combinatorial_parallel | 52.3 ms | 51.6 | 27.2 | 14.5 | 10.5 | 9.2 | 9.4 | 5.5x | 5.5x | yes |
+| sys3x2_N3 | 3/6/30 | graph_parallel | 4.9 ms | 5.8 | 3.4 | 2.2 | 2.3 | 2.9 | 2.7 | 2.1x | 1.8x | yes |
+| sys3x2_N3 | 3/6/30 | combinatorial_graph_parallel | 11.1 ms | 11.4 | 6.2 | 3.7 | 3.0 | 3.7 | 3.5 | 3.2x | 3.1x | yes |
+| sys3x2_N3 | 3/6/30 | geometric_parallel | 4.7 ms | 4.8 | 2.9 | 1.8 | 2.0 | 2.8 | 2.2 | 2.2x | 2.1x | yes |
+| sys3x2_N5 | 3/10/50 | combinatorial_parallel | 23580.0 ms | 23721.8 | 12491.1 | 6357.6 | 3386.4 | 2485.0 | 2309.9 | 10.3x | 10.2x | yes |
+| sys3x2_N5 | 3/10/50 | graph_parallel | 143.4 ms | 351.6 | 191.1 | 105.5 | 68.7 | 57.4 | 55.7 | 6.3x | 2.6x | yes |
+| sys3x2_N5 | 3/10/50 | combinatorial_graph_parallel | 629.1 ms | 646.4 | 357.9 | 209.5 | 137.8 | 113.8 | 110.2 | 5.9x | 5.7x | yes |
+| sys3x2_N5 | 3/10/50 | geometric_parallel | 37.6 ms | 39.9 | 22.0 | 11.9 | 9.2 | 9.8 | 8.3 | 4.8x | 4.5x | yes |
 
 Times in ms. "regions ok": same region count as the serial algorithm and no sampled gaps, overlaps or wrong laws at every thread count.
 
@@ -125,17 +133,17 @@ Times in ms. "regions ok": same region count as the serial algorithm and no samp
 
 Rust over 100 000 random parameters, PPOPT's numba `PointLocation` over 20 000; every Rust method agrees with sequential search (0 mismatches). Bold: fastest; hash table: largest grid.
 
-| problem | regions | PPOPT numba (us) | sequential (PPOPT algorithm) | sequential, early exit | BST | multiway (order 7) | linear machine | descriptor | hash table | YANN | speedup, same algorithm | speedup, fastest |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| di_doc_N3 | 7 | 5.3 | 54 | 29 | 34 | 29 | 28 | 36 | **22** | 52 | 100x | 241x |
-| di_N4 | 9 | 5.8 | 67 | 32 | 35 | 32 | 30 | 39 | **23** | 65 | 86x | 257x |
-| di_N6 | 11 | 6.1 | 79 | 35 | 42 | 37 | 32 | 42 | **23** | 79 | 77x | 263x |
-| di_N8 | 11 | 5.6 | 76 | 36 | 43 | 37 | 32 | 42 | **22** | 77 | 74x | 257x |
-| di_N10 | 11 | 5.7 | 75 | 35 | 42 | 37 | 32 | 42 | **23** | 79 | 76x | 253x |
-| masses2_N4 | 307 | 23.2 | 4,893 | 1,297 | 189 | 136 | none | 1,076 | **67** | 4,925 | 5x | 348x |
-| masses2_N6 | 901 | 63.9 | 14,113 | 5,351 | 255 | 178 | none | 4,296 | **83** | 13,989 | 5x | 770x |
-| sys3x2_N3 | 211 | 17.9 | 1,988 | 808 | 126 | 99 | none | 679 | **39** | 1,985 | 9x | 457x |
-| sys3x2_N5 | 973 | 68.5 | 9,286 | 4,488 | 163 | 119 | none | 3,559 | **51** | 9,212 | 7x | 1,345x |
+| problem | size (theta/x/m) | regions | PPOPT numba (us) | sequential (PPOPT algorithm) | sequential, early exit | BST | multiway (order 7) | linear machine | descriptor | hash table | YANN | speedup, same algorithm | speedup, fastest |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| di_doc_N3 | 2/9/20 | 7 | 5.3 | 54 | 29 | 34 | 29 | 28 | 36 | **22** | 52 | 100x | 241x |
+| di_N4 | 2/4/18 | 9 | 5.8 | 67 | 32 | 35 | 32 | 30 | 39 | **23** | 65 | 86x | 257x |
+| di_N6 | 2/6/26 | 11 | 6.1 | 79 | 35 | 42 | 37 | 32 | 42 | **23** | 79 | 77x | 263x |
+| di_N8 | 2/8/34 | 11 | 5.6 | 76 | 36 | 43 | 37 | 32 | 42 | **22** | 77 | 74x | 257x |
+| di_N10 | 2/10/42 | 11 | 5.7 | 75 | 35 | 42 | 37 | 32 | 42 | **23** | 79 | 76x | 253x |
+| masses2_N4 | 4/4/40 | 307 | 23.2 | 4,893 | 1,297 | 189 | 136 | none | 1,076 | **67** | 4,925 | 5x | 348x |
+| masses2_N6 | 4/6/60 | 901 | 63.9 | 14,113 | 5,351 | 255 | 178 | none | 4,296 | **83** | 13,989 | 5x | 770x |
+| sys3x2_N3 | 3/6/30 | 211 | 17.9 | 1,988 | 808 | 126 | 99 | none | 679 | **39** | 1,985 | 9x | 457x |
+| sys3x2_N5 | 3/10/50 | 973 | 68.5 | 9,286 | 4,488 | 163 | 119 | none | 3,559 | **51** | 9,212 | 7x | 1,345x |
 
 No exact linear machine exists for a partition that is not facet-to-facet (an argmax of affine functions is
 always face-to-face), which is the case for the four 3-D/4-D problems.
