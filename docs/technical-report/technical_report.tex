@@ -33,6 +33,7 @@
 \setlength{\emergencystretch}{2em}
 \renewcommand{\arraystretch}{1.08}
 \newcommand{\busy}{$^\dagger$}
+\newcommand{\sizenote}{Size is $n_\theta/n_x/m$: parameters, variables, constraints (Table~\ref{tab:sizes}).}
 \newcommand{\rpopt}{RPOPT}
 \newcommand{\ppopt}{PPOPT}
 \newcommand{\code}[1]{{\let\_\bu\texttt{\spaceskip=\fontdimen2\font plus .3em #1}}}
@@ -508,7 +509,7 @@ regions and 2 to 4 parameters; $\theta=x_0$ in every case. Both implementations 
 
 \begin{table}[!htbp]
 \centering\small
-\caption{mpQP benchmark problems. $\theta=x_0$. The three \code{dinv\_N$k$} problems (horizons 4, 6, 8) are the double integrator with an invariant terminal set instead of the LQR terminal cost; they enter the release-to-release scoreboard and the point location tests but have no PPOPT run.}
+\caption{mpQP benchmark problems. $\theta=x_0$. The three \code{dinv\_N$k$} problems (horizons 4, 6, 8) are the double integrator with an invariant terminal set instead of the LQR terminal cost; they enter the release-to-release scoreboard and the point location tests but have no PPOPT run. The constraints column counts the rows in the JSON file; the solvers see fewer after duplicate rows are merged (Table~\ref{tab:sizes}, Appendix~\ref{app:sizes}).}
 \label{tab:mpqp}
 \begin{tabularx}{\textwidth}{@{}l Y c c c c@{}}
 \toprule
@@ -535,6 +536,18 @@ problems of Oberdieck, Diangelakis and Pistikopoulos~\cite{oberdieck2016pop} (in
 \code{darnstrom/cdc24-mpqp}), and 13 random mpQPs with 6 to 10 parameters. The POP conversion was verified against direct QP solves
 from the raw data with quadprog: 2,000 random parameters (967 feasible), 0 mismatches in feasibility, maximum relative difference
 $1.4\times10^{-10}$ in $x$ and $2.4\times10^{-10}$ in the objective.
+
+Table~\ref{tab:sizes} gives the size of every suite: parameters $n_\theta$, variables $n_x$, constraints and critical regions; Appendix~\ref{app:sizes}
+lists all 204 problems. Loading a problem merges duplicate rows and drops redundant ones, so the solvers see fewer constraints than the file holds
+(\code{di\_N4}: 24 rows in the file, 18 after loading). The tables give the count the solvers see, and the result tables show the size of each
+problem as $n_\theta/n_x/m$ (parameters, variables, constraints).
+
+\begin{table}[!htbp]
+\centering\small
+\caption{Problem sizes by suite. Constraints are the rows of $Ax\le b+F\theta$ after loading; regions are from the archived solution of the fastest known solver for each problem (\code{bench/results/solution\_archive\_manifest\_1feb98b3ced6.csv}). For the degenerate mpLPs the partition is not unique, so another valid solver can report a different count.}
+\label{tab:sizes}
+\input{tables/tab_sizes.tex}
+\end{table}
 
 \subsection{PPOPT configuration and timing protocol}
 
@@ -615,7 +628,7 @@ four runs where \ppopt{} did not finish, so the value is a lower bound.}
 
 \begin{table}[!htbp]
 \centering\small\setlength{\tabcolsep}{4pt}
-\caption{mpQP, same algorithm, single thread (\code{bench/results/speedup.md}). \ppopt{} time limit 300 s, except two 4 h runs (\code{di\_N10}, \code{sys3x2\_N5} combinatorial). The last column is the region count: equal for \ppopt{} and \rpopt{} on every finished run, and \rpopt{}'s count where \ppopt{} did not finish (marked $>$).}
+\caption{mpQP, same algorithm, single thread (\code{bench/results/speedup.md}). \ppopt{} time limit 300 s, except two 4 h runs (\code{di\_N10}, \code{sys3x2\_N5} combinatorial). The last column is the region count: equal for \ppopt{} and \rpopt{} on every finished run, and \rpopt{}'s count where \ppopt{} did not finish (marked $>$). \sizenote}
 \label{tab:same}
 \input{tables/tab_same.tex}
 \end{table}
@@ -626,7 +639,7 @@ fastest \rpopt{} algorithm is \code{mplcp} on 8 of the 9 problems (\code{graph\_
 
 \begin{table}[!htbp]
 \centering\small
-\caption{Fastest serial algorithm per problem, one thread (\code{speedup.md}).}
+\caption{Fastest serial algorithm per problem, one thread (\code{speedup.md}). \sizenote}
 \label{tab:fast}
 \input{tables/tab_fast.tex}
 \end{table}
@@ -636,7 +649,7 @@ fastest \rpopt{} algorithm is \code{mplcp} on 8 of the 9 problems (\code{graph\_
 
 \begin{table}[!htbp]
 \centering\small
-\caption{Parallel against parallel (\code{speedup.md}). Regions: equal for \ppopt{} and \rpopt{} on every finished run, \rpopt{}'s count where \ppopt{} did not finish (marked $>$).}
+\caption{Parallel against parallel (\code{speedup.md}). Regions: equal for \ppopt{} and \rpopt{} on every finished run, \rpopt{}'s count where \ppopt{} did not finish (marked $>$). \sizenote}
 \label{tab:par}
 \input{tables/tab_par.tex}
 \end{table}
@@ -672,7 +685,7 @@ solution within 120 s, the bar is a lower bound computed with 120 s.}
 \begin{table}[!htbp]
 \centering\small\setlength{\tabcolsep}{4pt}
 \caption{mpLP, \rpopt{} \code{mplp\_lex} against \ppopt{} (\code{mplp\_speedup.md}; regions from \code{mplp\_full.txt}). The percentage in the \ppopt{} geometric
-column is the share of sampled feasible parameters not covered by its partition.}
+column is the share of sampled feasible parameters not covered by its partition. \sizenote}
 \label{tab:mplp}
 \input{tables/tab_mplp.tex}
 \end{table}
@@ -680,7 +693,7 @@ column is the share of sampled feasible parameters not covered by its partition.
 \begin{table}[!htbp]
 \centering\small
 \caption{Coverage of \ppopt{}'s mpLP solutions, sampled at 1,000 random $\theta$ in the parameter box per problem (\code{ppopt\_lp\_coverage.txt}).
-``Uncovered samples'' counts feasible samples that fall in no region; ``wrong objective'' counts samples where the stored law's objective differs from the direct LP optimum by more than a relative $10^{-6}$.}
+``Uncovered samples'' counts feasible samples that fall in no region; ``wrong objective'' counts samples where the stored law's objective differs from the direct LP optimum by more than a relative $10^{-6}$. \sizenote}
 \label{tab:gaps}
 \input{tables/tab_gaps.tex}
 \end{table}
@@ -724,7 +737,7 @@ facets, so none exists (an argmax of affine functions is always face-to-face).
 \input{tables/note_linmach.tex}
 \begin{table}[!htbp]
 \centering\small\setlength{\tabcolsep}{4pt}
-\caption{Point location, ns per query, 100,000 uniform queries. All methods agree with sequential search on every query. Omitted column: \linmachnote.}
+\caption{Point location, ns per query, 100,000 uniform queries. All methods agree with sequential search on every query. Omitted column: \linmachnote. \sizenote}
 \label{tab:plmethods}
 \input{tables/tab_pl_methods.tex}
 \end{table}
@@ -826,7 +839,7 @@ Table~\ref{tab:census} shows the overview for the two largest mpQP problems and 
 
 \begin{table}[!htbp]
 \centering\small\setlength{\tabcolsep}{4pt}
-\caption{LP census (\code{lp\_census.md}). LPs are counted per solve; LP time share is of total solve time\busy{}.}
+\caption{LP census (\code{lp\_census.md}). LPs are counted per solve; LP time share is of total solve time\busy{}. \sizenote}
 \label{tab:census}
 \input{tables/tab_census.tex}
 \end{table}
@@ -857,7 +870,7 @@ falls back to serial code on small problems and, per the README, is reported in 
 
 \begin{table}[!htbp]
 \centering\small\setlength{\tabcolsep}{4pt}
-\caption{Thread scaling\busy{}: solve time in ms (\code{thread\_scaling.md}). ``serial'' is the serial algorithm on one thread; the next columns are the parallel code at the given thread count.}
+\caption{Thread scaling\busy{}: solve time in ms (\code{thread\_scaling.md}). ``serial'' is the serial algorithm on one thread; the next columns are the parallel code at the given thread count. \sizenote}
 \label{tab:threads}
 \input{tables/tab_threads.tex}
 \end{table}
@@ -929,13 +942,22 @@ direct QP solves confirm them, its default \code{lowdim\_tol} discards them, and
 \section{Reproducing the results}
 
 The figures and tables of this report are generated from the committed result files by \code{docs/\allowbreak technical-report/\allowbreak make\_figures.py} and \code{make\_tables.py}, and the reference list by \code{make\_bib.py}. A build is
-\code{python make\_figures.py \&\& python make\_tables.py \&\& pdflatex technical\_report \&\& python make\_bib.py \&\& pdflatex technical\_report} (run twice for cross-references). The benchmarks themselves are run as in \code{bench/README.md}:
+\code{python make\_figures.py \&\& python make\_tables.py \&\& python make\_size\_table.py \&\& pdflatex technical\_report \&\& python make\_bib.py \&\& pdflatex technical\_report} (run twice for cross-references; \code{make\_tables.py} needs \code{bench/results/problem\_sizes.csv}, written by \code{cargo run -{}-profile gate -{}-example problem\_sizes}). The benchmarks themselves are run as in \code{bench/README.md}:
 \begin{itemize}
   \item mpQP: \code{ppopt\_bench problems results/rust.json --queries 100000}, \code{bench\_ppopt.py problems results/ppopt.json 300}, then \code{compare.py}.
   \item mpLP: \code{examples/mplp\_bench.rs}, \code{bench\_ppopt.py problems\_lp results/ppopt\_lp.json 120}, \code{ppopt\_gapcheck.py}, then \code{lp\_vs\_ppopt.py}.
   \item Scoreboard: \code{score.py} and \code{score\_lp.py}. Large suite: \code{bench/run\_large.sh}. LP census: \code{cargo run --release --features lp\_census --example lp\_census}.
 \end{itemize}
 No benchmark was run to write this report.
+
+\section{Benchmark problem sizes}\label{app:sizes}
+
+Table~\ref{tab:sizes_full} lists every benchmark problem. $n_\theta$ is the number of parameters, $n_x$ the number of variables. Constraints are the rows of
+$Ax\le b+F\theta$ (equalities included) and $\theta$ rows those of $A_\theta\theta\le b_\theta$; ``$a\to b$'' means the file has $a$ rows and the solvers see $b$ after duplicate and
+redundant rows are removed. Regions are from the archived solution of the fastest known solver for each problem; the solver for every row is in
+\code{bench/results/problem\_sizes.csv}. The table is generated by \code{cargo run -{}-profile gate -{}-example problem\_sizes} and \code{make\_size\_table.py}, from the problem files and the archive manifest, without solving anything.
+
+\input{tables/tab_sizes_full.tex}
 
 \input{references.tex}
 

@@ -12,6 +12,8 @@ import re
 import statistics
 import sys
 
+import sizes
+
 ppopt = json.load(open(sys.argv[1]))
 gaps = {}
 for line in open(sys.argv[2]):
@@ -32,8 +34,8 @@ rp = {k: statistics.median(v) for k, v in runs.items()}
 probs = ['diinf_N2', 'diinf_N3', 'diinf_N4', 'diinf_N5', 'dione_N2', 'dione_N3', 'dione_N4', 'sys3x2inf_N2', 'sys3x2inf_N3',
          'masses2inf_N2', 'masses2inf_N3', 'sys3x2one_N2', 'masses2one_N2']
 SERIAL = ['geometric', 'graph', 'combinatorial', 'combinatorial_graph', 'mplp_lex', 'graph_exp']
-print('| problem | PPOPT fastest gap-free | PPOPT geometric (gaps) | RPOPT fastest (1 thread) | speedup |')
-print('|---|---|---|---|---:|')
+out = ['| problem | PPOPT fastest gap-free | PPOPT geometric (gaps) | RPOPT fastest (1 thread) | speedup |',
+       '|---|---|---|---|---:|']
 for p in probs:
     best = None
     for a in ['geometric', 'graph', 'combinatorial', 'combinatorial_graph']:
@@ -53,4 +55,5 @@ for p in probs:
     else:
         sp = f'> {120e3 / rt:,.0f}x'
         bcell = 'none within 120 s'
-    print(f'| {p} | {bcell} | {geo_cell} | {ra} {rt:.2f} ms | {sp} |')
+    out.append(f'| {p} | {bcell} | {geo_cell} | {ra} {rt:.2f} ms | {sp} |')
+print(sizes.annotate_md('\n'.join(out)))   # adds the size (theta/x/m) column after `problem`

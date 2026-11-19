@@ -1,19 +1,19 @@
-\begin{tabular}{@{}l r L{3.9cm} L{3.1cm} r r@{}}
+\begin{tabular}{@{}l r r L{3.6cm} L{3.0cm} r r@{}}
 \toprule
-problem & regions & PPOPT, fastest gap-free & PPOPT \code{geometric} (sampled gaps) & RPOPT \code{mplp\_lex} & speedup \\
+problem & $n_\theta/n_x/m$ & regions & PPOPT, fastest gap-free & PPOPT \code{geometric} (sampled gaps) & RPOPT \code{mplp\_lex} & speedup \\
 \midrule
-\code{diinf\_N2} & 20 & \code{geometric}~144~ms & 144 ms (0.0\%) & 0.17 ms & 836x \\
-\code{diinf\_N3} & 31 & none in 120 s & 200 ms (49.8\%) & 0.40 ms & $>$301,508x \\
-\code{diinf\_N4} & 39 & none in 120 s & 267 ms (50.4\%) & 0.89 ms & $>$134,635x \\
-\code{diinf\_N5} & 47 & none in 120 s & 399 ms (50.4\%) & 1.83 ms & $>$65,574x \\
-\code{dione\_N2} & 20 & \code{combinatorial}~3,014~ms & 142 ms (0.3\%) & 0.17 ms & 18,028x \\
-\code{dione\_N3} & 30 & none in 120 s & 128 ms (52.7\%) & 0.39 ms & $>$305,732x \\
-\code{dione\_N4} & 43 & none in 120 s & 112 ms (76.8\%) & 0.89 ms & $>$134,725x \\
-\code{sys3x2inf\_N2} & 152 & none in 120 s & 2,546 ms (0.4\%) & 3.50 ms & $>$34,305x \\
-\code{sys3x2inf\_N3} & 504 & none in 120 s & crashes & 18.69 ms & $>$6,421x \\
-\code{masses2inf\_N2} & 202 & \code{geometric}~8,121~ms & 8,121 ms (0.0\%) & 7.12 ms & 1,140x \\
-\code{masses2inf\_N3} & 1,098 & \code{geometric}~83,868~ms & 83,868 ms (0.0\%) & 49.25 ms & 1,703x \\
-\code{sys3x2one\_N2} & 249 & \code{geometric}~4,517~ms & 4,517 ms (0.0\%) & 5.06 ms & 892x \\
-\code{masses2one\_N2} & 828 & \code{geometric}~44,642~ms & 44,642 ms (0.0\%) & 23.89 ms & 1,869x \\
+\code{diinf\_N2} & 2/6/24 & 20 & \code{geometric}~144~ms & 144 ms (0.0\%) & 0.17 ms & 836x \\
+\code{diinf\_N3} & 2/9/32 & 31 & none in 120 s & 200 ms (49.8\%) & 0.40 ms & $>$301,508x \\
+\code{diinf\_N4} & 2/12/42 & 39 & none in 120 s & 267 ms (50.4\%) & 0.89 ms & $>$134,635x \\
+\code{diinf\_N5} & 2/15/52 & 47 & none in 120 s & 399 ms (50.4\%) & 1.83 ms & $>$65,574x \\
+\code{dione\_N2} & 2/8/24 & 20 & \code{combinatorial}~3,014~ms & 142 ms (0.3\%) & 0.17 ms & 18,028x \\
+\code{dione\_N3} & 2/12/32 & 30 & none in 120 s & 128 ms (52.7\%) & 0.39 ms & $>$305,732x \\
+\code{dione\_N4} & 2/16/42 & 43 & none in 120 s & 112 ms (76.8\%) & 0.89 ms & $>$134,725x \\
+\code{sys3x2inf\_N2} & 3/8/40 & 152 & none in 120 s & 2,546 ms (0.4\%) & 3.50 ms & $>$34,305x \\
+\code{sys3x2inf\_N3} & 3/12/60 & 504 & none in 120 s & crashes & 18.69 ms & $>$6,421x \\
+\code{masses2inf\_N2} & 4/6/40 & 202 & \code{geometric}~8,121~ms & 8,121 ms (0.0\%) & 7.12 ms & 1,140x \\
+\code{masses2inf\_N3} & 4/9/60 & 1,098 & \code{geometric}~83,868~ms & 83,868 ms (0.0\%) & 49.25 ms & 1,703x \\
+\code{sys3x2one\_N2} & 3/14/40 & 249 & \code{geometric}~4,517~ms & 4,517 ms (0.0\%) & 5.06 ms & 892x \\
+\code{masses2one\_N2} & 4/12/40 & 828 & \code{geometric}~44,642~ms & 44,642 ms (0.0\%) & 23.89 ms & 1,869x \\
 \bottomrule
 \end{tabular}

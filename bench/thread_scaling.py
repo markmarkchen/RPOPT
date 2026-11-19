@@ -11,6 +11,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import sizes
+
 PROBLEMS = ['di_N8', 'masses2_N4', 'masses2_N6', 'sys3x2_N3', 'sys3x2_N5']
 ALGOS = ['combinatorial_parallel', 'graph_parallel', 'combinatorial_graph_parallel', 'geometric_parallel']
 THREADS = [1, 2, 4, 8, 12, 16]
@@ -52,7 +54,7 @@ def main():
             cells.append(f"{ser['solve_s'] / times[-1]:.1f}x" if ser else '-')
             cells.append('yes' if ok else 'NO')
             lines.append('| ' + ' | '.join(cells) + ' |')
-    text = '\n'.join(lines) + '\n\nTimes in ms. "regions ok": same region count as the serial algorithm and no sampled gaps, overlaps or wrong laws at every thread count.\n'
+    text = sizes.annotate_md('\n'.join(lines)) + '\n\nTimes in ms. "regions ok": same region count as the serial algorithm and no sampled gaps, overlaps or wrong laws at every thread count.\n'
     print(text)
     Path(out_md).write_text(text)
 

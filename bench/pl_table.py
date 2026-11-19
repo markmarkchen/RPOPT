@@ -8,6 +8,8 @@ Usage:
 import json
 import sys
 
+import sizes
+
 rs = json.load(open(sys.argv[1]))
 for extra in sys.argv[2:]:
     for k, v in json.load(open(extra)).items():
@@ -22,8 +24,8 @@ def pick(ms, name, cond=lambda m: True):
     return f"{c[0]['ns_per_query']:.0f}" if c else 'n/a'
 
 
-print('| problem | regions | sequential (PPOPT algorithm) | sequential, early exit | BST | multiway (order 7) | linear machine | descriptor | hash table (16R boxes) | YANN |')
-print('|---|---|---|---|---|---|---|---|---|---|')
+out = ['| problem | regions | sequential (PPOPT algorithm) | sequential, early exit | BST | multiway (order 7) | linear machine | descriptor | hash table (16R boxes) | YANN |',
+       '|---|---|---|---|---|---|---|---|---|---|']
 for p in sorted({k.split('/')[0] for k in rs}):
     pl = rs.get(p + '/point_location')
     if not pl:
@@ -33,6 +35,7 @@ for p in sorted({k.split('/')[0] for k in rs}):
     lm = pick(ms, 'linear machine')
     if lm == 'n/a' and p + '/linear_machine' in rs:
         lm = f"none exists ({rs[p + '/linear_machine']['multi_neighbour_facets']} non-f2f facets)"
-    print(f"| {p} | {rs[p + '/combinatorial']['regions']} | {pick(ms, 'sequential (PPOPT)')} | {pick(ms, 'sequential (early exit)')} | "
-          f"{pick(ms, 'binary search tree')} | {pick(ms, 'multiway tree', lambda m: m['info'].get('levels') == 3)} | {lm} | "
-          f"{pick(ms, 'descriptor function')} | {hts[-1]['ns_per_query']:.0f} | {pick(ms, 'YANN')} |")
+    out.append(f"| {p} | {rs[p + '/combinatorial']['regions']} | {pick(ms, 'sequential (PPOPT)')} | {pick(ms, 'sequential (early exit)')} | "
+               f"{pick(ms, 'binary search tree')} | {pick(ms, 'multiway tree', lambda m: m['info'].get('levels') == 3)} | {lm} | "
+               f"{pick(ms, 'descriptor function')} | {hts[-1]['ns_per_query']:.0f} | {pick(ms, 'YANN')} |")
+print(sizes.annotate_md('\n'.join(out)))   # adds the size (theta/x/m) column after `problem`

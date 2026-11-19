@@ -37,13 +37,28 @@ def cells(line):
     return [x.strip() for x in line.strip().strip("|").split("|")]
 
 
+def table_cells(text):
+    """Cell lists of every line of `text`. The `size (theta/x/m)` column that bench/sizes.py puts right after `problem`
+    is dropped, so the column indices below stay those of the tables without it (a row count check would otherwise
+    silently skip every row)."""
+    has_size = False
+    for line in text.splitlines():
+        p = cells(line)
+        if line.startswith("|") and p[0] == "problem":
+            has_size = len(p) > 1 and p[1].startswith("size")
+        elif not line.startswith("|"):
+            has_size = False
+        elif has_size and len(p) > 1:
+            p = p[:1] + p[2:]
+        yield p
+
+
 # ---------------------------------------------------------------- Figure 1
 def fig_mpqp_same():
     txt = read("speedup.md")
     sec = txt.split("### Same algorithm, single thread")[1].split("###")[0]
     rows = []
-    for line in sec.splitlines():
-        p = cells(line)
+    for p in table_cells(sec):
         if len(p) == 6 and p[0] != "problem" and not p[0].startswith("-"):
             sp = p[4]
             rows.append((p[0], p[1], num(sp.lstrip(">").rstrip("x")), sp.startswith(">")))
@@ -89,8 +104,7 @@ def fig_mpqp_same():
 # ---------------------------------------------------------------- Figure 2
 def fig_mplp():
     rows = []
-    for line in read("mplp_speedup.md").splitlines():
-        p = cells(line)
+    for p in table_cells(read("mplp_speedup.md")):
         if len(p) == 5 and p[0] != "problem" and not p[0].startswith("-"):
             sp = p[4]
             rows.append((p[0], num(sp.lstrip("> ").rstrip("x")), sp.startswith(">")))
@@ -212,8 +226,7 @@ def fig_pl():
     def ns(s):
         m = re.search(r"([0-9,]+) ns$", s)
         return num(m.group(1)) if m else np.nan
-    for line in txt.splitlines():
-        p = cells(line)
+    for p in table_cells(txt):
         if len(p) == 4 and p[0] != "problem" and not p[0].startswith("-"):
             rows.append((p[0], ns(p[1]), ns(p[2]), ns(p[3])))
     fig, ax = plt.subplots(figsize=(6.6, 3.1))

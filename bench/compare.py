@@ -12,6 +12,8 @@ A PPOPT run that hit its time limit gives a lower bound (">").
 import json
 import sys
 
+import sizes
+
 SERIAL = ['combinatorial', 'graph', 'geometric', 'combinatorial_graph']
 PARALLEL = {'combinatorial_parallel': 'combinatorial_parallel'}
 
@@ -119,7 +121,7 @@ def main():
     if best_rows:
         sp = sorted(s for *_, s in best_rows)
         lines.append(f'Fastest serial PPOPT algorithm vs fastest serial Rust algorithm: {sp[0]:,.0f}x to {sp[-1]:,.0f}x.')
-    text = '\n'.join(lines)
+    text = sizes.annotate_md('\n'.join(lines))   # adds the size (theta/x/m) column after `problem`
     print(text)
     if out_path:
         open(out_path, 'w').write(text + '\n')

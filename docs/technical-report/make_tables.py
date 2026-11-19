@@ -1,11 +1,25 @@
 #!/usr/bin/env python3
 """Generates the LaTeX tables of the RPOPT technical report from bench/results (no numbers typed by hand)."""
-import os, re, statistics
+import csv, os, re, statistics
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RES = os.path.join(HERE, "..", "..", "bench", "results")
 OUT = os.path.join(HERE, "tables")
 os.makedirs(OUT, exist_ok=True)
+
+# Problem sizes (theta, x, constraints the solvers see) for the `size` column of the per-problem tables.
+# bench/results/problem_sizes.csv comes from `cargo run --profile gate --example problem_sizes`.
+SIZE_HDR = r"$n_\theta/n_x/m$"
+_sizes_csv = os.path.join(RES, "problem_sizes.csv")
+assert os.path.exists(_sizes_csv), "run `cargo run --profile gate --example problem_sizes` first (writes " + _sizes_csv + ")"
+with open(_sizes_csv, newline="") as _f:
+    SIZES = {r["problem"]: r for r in csv.DictReader(_f)}
+
+
+def size_cell(name):
+    """'theta/x/m' of a benchmark problem, '--' for an instance that is not one."""
+    r = SIZES.get(name)
+    return f"{r['theta']}/{r['x']}/{r['constraints']}" if r else "--"
 
 
 def read(n):
@@ -54,12 +68,22 @@ def write(name, text):
 
 
 def rows_of(section_text, ncols):
+    """Table rows with exactly `ncols` cells. The `size (theta/x/m)` column that bench/sizes.py puts right after
+    `problem` is dropped first (recognised by its header), so `ncols` and the indices below are those of the table
+    without it; the sizes in the generated LaTeX come from problem_sizes.csv (see `size_cell`)."""
     out = []
+    has_size = False
     for line in section_text.splitlines():
         if not line.startswith("|"):
+            has_size = False
             continue
         p = cells(line)
-        if len(p) == ncols and p[0] != "problem" and not set(p[0]) <= set("-: "):
+        if p[0] == "problem":
+            has_size = len(p) > 1 and p[1].startswith("size")
+            continue
+        if has_size and len(p) > 1:
+            p = p[:1] + p[2:]
+        if len(p) == ncols and not set(p[0]) <= set("-: "):
             out.append(p)
     return out
 
@@ -67,33 +91,33 @@ def rows_of(section_text, ncols):
 # ------------------------------------------------------------------ mpQP vs PPOPT
 sp = read("speedup.md")
 same = rows_of(sp.split("### Same algorithm, single thread")[1].split("###")[0], 6)
-t = [r"\begin{tabular}{@{}llrrrr@{}}", r"\toprule",
-     r"problem & algorithm & PPOPT & RPOPT (1 thread) & speedup & regions \\", r"\midrule"]
+t = [r"\begin{tabular}{@{}lrlrrrr@{}}", r"\toprule",
+     r"problem & " + SIZE_HDR + r" & algorithm & PPOPT & RPOPT (1 thread) & speedup & regions \\", r"\midrule"]
 prev = None
 for p in same:
     if prev and p[0] != prev:
         t.append(r"\addlinespace[2pt]")
     prev = p[0]
-    t.append(" & ".join([tt(p[0]) if p[0] != "" else "", tt(p[1]), val(p[2]), val(p[3]), val(p[4]), regcount(p[5])]) + r" \\")
+    t.append(" & ".join([tt(p[0]) if p[0] != "" else "", size_cell(p[0]), tt(p[1]), val(p[2]), val(p[3]), val(p[4]), regcount(p[5])]) + r" \\")
 t += [r"\bottomrule", r"\end{tabular}"]
 write("tab_same.tex", "\n".join(t))
 
 par = rows_of(sp.split("### Parallel algorithms")[1].split("###")[0], 6)
-t = [r"\begin{tabular}{@{}lrrrr@{}}", r"\toprule",
-     r"problem & PPOPT (processes) & RPOPT (16 threads) & speedup & regions \\", r"\midrule"]
+t = [r"\begin{tabular}{@{}lrrrrr@{}}", r"\toprule",
+     r"problem & " + SIZE_HDR + r" & PPOPT (processes) & RPOPT (16 threads) & speedup & regions \\", r"\midrule"]
 for p in par:
-    t.append(" & ".join([tt(p[0]), val(p[2]), val(p[3]), val(p[4]), regcount(p[5])]) + r" \\")
+    t.append(" & ".join([tt(p[0]), size_cell(p[0]), val(p[2]), val(p[3]), val(p[4]), regcount(p[5])]) + r" \\")
 t += [r"\bottomrule", r"\end{tabular}"]
 write("tab_par.tex", "\n".join(t))
 
 fast = rows_of(sp.split("### Fastest serial algorithm per problem")[1].split("###")[0], 4)
-t = [r"\begin{tabular}{@{}lllr@{}}", r"\toprule",
-     r"problem & PPOPT's fastest & RPOPT's fastest (1 thread) & speedup \\", r"\midrule"]
+t = [r"\begin{tabular}{@{}lrllr@{}}", r"\toprule",
+     r"problem & " + SIZE_HDR + r" & PPOPT's fastest & RPOPT's fastest (1 thread) & speedup \\", r"\midrule"]
 for p in fast:
     def alg(x):
         m = re.match(r"(\S+) (.*)", x)
         return tt(m.group(1)) + " " + val(m.group(2))
-    t.append(" & ".join([tt(p[0]), alg(p[1]), alg(p[2]), val(p[3])]) + r" \\")
+    t.append(" & ".join([tt(p[0]), size_cell(p[0]), alg(p[1]), alg(p[2]), val(p[3])]) + r" \\")
 t += [r"\bottomrule", r"\end{tabular}"]
 write("tab_fast.tex", "\n".join(t))
 
@@ -106,8 +130,8 @@ for line in full.splitlines():
         regs.setdefault(m.group(1), int(m.group(2)))
 ms = read("mplp_speedup.md")
 rows = rows_of(ms, 5)
-t = [r"\begin{tabular}{@{}l r L{3.9cm} L{3.1cm} r r@{}}", r"\toprule",
-     r"problem & regions & PPOPT, fastest gap-free & PPOPT \code{geometric} (sampled gaps) & RPOPT \code{mplp\_lex} & speedup \\", r"\midrule"]
+t = [r"\begin{tabular}{@{}l r r L{3.6cm} L{3.0cm} r r@{}}", r"\toprule",
+     r"problem & " + SIZE_HDR + r" & regions & PPOPT, fastest gap-free & PPOPT \code{geometric} (sampled gaps) & RPOPT \code{mplp\_lex} & speedup \\", r"\midrule"]
 for p in rows:
     a = p[1]
     if a.startswith("none"):
@@ -118,7 +142,7 @@ for p in rows:
     g = p[2].replace("(", "(").replace(" gaps", "")
     g = val(g).replace("crashed", "crashes")
     r_ = p[3].replace("mplp_lex ", "")
-    t.append(" & ".join([tt(p[0]), f"{regs[p[0]]:,}", a, g, val(r_), val(p[4]).replace("$>$ ", "$>$")]) + r" \\")
+    t.append(" & ".join([tt(p[0]), size_cell(p[0]), f"{regs[p[0]]:,}", a, g, val(r_), val(p[4]).replace("$>$ ", "$>$")]) + r" \\")
 t += [r"\bottomrule", r"\end{tabular}"]
 write("tab_mplp.tex", "\n".join(t))
 
@@ -143,14 +167,14 @@ print("mplp same-algorithm: ", len(allv), min(allv), statistics.median(allv), ma
 
 # mpLP gap coverage of PPOPT (parsed from ppopt_lp_coverage.txt)
 cov = read("ppopt_lp_coverage.txt")
-t = [r"\begin{tabular}{@{}llrrrr@{}}", r"\toprule",
-     r"problem & PPOPT algorithm & regions & uncovered samples & share & wrong objective \\", r"\midrule"]
+t = [r"\begin{tabular}{@{}lrlrrrr@{}}", r"\toprule",
+     r"problem & " + SIZE_HDR + r" & PPOPT algorithm & regions & uncovered samples & share & wrong objective \\", r"\midrule"]
 for line in cov.splitlines():
     m = re.match(r"^(\S+)\.json (\w+): regions (\d+), feasible samples (\d+), gaps (\d+) \(([\d.]+)%\), wrong objective (\d+)", line)
     if m:
-        t.append(f"{tt(m.group(1))} & {tt(m.group(2))} & {int(m.group(3)):,} & {m.group(5)} of {m.group(4)} & {m.group(6)}\\% & {m.group(7)} \\\\")
+        t.append(f"{tt(m.group(1))} & {size_cell(m.group(1))} & {tt(m.group(2))} & {int(m.group(3)):,} & {m.group(5)} of {m.group(4)} & {m.group(6)}\\% & {m.group(7)} \\\\")
     elif "TypeError" in line:
-        t.append(r"\texttt{sys3x2inf\_N3} & \texttt{geometric} & \multicolumn{4}{l}{crashes (\texttt{TypeError}, no solution)} \\")
+        t.append(r"\texttt{sys3x2inf\_N3} & " + size_cell("sys3x2inf_N3") + r" & \texttt{geometric} & \multicolumn{4}{l}{crashes (\texttt{TypeError}, no solution)} \\")
 t += [r"\bottomrule", r"\end{tabular}"]
 # keep order of the file but reposition the crash row after sys3x2inf_N2
 write("tab_gaps.tex", "\n".join(t))
@@ -187,23 +211,23 @@ write("tab_score.tex", "\n".join(t))
 # ------------------------------------------------------------------ thread scaling
 th = read("thread_scaling.md")
 rows = rows_of(th, 12)
-t = [r"\begin{tabular}{@{}llrrrrrrr@{}}", r"\toprule",
-     r"problem & algorithm & serial & 1 & 2 & 4 & 8 & 16 & 16 vs 1 \\", r"\midrule"]
+t = [r"\begin{tabular}{@{}lrlrrrrrrr@{}}", r"\toprule",
+     r"problem & " + SIZE_HDR + r" & algorithm & serial & 1 & 2 & 4 & 8 & 16 & 16 vs 1 \\", r"\midrule"]
 prev = None
 for p in rows:
     if prev and p[0] != prev:
         t.append(r"\addlinespace[2pt]")
     prev = p[0]
     tf = lambda x: f"{float(x.replace(' ms', '').replace(',', '')):,.1f}"
-    t.append(" & ".join([tt(p[0]), tt(p[1].replace("_parallel", "")), tf(p[2]), tf(p[3]), tf(p[4]), tf(p[5]), tf(p[6]), tf(p[8]), p[9].replace("x", r"$\times$")]) + r" \\")
+    t.append(" & ".join([tt(p[0]), size_cell(p[0]), tt(p[1].replace("_parallel", "")), tf(p[2]), tf(p[3]), tf(p[4]), tf(p[5]), tf(p[6]), tf(p[8]), p[9].replace("x", r"$\times$")]) + r" \\")
 t += [r"\bottomrule", r"\end{tabular}"]
 write("tab_threads.tex", "\n".join(t))
 
 # ------------------------------------------------------------------ point location (all methods)
 pl = read("point_location.md")
 rows = rows_of(pl, 10)
-t = [r"\begin{tabular}{@{}lrrrrrrrr@{}}", r"\toprule",
-     r"problem & regions & seq. & seq. early & BST & multiway & descr. & hash & YANN \\", r"\midrule"]
+t = [r"\begin{tabular}{@{}lrrrrrrrrr@{}}", r"\toprule",
+     r"problem & " + SIZE_HDR + r" & regions & seq. & seq. early & BST & multiway & descr. & hash & YANN \\", r"\midrule"]
 have, none_ = [], []
 for p in rows:
     if p[6].startswith("none"):
@@ -211,7 +235,7 @@ for p in rows:
     else:
         have.append((p[0], p[6]))
     c = lambda x: f"{int(x.replace(',', '')):,}"
-    t.append(" & ".join([tt(p[0]), c(p[1]), c(p[2]), c(p[3]), c(p[4]), c(p[5]), c(p[7]), c(p[8]), c(p[9])]) + r" \\")
+    t.append(" & ".join([tt(p[0]), size_cell(p[0]), c(p[1]), c(p[2]), c(p[3]), c(p[4]), c(p[5]), c(p[7]), c(p[8]), c(p[9])]) + r" \\")
 write("note_linmach.tex", "\\newcommand{\\linmachnote}{linear machine, ns per query: " + ", ".join(f"{tt(a)} {b}" for a, b in have)
       + "; none exists on " + ", ".join(tt(a) for a in none_) + "}")
 t += [r"\bottomrule", r"\end{tabular}"]
@@ -290,21 +314,21 @@ write("tab_scaling.tex", "\n".join(t))
 
 # ------------------------------------------------------------------ large suite summary
 lg = read("large.md")
-rows = rows_of(lg.split("## Summary by algorithm")[1], 4)
-t = [r"\begin{tabular}{@{}lrrr@{}}", r"\toprule",
-     r"algorithm & solved & timed out & geometric mean time vs \texttt{graph} \\", r"\midrule"]
+rows = rows_of(lg.split("## Summary by algorithm")[1], 5)  # algorithm | solved | timed out | returned no regions | time vs graph
+t = [r"\begin{tabular}{@{}lrrrr@{}}", r"\toprule",
+     r"algorithm & solved & timed out & no regions & time vs \texttt{graph} \\", r"\midrule"]
 for p in rows:
     if p[0] == "algorithm":
         continue
-    t.append(f"{tt(p[0])} & {p[1]} & {p[2]} & {p[3]} \\\\")
+    t.append(f"{tt(p[0])} & {p[1]} & {p[2]} & {p[3]} & {p[4]} \\\\")
 t += [r"\bottomrule", r"\end{tabular}"]
 write("tab_large.tex", "\n".join(t))
 
 # ------------------------------------------------------------------ LP census overview
 ce = read("lp_census.md").split("### Overview")[1].split("###")[0]
 rows = rows_of(ce, 11)
-t = [r"\begin{tabular}{@{}llrrrrr@{}}", r"\toprule",
-     r"problem & algorithm & regions & LPs & LPs per region & QPs & LP time / solve$^\dagger$ \\", r"\midrule"]
+t = [r"\begin{tabular}{@{}lrlrrrrr@{}}", r"\toprule",
+     r"problem & " + SIZE_HDR + r" & algorithm & regions & LPs & LPs per region & QPs & LP time / solve$^\dagger$ \\", r"\midrule"]
 prev = None
 for p in rows:
     if p[0] not in ("masses2_N6", "sys3x2_N5", "diinf_N4"):
@@ -314,7 +338,7 @@ for p in rows:
     if prev and p[0] != prev:
         t.append(r"\addlinespace[2pt]")
     prev = p[0]
-    t.append(" & ".join([tt(p[0]), tt(p[1]), p[2].replace(",", ""), f"{int(p[4]):,}", f"{float(p[5]):,.1f}", f"{int(p[6]):,}", p[7].replace("%", r"\%")]) + r" \\")
+    t.append(" & ".join([tt(p[0]), size_cell(p[0]), tt(p[1]), p[2].replace(",", ""), f"{int(p[4]):,}", f"{float(p[5]):,.1f}", f"{int(p[6]):,}", p[7].replace("%", r"\%")]) + r" \\")
 t += [r"\bottomrule", r"\end{tabular}"]
 write("tab_census.tex", "\n".join(t))
 

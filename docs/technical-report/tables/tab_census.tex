@@ -1,22 +1,22 @@
-\begin{tabular}{@{}llrrrrr@{}}
+\begin{tabular}{@{}lrlrrrrr@{}}
 \toprule
-problem & algorithm & regions & LPs & LPs per region & QPs & LP time / solve$^\dagger$ \\
+problem & $n_\theta/n_x/m$ & algorithm & regions & LPs & LPs per region & QPs & LP time / solve$^\dagger$ \\
 \midrule
-\code{masses2\_N6} & \code{geometric} & 901 & 31,611 & 35.1 & 7,347 & 77\% \\
-\code{masses2\_N6} & \code{graph} & 901 & 48,903 & 54.3 & 100 & 29\% \\
-\code{masses2\_N6} & \code{graph\_exp} & 901 & 52,961 & 58.8 & 100 & 65\% \\
-\code{masses2\_N6} & \code{combinatorial\_graph} & 901 & 157,087 & 174.3 & 1 & 42\% \\
-\code{masses2\_N6} & \code{mplcp} & 901 & 4,469 & 5.0 & 1 & 2\% \\
-\code{masses2\_N6} & \code{combinatorial} & 901 & 342,759 & 380.4 & 0 & 42\% \\
+\code{masses2\_N6} & 4/6/60 & \code{geometric} & 901 & 31,611 & 35.1 & 7,347 & 77\% \\
+\code{masses2\_N6} & 4/6/60 & \code{graph} & 901 & 48,903 & 54.3 & 100 & 29\% \\
+\code{masses2\_N6} & 4/6/60 & \code{graph\_exp} & 901 & 52,961 & 58.8 & 100 & 65\% \\
+\code{masses2\_N6} & 4/6/60 & \code{combinatorial\_graph} & 901 & 157,087 & 174.3 & 1 & 42\% \\
+\code{masses2\_N6} & 4/6/60 & \code{mplcp} & 901 & 4,469 & 5.0 & 1 & 2\% \\
+\code{masses2\_N6} & 4/6/60 & \code{combinatorial} & 901 & 342,759 & 380.4 & 0 & 42\% \\
 \addlinespace[2pt]
-\code{sys3x2\_N5} & \code{geometric} & 973 & 22,179 & 22.8 & 5,511 & 44\% \\
-\code{sys3x2\_N5} & \code{graph} & 973 & 88,226 & 90.7 & 100 & 23\% \\
-\code{sys3x2\_N5} & \code{graph\_exp} & 973 & 111,492 & 114.6 & 100 & 21\% \\
-\code{sys3x2\_N5} & \code{combinatorial\_graph} & 973 & 358,390 & 368.3 & 1 & 17\% \\
-\code{sys3x2\_N5} & \code{mplcp} & 973 & 1,515 & 1.6 & 1 & 9\% \\
-\code{sys3x2\_N5} & \code{combinatorial} & 973 & 7,543,221 & 7,752.5 & 0 & 40\% \\
+\code{sys3x2\_N5} & 3/10/50 & \code{geometric} & 973 & 22,179 & 22.8 & 5,511 & 44\% \\
+\code{sys3x2\_N5} & 3/10/50 & \code{graph} & 973 & 88,226 & 90.7 & 100 & 23\% \\
+\code{sys3x2\_N5} & 3/10/50 & \code{graph\_exp} & 973 & 111,492 & 114.6 & 100 & 21\% \\
+\code{sys3x2\_N5} & 3/10/50 & \code{combinatorial\_graph} & 973 & 358,390 & 368.3 & 1 & 17\% \\
+\code{sys3x2\_N5} & 3/10/50 & \code{mplcp} & 973 & 1,515 & 1.6 & 1 & 9\% \\
+\code{sys3x2\_N5} & 3/10/50 & \code{combinatorial} & 973 & 7,543,221 & 7,752.5 & 0 & 40\% \\
 \addlinespace[2pt]
-\code{diinf\_N4} & \code{geometric} & 39 & 2,284 & 58.6 & 0 & 52\% \\
-\code{diinf\_N4} & \code{mplp\_lex} & 39 & 982 & 25.2 & 0 & 2\% \\
+\code{diinf\_N4} & 2/12/42 & \code{geometric} & 39 & 2,284 & 58.6 & 0 & 52\% \\
+\code{diinf\_N4} & 2/12/42 & \code{mplp\_lex} & 39 & 982 & 25.2 & 0 & 2\% \\
 \bottomrule
 \end{tabular}
